@@ -3887,7 +3887,8 @@ class Recruitment_model extends App_Model
 		$this->db->where('email', $data['email']);
 		$email = $this->db->get(db_prefix() . 'staff')->row();
 		if ($email) {
-			die('Email already exists');
+			// Avoid hard-crashing the request; caller can show an error if needed.
+			return false;
 		}
 		$data['admin'] = 0;
 		if (is_admin()) {
@@ -4112,9 +4113,9 @@ class Recruitment_model extends App_Model
 	public function get_candidate_position($id)
 	{
 		$query = "select position from tblrec_interview where candidate = $id";
-		$position = $this->db->query($query)->row()->position;
+		$row = $this->db->query($query)->row();
 
-		return $position;
+		return $row ? $row->position : null;
 	}
 
 	public function insert_update_feedback($data)
@@ -4125,10 +4126,11 @@ class Recruitment_model extends App_Model
 
 		if ($is_data_present) {
 			$this->db->update('tblrec_interview_feedback', $data, $update_array);
+			return true;
 		} else {
 			$insert_id = $this->db->insert("tblrec_interview_feedback", $data);
+			return $insert_id;
 		}
-		return $insert_id;
 	}
 
 	public function get_all_interview_data($candidate_id)

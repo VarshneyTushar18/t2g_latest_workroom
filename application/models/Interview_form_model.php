@@ -32,8 +32,7 @@ class Interview_form_model extends App_Model
 
         $this->email->set_mailtype("html");
         $this->email->from('noreply_workroom@tech2globe.com', 'T2G Workroom');
-       // $this->email->to('hr@tech2globe.com');
-		$this->email->to('naved.ahamad1@tech2globe.net');
+        $this->email->to('hr@tech2globe.com');
 
         $subject = 'A new Candidate has filled the Interview Form';
 
@@ -52,7 +51,7 @@ class Interview_form_model extends App_Model
             <p>'.$data['candidate_name'].' '.$data['last_name'].' has filled the Interview of form on '.date('Y-m-d').'.</p></br></br>
 
 
-            <p><b>You can check the employee details over :</b> '.admin_url('recruitment/candidate_profile').' </p></br>
+            <p><b>You can check the employee details here:</b> <a href="'.admin_url('recruitment/candidate_profile').'">Candidate Profile</a></p>
 
             <p><em>Kind Regards,<br>
             T2G Workroom</em></p>
@@ -62,14 +61,8 @@ class Interview_form_model extends App_Model
         ';
 		 $this->email->subject($subject);
         $this->email->message($message);
-		if ($this->email->send()) {
-					echo 'Mail sent';
-				} else {
-					echo 'Mail not sent';
-					echo $this->email->print_debugger();
-				}
-
-				$this->email->clear();
+        $this->email->send();
+        $this->email->clear();
        
     }
 }

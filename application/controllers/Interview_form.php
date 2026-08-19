@@ -142,21 +142,14 @@ class Interview_form extends App_Controller
         }
 
         if($data['candidate_id']){
-            $updated = $this->recruitment_model->update_cadidate($data_add,$data['candidate_id']);
-          
-            echo 'uddated';die;
-            echo $updated; die;
-            // $this->load->view('thank_you');
+            $this->recruitment_model->update_cadidate($data_add,$data['candidate_id']);
+            $this->load->view('thank_you');
 
         }else{
             $data_add['candidate_code'] = $this->addNewCode();
-
-            
-            $added = $this->recruitment_model->add_candidate($data_add);
+            $this->recruitment_model->add_candidate($data_add);
             $this->interview_form_model->send_mail_to_hr_for_new_candidate($data_add);
-            echo 'added';die;
-            echo $added; die;
-            // $this->load->view('thank_you');
+            $this->load->view('thank_you');
 
         }
 
