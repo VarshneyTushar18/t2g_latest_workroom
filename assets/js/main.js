@@ -465,11 +465,12 @@ $(function () {
     // Set aria expanded to true
     $linkSidebarActive.prop("aria-expanded", true);
     $linkSidebarActive
-      .parents("ul.nav-second-level")
-      .prop("aria-expanded", true);
+      .parents("ul.collapse")
+      .prop("aria-expanded", true)
+      .addClass("in");
     $linkSidebarActive
       .parents("li")
-      .find("a:first-child")
+      .children("a")
       .prop("aria-expanded", true);
   }
 

@@ -184,10 +184,6 @@
 
               <div class="col-md-12">
                 <!-- calendar code html -->
-                <?php
-                $valid_cur_date = $this->timesheets_model->get_next_shift_date(get_staff_user_id(), date('Y-m-d'));
-                ?>
-
                 <div class="content">
                   <?php echo form_open(); ?>
                   <?php echo form_hidden('calendar_filters', true); ?>

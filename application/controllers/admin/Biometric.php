@@ -16,20 +16,71 @@ class Biometric extends AdminController
         $this->load->model('biometric_model');
 		$this->load->model('departments_model');
 		$this->load->model('staff_model');
-        require_once(FCPATH . 'vendor/autoload.php'); // PhpSpreadsheet
+    }
+
+    private function load_phpspreadsheet()
+    {
+        static $loaded = false;
+        if ($loaded) {
+            return;
+        }
+
+        $autoload = FCPATH . 'vendor/autoload.php';
+        if (!is_file($autoload)) {
+            show_error('PhpSpreadsheet is not installed (vendor/autoload.php missing).');
+        }
+
+        require_once $autoload;
+        $loaded = true;
     }
 
     public function index()
 		{
-			//echo get_staff_user_id();die;
-		 $data['title'] = 'Attendance Import';
-		$data['attendance_data'] = $this->biometric_model->get_all_attendance(); 
-		
+		 $data['title'] = 'Biometric Attendance';
+		$data['can_filter_all'] = $this->can_view_all_biometric();
+		$data['sync_status'] = $this->biometric_model->get_sync_status();
+		$data['default_month'] = $this->biometric_model->get_latest_attendance_month() ?: date('Y-m');
 
-        $data['result'] = $this->departments_model->get_staff_departments_biometric();
-		
-		$this->load->view('admin/biometric/attendance_import_view', $data);;
+		$filters = [
+			'month'      => $data['default_month'],
+			'department' => '',
+			'staff'      => $this->can_view_all_biometric() ? '' : get_staff_user_id(),
+		];
+
+		$data['initial_rows'] = $this->biometric_model->get_attendance_filtered(10, 0, $filters);
+		$data['initial_total'] = $this->biometric_model->get_attendance_filtered_count($filters);
+		foreach ($data['initial_rows'] as &$row) {
+			$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '');
 		}
+		unset($row);
+
+		if ($data['can_filter_all']) {
+			$departments = $this->departments_model->get();
+			$data['result'] = [];
+			foreach ((array) $departments as $dept) {
+				$data['result'][] = [
+					'departmentid' => $dept['departmentid'],
+					'name'         => $dept['name'],
+				];
+			}
+		} else {
+			$data['result'] = $this->departments_model->get_staff_departments_biometric();
+		}
+
+		$this->load->view('admin/biometric/attendance_import_view', $data);
+		}
+
+	private function can_view_all_biometric()
+	{
+		return is_admin() || is_manager() || is_super_admin() || is_HR() || is_admin2();
+	}
+
+	public function sync_status()
+	{
+		$this->output
+			->set_content_type('application/json', 'utf-8')
+			->set_output(json_encode($this->biometric_model->get_sync_status()));
+	}
 	public function calculate_total_break($punch_string)
 {
     $entries = explode(',', trim($punch_string, ','));
@@ -82,31 +133,71 @@ class Biometric extends AdminController
 
 	public function fetch_attendance_data()
 		{
-			$limit = $this->input->get('limit') ?? 10;
-			$offset = $this->input->get('offset') ?? 0;
-			$month = $this->input->get('month');
-			$department = $this->input->get('department'); 
-			$staff = $this->input->get('staff');
+			try {
+				$limit = (int) ($this->input->get('limit') ?? 10);
+				$offset = (int) ($this->input->get('offset') ?? 0);
+				if ($limit < 1) {
+					$limit = 10;
+				}
+				if ($limit > 100) {
+					$limit = 100;
+				}
+				if ($offset < 0) {
+					$offset = 0;
+				}
 
-			// Fallback to logged-in user if no staff is passed
-			if (empty($staff)) {
-				$staff = get_staff_user_id(); // assumes you're using CodeIgniter's staff session helper
+				$month = $this->input->get('month');
+				$department = $this->input->get('department');
+				$staff = $this->input->get('staff');
+
+				if ($department === '#' || $department === 'all' || $department === null) {
+					$department = '';
+				}
+				if ($staff === '#' || $staff === 'all' || $staff === null) {
+					$staff = '';
+				}
+
+				if (!$this->can_view_all_biometric()) {
+					$staff = get_staff_user_id();
+					$department = '';
+				}
+
+				$filters = [
+					'month' => $month,
+					'department' => $department,
+					'staff' => $staff,
+				];
+
+				$data = $this->biometric_model->get_attendance_filtered($limit, $offset, $filters);
+				$total = $this->biometric_model->get_attendance_filtered_count($filters);
+
+				foreach ($data as &$row) {
+					$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '');
+				}
+				unset($row);
+
+				$payload = json_encode(
+					['data' => $data, 'total' => $total],
+					JSON_INVALID_UTF8_SUBSTITUTE
+				);
+				if ($payload === false) {
+					$payload = json_encode(['data' => [], 'total' => 0, 'error' => 'json_encode_failed']);
+				}
+
+				$this->output
+					->set_content_type('application/json', 'utf-8')
+					->set_output($payload);
+			} catch (Throwable $e) {
+				log_message('error', 'fetch_attendance_data: ' . $e->getMessage());
+				$this->output
+					->set_status_header(500)
+					->set_content_type('application/json', 'utf-8')
+					->set_output(json_encode([
+						'data' => [],
+						'total' => 0,
+						'error' => $e->getMessage(),
+					]));
 			}
-
-			$filters = [
-				'month' => $month,
-				'department' => $department,
-				'staff' => $staff
-			];
-
-			$data = $this->biometric_model->get_attendance_filtered($limit, $offset, $filters);
-			$total = $this->biometric_model->get_attendance_filtered_count($filters);
-
-			foreach ($data as &$row) {
-				$row['break_time'] = $this->calculate_total_break($row['punch_records']);
-			}
-
-			echo json_encode(['data' => $data, 'total' => $total]);
 		}
 
 
@@ -114,19 +205,36 @@ class Biometric extends AdminController
 
     public function save_attendance_bulk_data()
     {
-        $allowed_fields = [
-            "Attendance Date", "Company", "Location", "Employee Code", "Employee Name",
-            "Shift", "Scheduled In Time", "Scheduled Out Time",
-            "Actual In Time", "Actual Out Time", "Work Duration", "Total Duration",
-            "Late By", "Early Going By", "Over Time", "Status", "Punch Records", "Remarks"
-        ];
+        set_alert(
+            'warning',
+            'Manual Excel import is disabled. Attendance syncs automatically from Biomax every 2 minutes.'
+        );
+        redirect(admin_url('biometric/index'));
+        return;
 
-        $allowed_fields_name = [
-            "attendance_date", "company", "location", "employee_code", "employee_name",
-            "shift", "s_in_time", "s_out_time",
-            "a_in_time", "a_out_time", "work_duration", "t_duration",
-            "late_by", "early_going_by", "over_time", "status", "punch_records", "remark"
+        $this->load_phpspreadsheet();
+
+        $header_to_field = [
+            'Attendance Date'      => 'attendance_date',
+            'Company'              => 'company',
+            'Location'             => 'location',
+            'Employee Code'        => 'employee_code',
+            'Employee Name'        => 'employee_name',
+            'Shift'                => 'shift',
+            'Scheduled In Time'    => 's_in_time',
+            'Scheduled Out Time'   => 's_out_time',
+            'Actual In Time'       => 'a_in_time',
+            'Actual Out Time'      => 'a_out_time',
+            'Work Duration'        => 'work_duration',
+            'Total Duration'       => 't_duration',
+            'Late By'              => 'late_by',
+            'Early Going By'       => 'early_going_by',
+            'Over Time'            => 'over_time',
+            'Status'               => 'status',
+            'Punch Records'        => 'punch_records',
+            'Remarks'              => 'remark',
         ];
+        $optional_headers = ['S.No', 'S No', 'SNo', 'Sr.No', 'Sr No', 'Serial No'];
 
         if (!isset($_FILES['excelFile']['tmp_name']) || empty($_FILES['excelFile']['tmp_name'])) {
             set_alert('warning', 'Please upload a file.');
@@ -135,7 +243,7 @@ class Biometric extends AdminController
 
         $file = $_FILES['excelFile']['tmp_name'];
         $file_name = $_FILES['excelFile']['name'];
-        $ext = pathinfo($file_name, PATHINFO_EXTENSION);
+        $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
         if (!in_array($ext, ['xls', 'xlsx'])) {
             set_alert('warning', 'Invalid file type. Only Excel files allowed.');
@@ -145,90 +253,155 @@ class Biometric extends AdminController
         try {
             $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file);
             $sheet = $spreadsheet->getActiveSheet();
-            $data = $sheet->toArray();
+            $data = $sheet->toArray(null, true, true, false);
 
             if (count($data) <= 1) {
                 set_alert('warning', 'The file must contain data.');
                 redirect(admin_url('biometric/index'));
             }
 
-            // Clean and validate headers
-            $headers = array_filter(array_map(function($h) {
-                return trim((string) $h);
-            }, $data[0]), function($val) {
-                return $val !== '';
-            });
+            // Find the real header row (title rows are common in biometric exports)
+            $header_index = null;
+            $headers = [];
+            foreach ($data as $i => $row) {
+                $normalized = array_map(function ($h) {
+                    return trim((string) $h);
+                }, $row);
+                if (in_array('Attendance Date', $normalized, true) && in_array('Employee Code', $normalized, true)) {
+                    $header_index = $i;
+                    $headers = $normalized;
+                    break;
+                }
+            }
 
-            log_message('debug', 'Headers found: ' . json_encode($headers));
+            if ($header_index === null) {
+                set_alert('warning', 'Could not find required headers (Attendance Date, Employee Code).');
+                redirect(admin_url('biometric/index'));
+            }
 
+            $column_map = [];
             $invalid = [];
-            foreach ($headers as $header) {
-                if (!in_array($header, $allowed_fields)) {
+            foreach ($headers as $col => $header) {
+                if ($header === '') {
+                    continue;
+                }
+                if (isset($header_to_field[$header])) {
+                    $column_map[$col] = $header_to_field[$header];
+                } elseif (!in_array($header, $optional_headers, true)) {
                     $invalid[] = $header;
                 }
             }
 
             if (!empty($invalid)) {
-                set_alert('warning', 'Invalid fields: ' . implode(", ", $invalid));
+                set_alert('warning', 'Invalid fields: ' . implode(', ', $invalid));
                 redirect(admin_url('biometric/index'));
             }
 
-            // Process rows
+            if (!in_array('attendance_date', $column_map, true) || !in_array('employee_code', $column_map, true)) {
+                set_alert('warning', 'Required columns missing: Attendance Date and Employee Code.');
+                redirect(admin_url('biometric/index'));
+            }
+
             $insert_data = [];
-				foreach ($data as $index => $row) {
-						if ($index < 2) continue; 
+            for ($i = $header_index + 1; $i < count($data); $i++) {
+                $row = $data[$i];
+                $mapped = [];
+                foreach ($column_map as $col => $field) {
+                    $mapped[$field] = isset($row[$col]) ? trim((string) $row[$col]) : '';
+                }
 
-						array_shift($row); // Remove S.No
+                if ($mapped['employee_code'] === '' && ($mapped['attendance_date'] ?? '') === '') {
+                    continue;
+                }
 
-						$row = array_slice($row, 0, count($allowed_fields_name));
-
-						if (count($row) != count($allowed_fields_name)) {
-							log_message('debug', 'Skipped row ' . ($index + 1) . ' due to column count mismatch');
-							continue;
-						}
-
-						$insert_data[] = array_combine($allowed_fields_name, $row);
-					}
+                $insert_data[] = $mapped;
+            }
 
             if (empty($insert_data)) {
                 set_alert('warning', 'No valid records to import.');
             } else {
-                if ($this->biometric_model->insert_attendance_bulk($insert_data)) {
-                    set_alert('success', 'Attendance records imported successfully.');
+                $result = $this->biometric_model->insert_attendance_bulk($insert_data);
+                if (!empty($result['success'])) {
+                    set_alert(
+                        'success',
+                        'Attendance imported. Inserted: ' . (int) $result['inserted']
+                        . ', Updated: ' . (int) $result['updated']
+                        . ', Skipped: ' . (int) $result['skipped']
+                    );
                 } else {
-                    set_alert('warning', 'No records were inserted.');
+                    set_alert('warning', 'No records were inserted. Skipped: ' . (int) ($result['skipped'] ?? 0));
                 }
             }
 
             redirect(admin_url('biometric/index'));
-
         } catch (Exception $e) {
-            die('Error reading file: ' . $e->getMessage());
-        } 
+            set_alert('danger', 'Error reading file: ' . $e->getMessage());
+            redirect(admin_url('biometric/index'));
+        }
     }
+
 public function get_staff_by_department()
 {
-    $dept_id = $this->input->get('dept_id');
-
-    $this->db->select('s.staffid, s.firstname, s.lastname');
-    $this->db->from('tblstaff_departments sd');
-    $this->db->join('tblstaff s', 's.staffid = sd.staffid');
-    $this->db->where('s.active', 1); // optional: only active staff
-
-    if (!empty($dept_id)) {
-        $this->db->where('sd.departmentid', $dept_id);
+    if (!$this->can_view_all_biometric()) {
+        echo json_encode([]);
+        return;
     }
 
+    $dept_id = $this->input->get('dept_id');
+    if ($dept_id === '#' || $dept_id === 'all') {
+        $dept_id = '';
+    }
+
+    $this->db->select('s.staffid, s.firstname, s.lastname');
+    $this->db->from(db_prefix() . 'staff_departments sd');
+    $this->db->join(db_prefix() . 'staff s', 's.staffid = sd.staffid');
+    $this->db->where('s.active', 1);
+
+    if ($dept_id !== '' && $dept_id !== null && is_numeric($dept_id)) {
+        $this->db->where('sd.departmentid', (int) $dept_id);
+    }
+
+    $this->db->group_by('s.staffid');
+    $this->db->order_by('s.firstname', 'ASC');
     $staff = $this->db->get()->result_array();
 
     $result = array_map(function ($s) {
         return [
             'staffid' => $s['staffid'],
-            'full_name' => $s['firstname'] . ' ' . $s['lastname']
+            'full_name' => $s['firstname'] . ' ' . $s['lastname'],
         ];
     }, $staff);
 
     echo json_encode($result);
 }
+
+    public function swipes()
+    {
+        // Old menu URL — send users to the merged Biometric page (Punch Swipes tab).
+        redirect(admin_url('biometric?tab=swipes'));
+    }
+
+    public function fetch_swipes()
+    {
+        $from = $this->input->get('from') ?: date('Y-m-d');
+        $to = $this->input->get('to') ?: date('Y-m-d');
+        $staff = $this->input->get('staff');
+
+        if (!$this->can_view_all_biometric()) {
+            $staff = get_staff_user_id();
+        } elseif ($staff === '#' || $staff === 'all' || $staff === null) {
+            $staff = '';
+        }
+
+        $swipes = $this->biometric_model->get_swipes([
+            'from' => $from,
+            'to' => $to,
+            'staff' => $staff,
+        ]);
+
+        $this->output
+            ->set_content_type('application/json', 'utf-8')
+            ->set_output(json_encode(['data' => $swipes, 'total' => count($swipes)]));
+    }
 
 }

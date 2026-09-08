@@ -883,3 +883,312 @@ function get_client_ip() {
 
 }
 
+/**
+ * HR / Admin can view all employees in leave & attendance views.
+ */
+function timesheets_hr_can_view_all_staff($staff_id = '')
+{
+	return is_admin($staff_id) || is_HR($staff_id) || is_super_hr($staff_id);
+}
+
+/**
+ * Staff IDs the current user may view (self + direct/indirect reports).
+ * Returns null when HR/Admin (all active staff).
+ *
+ * @param int|string $viewer_id
+ * @return array<int>|null
+ */
+function timesheets_get_team_staff_ids($viewer_id = '')
+{
+	$viewer_id = ($viewer_id === '') ? (int) get_staff_user_id() : (int) $viewer_id;
+
+	if (timesheets_hr_can_view_all_staff($viewer_id)) {
+		return null;
+	}
+
+	$ids = [$viewer_id];
+
+	if (timesheet_get_status_modules('hr_profile') == true) {
+		$CI = &get_instance();
+		$CI->load->model('hr_profile/hr_profile_model');
+		$team = $CI->hr_profile_model->get_staff_by_manager();
+		if (is_array($team) && count($team) > 0) {
+			$ids = array_values(array_unique(array_map('intval', $team)));
+		}
+	}
+
+	return $ids;
+}
+
+/**
+ * True when user manages at least one other active staff member.
+ */
+function timesheets_is_team_manager($staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+
+	if (timesheets_hr_can_view_all_staff($staff_id)) {
+		return false;
+	}
+
+	$team = timesheets_get_team_staff_ids($staff_id);
+
+	return is_array($team) && count($team) > 1;
+}
+
+/**
+ * May the viewer open this employee's leave/attendance data?
+ */
+function timesheets_can_view_staff($target_staff_id, $viewer_id = '')
+{
+	$target_staff_id = (int) $target_staff_id;
+	if ($target_staff_id <= 0) {
+		return false;
+	}
+
+	$viewer_id = ($viewer_id === '') ? (int) get_staff_user_id() : (int) $viewer_id;
+
+	if ($target_staff_id === $viewer_id) {
+		return true;
+	}
+
+	if (timesheets_hr_can_view_all_staff($viewer_id)) {
+		return true;
+	}
+
+	$team = timesheets_get_team_staff_ids($viewer_id);
+
+	return is_array($team) && in_array($target_staff_id, $team, true);
+}
+
+/**
+ * Named staff who may approve attendance regularization (in addition to HR / Super Admin roles).
+ * Sahil Verma (legacy + active), Sarabjeet Singh.
+ *
+ * @return int[]
+ */
+function timesheets_attendance_approval_staff_ids()
+{
+	return [144, 1194, 178];
+}
+
+/**
+ * Staff who may approve / reject leave applications.
+ * Only: Sarabjeet, Admin, Super Admin, HR / Super HR (not team managers).
+ *
+ * @return int[]
+ */
+function timesheets_leave_approval_staff_ids()
+{
+	static $ids = null;
+	if ($ids !== null) {
+		return $ids;
+	}
+
+	$CI = &get_instance();
+	$named = [178]; // Sarabjeet Singh
+	$rows = $CI->db->select('staffid')
+		->from(db_prefix() . 'staff')
+		->where('active', 1)
+		->group_start()
+			->where('admin', 1)
+			->or_where_in('role', [22, 24, 28, 30]) // Admin, HR, Super Admin, Super HR
+			->or_where_in('staffid', $named)
+		->group_end()
+		->get()
+		->result_array();
+
+	$ids = array_values(array_unique(array_map('intval', array_column($rows, 'staffid'))));
+	sort($ids);
+
+	return $ids;
+}
+
+/**
+ * Super Admin leave approvers for HR / Accounts applicants (Harpreet + Super Admin role).
+ *
+ * @return int[]
+ */
+function timesheets_super_admin_leave_approver_ids()
+{
+	static $ids = null;
+	if ($ids !== null) {
+		return $ids;
+	}
+
+	$CI = &get_instance();
+	$named = [1]; // Harpreet Singh
+	$rows = $CI->db->select('staffid')
+		->from(db_prefix() . 'staff')
+		->where('active', 1)
+		->group_start()
+			->where_in('staffid', $named)
+			->or_where('role', 28) // Super Admin
+		->group_end()
+		->get()
+		->result_array();
+
+	$ids = array_values(array_unique(array_map('intval', array_column($rows, 'staffid'))));
+	sort($ids);
+	if (empty($ids)) {
+		$ids = [1];
+	}
+
+	return $ids;
+}
+
+/**
+ * HR / Accounts (Finance) staff leave must be approved only by Super Admin (Harpreet).
+ *
+ * @param int|string $staff_id applicant
+ * @return bool
+ */
+function timesheets_staff_is_hr_or_accounts($staff_id)
+{
+	$staff_id = (int) $staff_id;
+	if ($staff_id <= 0) {
+		return false;
+	}
+
+	if (!function_exists('get_department_by_staffid')) {
+		$CI = &get_instance();
+		$CI->load->helper('custom');
+	}
+
+	$departments = get_department_by_staffid($staff_id);
+	if (!is_array($departments) || empty($departments)) {
+		return false;
+	}
+
+	foreach ($departments as $dept) {
+		$name = strtolower(trim((string) ($dept['name'] ?? '')));
+		if ($name === '') {
+			continue;
+		}
+		// HR, HR Ops, HR Recruitment, Finance, Accounts
+		if (
+			preg_match('/\bhr\b/', $name)
+			|| strpos($name, 'human resource') !== false
+			|| strpos($name, 'account') !== false
+			|| strpos($name, 'finance') !== false
+		) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Approver staff IDs for a specific leave applicant.
+ *
+ * @param int|string $applicant_staff_id
+ * @return int[]
+ */
+function timesheets_leave_approver_ids_for_applicant($applicant_staff_id)
+{
+	$applicant_staff_id = (int) $applicant_staff_id;
+	if ($applicant_staff_id > 0 && timesheets_staff_is_hr_or_accounts($applicant_staff_id)) {
+		return timesheets_super_admin_leave_approver_ids();
+	}
+
+	return timesheets_leave_approval_staff_ids();
+}
+
+/**
+ * Who may approve / reject attendance regularization (additional timesheets).
+ * Only: Sahil, Sarabjeet, HR / Super HR, Super Admin.
+ *
+ * @param int|string $staff_id
+ * @return bool
+ */
+function timesheets_can_approve_attendance($staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+	if ($staff_id <= 0) {
+		return false;
+	}
+
+	if (in_array($staff_id, timesheets_attendance_approval_staff_ids(), true)) {
+		return true;
+	}
+
+	$role = get_staff_role_slug($staff_id);
+
+	return in_array($role, ['hr', 'super hr', 'super admin'], true);
+}
+
+/**
+ * Who may approve / reject leave applications.
+ * For HR / Accounts applicants: Super Admin (Harpreet) only.
+ *
+ * @param int|string $staff_id approver
+ * @param int|string $applicant_staff_id optional leave applicant
+ * @return bool
+ */
+function timesheets_can_approve_leave($staff_id = '', $applicant_staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+	if ($staff_id <= 0) {
+		return false;
+	}
+
+	$applicant_staff_id = (int) $applicant_staff_id;
+	if ($applicant_staff_id > 0 && timesheets_staff_is_hr_or_accounts($applicant_staff_id)) {
+		return in_array($staff_id, timesheets_super_admin_leave_approver_ids(), true)
+			|| get_staff_role_slug($staff_id) === 'super admin';
+	}
+
+	if (in_array($staff_id, timesheets_leave_approval_staff_ids(), true)) {
+		return true;
+	}
+
+	$role = get_staff_role_slug($staff_id);
+
+	return in_array($role, ['admin', 'hr', 'super hr', 'super admin'], true)
+		|| is_admin($staff_id);
+}
+
+/**
+ * Staff picker on leave/attendance pages (HR = all, manager = team only).
+ */
+function timesheets_user_can_pick_staff()
+{
+	$uid = (int) get_staff_user_id();
+
+	return timesheets_hr_can_view_all_staff($uid) || timesheets_is_team_manager($uid);
+}
+
+/**
+ * Dropdown list for staff picker.
+ *
+ * @param int|string $viewer_id
+ * @return array
+ */
+function timesheets_get_viewable_staff_list($viewer_id = '')
+{
+	$CI = &get_instance();
+	$viewer_id = ($viewer_id === '') ? (int) get_staff_user_id() : (int) $viewer_id;
+
+	if (timesheets_hr_can_view_all_staff($viewer_id)) {
+		return $CI->db->select('staffid, firstname, lastname')
+			->where('active', 1)
+			->order_by('firstname', 'ASC')
+			->get(db_prefix() . 'staff')
+			->result_array();
+	}
+
+	$ids = timesheets_get_team_staff_ids($viewer_id);
+	if (!is_array($ids) || !$ids) {
+		return [];
+	}
+
+	return $CI->db->select('staffid, firstname, lastname')
+		->where_in('staffid', $ids)
+		->where('active', 1)
+		->order_by('firstname', 'ASC')
+		->get(db_prefix() . 'staff')
+		->result_array();
+}
+
+

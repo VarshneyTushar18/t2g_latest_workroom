@@ -3,15 +3,16 @@
 defined('BASEPATH') or exit('No direct script access allowed');
 
 $table_data = [
-   _l('code'),
+   'Project ID',
    _l('project_name'),
    _l('project_start_date'),
-   _l('project_deadline'),
+   'End Date',
    _l('project_status'),
    _l('project_members'),
-   _l('Estimated Hours'),
-   _l('Hours Spent'),
+   'Allocated Hours',
+   'Spent Hours',
    _l('Team / Hours'),
+   _l('Difference')
 ];
 
 

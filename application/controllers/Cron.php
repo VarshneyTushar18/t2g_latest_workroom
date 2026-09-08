@@ -27,6 +27,28 @@ class Cron extends App_Controller
  
         echo "Cron Ran Successfully at ".$time.PHP_EOL;
     }
+
+	/** One-off resend leave decision email (CLI only). */
+	public function resend_leave_decision_mail($leave_id = 0, $approved = 0)
+	{
+		if (!$this->input->is_cli_request()) {
+			echo "Direct access not allowed\n";
+			return;
+		}
+		$leave_id = (int) $leave_id;
+		if ($leave_id <= 0) {
+			echo "Usage: php index.php cron resend_leave_decision_mail {leave_id} {0|1}\n";
+			return;
+		}
+		$this->load->model('timesheets/timesheets_model');
+		$comment = '';
+		$row = $this->db->where('leave_id', $leave_id)->order_by('id', 'DESC')->limit(1)->get(db_prefix() . 'leave_comment')->row();
+		if ($row) {
+			$comment = (string) ($approved ? ($row->approval_comment ?? '') : ($row->rejection_comment ?? ''));
+		}
+		$ok = $this->timesheets_model->notify_leave_decision_to_employee($leave_id, ((int) $approved) === 1, $comment, 1);
+		echo ($ok ? 'SENT' : 'FAILED') . " leave #{$leave_id}\n";
+	}
 	
     public function index($key = '')
     {
@@ -173,6 +195,23 @@ class Cron extends App_Controller
 		$this->load->model('cron_model');
 		$this->cron_model->send_break_report_to_staff();
 	}
+
+    /**
+     * PEDMA evaluation reminders for managers (days 1/5/10 + daily after 10th).
+     * Example: /cron/send_pedma_evaluation_reminders/YOUR_CRON_KEY
+     */
+    public function send_pedma_evaluation_reminders($key = '')
+    {
+        if (defined('APP_CRON_KEY') && APP_CRON_KEY != '' && APP_CRON_KEY != $key) {
+            header('HTTP/1.0 401 Unauthorized');
+            die('Passed cron job key is not correct.');
+        }
+
+        $this->load->model('cron_model');
+        $result = $this->cron_model->send_pedma_evaluation_reminders();
+        header('Content-Type: application/json');
+        echo json_encode($result);
+    }
 
 	public function testing()
 	{

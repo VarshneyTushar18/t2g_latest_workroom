@@ -9,7 +9,7 @@
     <title>Interview Form</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.6.0/css/all.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="shortcut icon" id="favicon" href="/uploads/company/favicon.png">
     <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
@@ -138,6 +138,8 @@
             display: flex;
             align-items: center;
             justify-content: end;
+            z-index: 9999 !important;
+            pointer-events: auto !important;
         }
 
         .user-profile-container .profile-pic {
@@ -147,10 +149,56 @@
             height: 100%;
             object-fit: contain;
             background: #ffffff;
+            pointer-events: none;
         }
 
         .user-profile-container .file-upload {
-            display: none;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 10000;
+            display: block !important;
+        }
+
+        .user-profile-container .circle {
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            pointer-events: auto;
+        }
+
+        .user-profile-container .p-image {
+            background: #141e46;
+            color: #fff;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            z-index: 10001;
+            position: relative;
+            margin-top: 8px;
+            pointer-events: auto;
+        }
+
+        .user-profile-container .p-image span {
+            color: #fff;
+            font-weight: 600;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .user-profile-container label.upload-photo-label {
+            display: block;
+            width: 100%;
+            cursor: pointer;
+            margin: 0;
         }
 
         .tooltipLongShift:hover i {
@@ -176,7 +224,7 @@
 
         .user-profile-container .upload-button {
             font-size: 1.2em;
-            color: #222;
+            color: #fff;
         }
 
         .website-details a {
@@ -185,7 +233,8 @@
 
         .user-profile-container .upload-button:hover {
             transition: all .3s cubic-bezier(.175, .885, .32, 1.275);
-            color: #999;
+            color: #fff;
+            opacity: 0.9;
         }
 
         .input-group-container label {
@@ -499,9 +548,6 @@
                                             href="mailto:career@tech2globe.com">career@tech2globe.com</a>
                                     </div>
                                 </div>
-                                <address class="mb-1"><i class="fa-regular fa-building"></i>&nbsp; &nbsp; 606, 6th
-                                    Floor, Pearls Omaxe Tower-1, Netaji Subhash Place, New Delhi, 110034
-                                </address>
                                 <address class="mb-0"><i class="fa-regular fa-building"></i>&nbsp; &nbsp; 701, 7th
                                     Floor, Tower B, Logix Cyber Park, C Block, Phase 2, Sector 62, Noida,
                                     Uttar Pradesh, 201301
@@ -510,17 +556,19 @@
                         </div>
                         <?php echo form_open('interview_form/submit_interview_details', ['id' => 'interview_form']) ?>
                         <div class="col-lg-2 position-absolute user-profile-container">
-                            <div class="row">
+                            <div class="row w-100">
                                 <div class="small-12 medium-2 large-2 columns position-relative">
-                                    <div class="circle">
-                                        <img class="profile-pic" src="/uploads/interview-form-images//user-icon.jpg">
-
-                                    </div>
-                                    <div class="p-image position-absolute bottom-0 end-0">
-                                        <i class="fa fa-camera upload-button"></i>
-                                        <input class="file-upload" type="file" accept="image/*" name="profile-pic" id="profileImg" />
-                                        <input type="hidden" id="oldProfileImg" name="old-profile-pic" value="">
-                                    </div>
+                                    <label for="profileImg" class="upload-photo-label">
+                                        <div class="circle" id="profileUploadArea" title="Click to upload profile photo">
+                                            <img class="profile-pic" src="/uploads/interview-form-images/user-icon.jpg" alt="Profile photo">
+                                        </div>
+                                        <div class="p-image" title="Upload profile photo">
+                                            <i class="fa-solid fa-camera"></i>
+                                            <span>Upload Photo</span>
+                                        </div>
+                                    </label>
+                                    <input class="file-upload" type="file" accept="image/*" name="profile-pic" id="profileImg" />
+                                    <input type="hidden" id="oldProfileImg" name="old-profile-pic" value="">
                                 </div>
                             </div>
                         </div>
@@ -1782,10 +1830,6 @@
 
             $(".file-upload").on('change', function () {
                 readURL(this);
-            });
-
-            $(".upload-button").on('click', function () {
-                $(".file-upload").click();
             });
         });
     </script>

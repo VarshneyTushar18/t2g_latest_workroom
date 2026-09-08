@@ -704,41 +704,83 @@ class Staff_model extends App_Model
 
 
     // custom function to get staff with their department id
-    public function get_staff_based_on_department($id = '')
+    // $active: 1 = active (default), 0 = inactive
+    public function get_staff_based_on_department($id = '', $active = 1)
     {
         $this->load->model('departments_model');
+        $active = ((int) $active === 0) ? 0 : 1;
+
         if ($id) {
-            $query = 'select * from tblstaff inner join tblstaff_departments on tblstaff.staffid = tblstaff_departments.staffid where tblstaff.active = 1 and tblstaff_departments.departmentid = ' . $id;
-        } else {
-            $query = 'select * from tblstaff inner join tblstaff_departments on tblstaff.staffid = tblstaff_departments.staffid where tblstaff.active = 1;';
+            // Specific department selected (Evaluation page AJAX):
+            // return staff of that department by active status.
+            $query = 'SELECT tblstaff.*, tblstaff_departments.departmentid
+                      FROM tblstaff
+                      INNER JOIN tblstaff_departments ON tblstaff.staffid = tblstaff_departments.staffid
+                      WHERE tblstaff.active = ' . (int) $active . '
+                        AND tblstaff_departments.departmentid = ' . (int) $id . '
+                      ORDER BY tblstaff.firstname ASC, tblstaff.lastname ASC';
+            $rows = $this->db->query($query)->result_array();
+
+            $unique = [];
+            $seen = [];
+            foreach ($rows as $row) {
+                if (isset($seen[$row['staffid']])) {
+                    continue;
+                }
+                $seen[$row['staffid']] = true;
+                $unique[] = $row;
+            }
+
+            return $unique;
         }
-        $all_staff_data = $this->db->query($query)->result();
+
         $departments = $this->departments_model->get_staff_departments();
-
-        $staff_with_same_department = [];
-        $start = false;
-
-        /* foreach will loop through all active staff data then first for loop will check whether 
-        that staff is present in the array. if it is present then variable will be true 
-        in second loop we loop through all the departments that staff is part of . if staff is part of 
-        department that logged in staff is part of then it will be inserted in the array . Also it will be
-        inserted only if it is false . This is to prevent inserting of the duplicate staff */
-
-        foreach ($all_staff_data as $staff_data) {
-            for ($j = 0; $j < count($staff_with_same_department); $j++) {
-                if ($staff_data->staffid == $staff_with_same_department[$j]['staffid']) {
-                    $start = true;
-                }
-            }
-            for ($i = 0; $i < count($departments); $i++) {
-                if (($staff_data->departmentid == $departments[$i]['departmentid']) && $start == false) {
-                    $staff_with_same_department[] = (array)$staff_data;
-                }
-            }
-            $start = false;
+        if (empty($departments)) {
+            return [];
         }
 
-        return $staff_with_same_department;
+        $dept_ids = array_map('intval', array_column($departments, 'departmentid'));
+        $dept_ids = array_filter($dept_ids);
+        if (empty($dept_ids)) {
+            return [];
+        }
+
+        $ids_list = implode(',', $dept_ids);
+        $query = 'SELECT DISTINCT s.staffid, s.firstname, s.lastname, s.email, s.active, sd.departmentid
+                  FROM ' . db_prefix() . 'staff s
+                  INNER JOIN ' . db_prefix() . 'staff_departments sd ON s.staffid = sd.staffid
+                  WHERE s.active = ' . (int) $active . '
+                    AND sd.departmentid IN (' . $ids_list . ')
+                  ORDER BY s.firstname ASC, s.lastname ASC';
+
+        return $this->db->query($query)->result_array();
+    }
+
+    /**
+     * For PEDMA Evaluation: managers only see assigned team (team_manage).
+     * Super Admin / Admin keep department-wide list.
+     */
+    public function filter_staff_for_pedma_evaluation($staff_list = [])
+    {
+        if (!is_array($staff_list)) {
+            return [];
+        }
+
+        if (is_admin() || is_super_admin() || is_admin2()) {
+            return $staff_list;
+        }
+
+        $manager_id = (int) get_staff_user_id();
+        $filtered = [];
+
+        foreach ($staff_list as $staff) {
+            $team_manage = isset($staff['team_manage']) ? (int) $staff['team_manage'] : 0;
+            if ($team_manage === $manager_id) {
+                $filtered[] = $staff;
+            }
+        }
+
+        return $filtered;
     }
 
     // this will change column name of staffid to staff_id
@@ -1826,18 +1868,176 @@ class Staff_model extends App_Model
         return $this->db->affected_rows();
     }
 
-    function calculateEarnedLeaves($doj)
+    /**
+     * Employment category for leave rates: fte | intern | wfh
+     */
+    public function get_employment_category($staffid)
     {
-        $currentDate = Date('Y-m-d');
-        $tenureInYears = strtotime($currentDate) - strtotime($doj);
-        $tenureInYears = floor($tenureInYears / (365 * 24 * 60 * 60));
-
-        if ($tenureInYears > 2) {
-            $leaveRate = 1.75; // Less than 2 years
-        } else {
-            $leaveRate = 1.25; // 2 years or more
+        $staffid = (int) $staffid;
+        if ($staffid <= 0) {
+            return 'fte';
         }
-        return $leaveRate;
+
+        if (!$this->db->field_exists('employment_category', db_prefix() . 'staff_info')) {
+            return 'fte';
+        }
+
+        $row = $this->db->select('employment_category')
+            ->where('staffid', $staffid)
+            ->get(db_prefix() . 'staff_info')
+            ->row();
+        $cat = strtolower(trim((string) ($row->employment_category ?? 'fte')));
+        if (!in_array($cat, ['fte', 'intern', 'wfh'], true)) {
+            return 'fte';
+        }
+
+        return $cat;
+    }
+
+    /**
+     * True once resignation procedure is submitted (any approval state).
+     */
+    public function staff_has_submitted_resignation($staffid)
+    {
+        $staffid = (int) $staffid;
+        if ($staffid <= 0 || !$this->db->table_exists(db_prefix() . 'hr_list_staff_quitting_work')) {
+            return false;
+        }
+
+        return (int) $this->db->where('staffid', $staffid)
+            ->count_all_results(db_prefix() . 'hr_list_staff_quitting_work') > 0;
+    }
+
+    /**
+     * FY carry-forward cap: WFH 5, others (FTE/Intern) 10.
+     */
+    public function get_leave_carry_forward_cap($staffid)
+    {
+        return $this->get_employment_category($staffid) === 'wfh' ? 5.0 : 10.0;
+    }
+
+    /**
+     * 1 = first calendar month of employment, 2 = second, etc. 0 = before DOJ.
+     */
+    public function employment_month_number($doj, $month, $year)
+    {
+        $month = (int) $month;
+        $year = (int) $year;
+        if ($month < 1 || $month > 12 || empty($doj) || $doj === '0000-00-00' || !strtotime($doj)) {
+            return 0;
+        }
+
+        $doj_y = (int) date('Y', strtotime($doj));
+        $doj_m = (int) date('n', strtotime($doj));
+        $n = (($year - $doj_y) * 12) + ($month - $doj_m) + 1;
+
+        return $n;
+    }
+
+    /**
+     * Base monthly rate from category + tenure (no first/second-month adjustment).
+     */
+    public function get_base_monthly_leave_rate($staffid = 0, $doj = null, $as_of_date = null)
+    {
+        $staffid = (int) $staffid;
+        if ($staffid > 0 && $this->staff_has_submitted_resignation($staffid)) {
+            return 0.0;
+        }
+
+        $category = $staffid > 0 ? $this->get_employment_category($staffid) : 'fte';
+        if ($category === 'intern' || $category === 'wfh') {
+            return 1.0;
+        }
+
+        // Full-time: 1.25 until 2 years completed, then 1.75
+        if (empty($doj) || $doj === '0000-00-00' || !strtotime($doj)) {
+            if ($staffid > 0) {
+                $info = $this->db->select('doj')->where('staffid', $staffid)->get(db_prefix() . 'staff_info')->row();
+                $doj = $info->doj ?? null;
+            }
+        }
+        if (empty($doj) || $doj === '0000-00-00' || !strtotime($doj)) {
+            return 1.25;
+        }
+
+        $as_of = $as_of_date ?: date('Y-m-d');
+        $tenureYears = floor((strtotime($as_of) - strtotime($doj)) / (365 * 24 * 60 * 60));
+        if ($tenureYears >= 2) {
+            return 1.75;
+        }
+
+        return 1.25;
+    }
+
+    /**
+     * Monthly earned-leave credit for a staff member.
+     * Policy:
+     * - First employment month: 0
+     * - Second month: first + second month entitlement (2 x base rate)
+     * - Thereafter: base rate (intern/WFH 1, FTE 1.25 / 1.75 after 2 years)
+     * - After resignation: 0
+     *
+     * @param string|null $doj
+     * @param int         $staffid
+     * @param int|null    $month
+     * @param int|null    $year
+     */
+    function calculateEarnedLeaves($doj, $staffid = 0, $month = null, $year = null)
+    {
+        $staffid = (int) $staffid;
+        $month = $month === null ? (int) date('n') : (int) $month;
+        $year = $year === null ? (int) date('Y') : (int) $year;
+
+        if ($staffid > 0 && $this->staff_has_submitted_resignation($staffid)) {
+            return 0.0;
+        }
+
+        if ((empty($doj) || $doj === '0000-00-00' || !strtotime($doj)) && $staffid > 0) {
+            $info = $this->db->select('doj')->where('staffid', $staffid)->get(db_prefix() . 'staff_info')->row();
+            $doj = $info->doj ?? null;
+        }
+
+        $as_of = sprintf('%04d-%02d-%02d', $year, $month, min(28, (int) date('j')));
+        $base = $this->get_base_monthly_leave_rate($staffid, $doj, $as_of);
+
+        $emp_month = $this->employment_month_number($doj, $month, $year);
+        if ($emp_month <= 0) {
+            return 0.0;
+        }
+        if ($emp_month === 1) {
+            return 0.0;
+        }
+        if ($emp_month === 2) {
+            // Credit month-1 + month-2 together in the second month.
+            return round($base * 2, 2);
+        }
+
+        return round($base, 2);
+    }
+
+    /**
+     * Clear leave balance when resignation is submitted.
+     */
+    public function zero_leave_balance_on_resignation($staffid)
+    {
+        $staffid = (int) $staffid;
+        if ($staffid <= 0 || !$this->db->table_exists(db_prefix() . 'timesheets_requisition_leave')) {
+            return false;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $this->db->insert(db_prefix() . 'timesheets_requisition_leave', [
+            'staff_id'      => $staffid,
+            'subject'       => 'Leave balance cleared on resignation',
+            'start_time'    => $now,
+            'end_time'      => $now,
+            'datecreated'   => $now,
+            'carry_forward' => 0,
+            'leave_balance' => 0,
+            'status'        => 1,
+        ]);
+
+        return (bool) $this->db->insert_id();
     }
     /*function carryForward($staffid, $doj, $month, $year)
     {
@@ -1871,33 +2071,38 @@ class Staff_model extends App_Model
 	
 	 function carryForward($staffid, $doj, $month, $year)
     {
-        // $prevMonth = ($month == 1) ? 12 : $month - 1;
-        // $prevMonthFormatted = str_pad($prevMonth, 2, '0', STR_PAD_LEFT);
+        $staffid = (int) $staffid;
+        $month = (int) $month;
+        $year = (int) $year;
+        if ($staffid <= 0 || $month < 1 || $month > 12 || $year < 2000) {
+            return 0;
+        }
 
-        // $prevYear = ($month == 1) ? $year - 1 : $year;
-        // $prevDate = "$prevYear-$prevMonthFormatted-31 00:00:00";
-        // $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
-        // $leaveRate = $this->calculateEarnedLeaves($doj);
+        if ($this->staff_has_submitted_resignation($staffid)) {
+            return 0;
+        }
+
         $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
-
-        $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
-        $leaveRate = $this->calculateEarnedLeaves($doj);
-        $lastDayOfTheMonth = "$year-$monthFormatted-$day 00:00:00";
-
-       // $totalLeavesPreviousMonth = ($this->noOfMonthsFromTo($doj, $lastDayOfTheMonth)-1) * $leaveRate;
-	
         $firstDayOfTheMonth = "$year-$monthFormatted-01 00:00:00";
-		
-        // echo $firstDayOfTheMonth ; die;
-        // $sql = "SELECT SUM(number_of_leaving_day) as sum_of_leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND MONTH(start_time) < $month ";
-		
+
         $sql = "SELECT carry_forward FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time <= '$firstDayOfTheMonth' ORDER by id DESC LIMIT 1";
-		
-        // echo $sql; die;
+
         $query = $this->db->query($sql);
-        $sum_of_leaves = $query->row();
-		//print_r($sum_of_leaves);
-        return $sum_of_leaves->carry_forward;
+        $sum_of_leaves = $query ? $query->row() : null;
+        if (!$sum_of_leaves) {
+            return 0;
+        }
+
+        $carry = (float) ($sum_of_leaves->carry_forward ?? 0);
+        // Financial year starts April: cap carry into April (and later months that still hold FY opening).
+        if ($month === 4) {
+            $cap = $this->get_leave_carry_forward_cap($staffid);
+            if ($carry > $cap) {
+                $carry = $cap;
+            }
+        }
+
+        return $carry;
     }
 	
 
@@ -1937,119 +2142,241 @@ class Staff_model extends App_Model
 	}
 	function monthlyLeave($staffid, $month, $year)
 	{
-		$monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
+		$staffid = (int) $staffid;
+		$month = (int) $month;
+		$year = (int) $year;
+		$coutn_taken_leave = 0;
+		if ($staffid <= 0 || $month < 1 || $month > 12 || $year < 2000) {
+			return 0;
+		}
 
+		$monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
         $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
-        //$leaveRate = $this->calculateEarnedLeaves($doj);
         $lastDayOfTheMonth = "$year-$monthFormatted-$day";
 		 $firstDayOfTheMonth = "$year-$monthFormatted-01";
-		//echo "SELECT count(id) as count_status FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status=2 AND status=0";die;
 		 $sql = "SELECT number_of_leaving_day FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND end_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status=1";
         
         $query = $this->db->query($sql);
 	
-        $sum_of_leave = $query->result_array();
-		//echo count($sum_of_leave);
+        $sum_of_leave = $query ? $query->result_array() : [];
 		for($i=0;$i<count($sum_of_leave);$i++){
-	//	print_r($sum_of_leave[$i]['number_of_leaving_day']);
-			$coutn_taken_leave += $sum_of_leave[$i]['number_of_leaving_day'];
-			//echo $coutn_taken_leave;
+			$coutn_taken_leave += (float) $sum_of_leave[$i]['number_of_leaving_day'];
 		}
 		
-		/*foreach($sum_of_leave as $leave_taken){
-			echo $leave_taken['number_of_leaving_day']+$leave_taken['number_of_leaving_day'];
-			
-		}*/
-			//print_r($sum_of_leave);
-		//print_r($sum_of_leaves);die;
-        // return $totalLeavesEarned ;
-        // return " staff id - ". $staffid . " , total leaves earned -" . $totalLeavesEarned  ; 
-        
-        // echo $sum_of_leaves; die;
-        // echo  $totalLeavesEarned . " - " . $sum_of_leaves; die;
         return $coutn_taken_leave;
 		
 	}
 	function status_approve($staffid, $month, $year)
 	{
+		 $staffid = (int) $staffid;
+		 $month = (int) $month;
+		 $year = (int) $year;
+		 if ($staffid <= 0 || $month < 1 || $month > 12 || $year < 2000) {
+			return 0;
+		 }
+
 		 $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
 
         $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
-        //$leaveRate = $this->calculateEarnedLeaves($doj);
         $lastDayOfTheMonth = "$year-$monthFormatted-$day";
 		 $firstDayOfTheMonth = "$year-$monthFormatted-01";
-		//echo "SELECT count(id) as count_status FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status=2 AND status=0";die;
 		 $sql = "SELECT count(status) as count_status FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status IN(2,0)";
         
         $query = $this->db->query($sql);
-        $sum_of_status = $query->row();
-		//print_r($sum_of_leaves);die;
-        // return $totalLeavesEarned ;
-        // return " staff id - ". $staffid . " , total leaves earned -" . $totalLeavesEarned  ; 
-        
-        // echo $sum_of_leaves; die;
-        // echo  $totalLeavesEarned . " - " . $sum_of_leaves; die;
-        return $sum_of_status->count_status;
+        $sum_of_status = $query ? $query->row() : null;
+        return $sum_of_status->count_status ?? 0;
 		
 	}
 	function monthlystatus($staffid, $month, $year)
     {
-		
+		$staffid = (int) $staffid;
+		$month = (int) $month;
+		$year = (int) $year;
+		if ($staffid <= 0 || $month < 1 || $month > 12 || $year < 2000) {
+			return 0;
+		}
 		
         $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
 
         $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
-        //$leaveRate = $this->calculateEarnedLeaves($doj);
         $lastDayOfTheMonth = "$year-$monthFormatted-$day";
 		 $firstDayOfTheMonth = "$year-$monthFormatted-01";
 
-        //$totalLeavesEarned = $this->noOfMonthsFromTo($doj, $lastDayOfTheMonth) * $leaveRate;
-
-        // $sql = "SELECT SUM(number_of_leaving_day) as sum_of_leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND MONTH(start_time) <= $month;";
-       // $sql = "SELECT SUM(number_of_leaving_day) as sum_of_leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND start_time <= '$lastDayOfTheMonth'";
-	 //echo "SELECT count(status) as sum FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  date(start_time) BETWEEN $firstDayOfTheMonth AND $lastDayOfTheMonth AND status=4";die;
 	   $sql = "SELECT count(status) as sum FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status=4";
         
         $query = $this->db->query($sql);
-        $sum_of_leaves = $query->row();
-		//print_r($sum_of_leaves);die;
-        // return $totalLeavesEarned ;
-        // return " staff id - ". $staffid . " , total leaves earned -" . $totalLeavesEarned  ; 
-        
-        // echo $sum_of_leaves; die;
-        // echo  $totalLeavesEarned . " - " . $sum_of_leaves; die;
-        return $sum_of_leaves->sum;
+        $sum_of_leaves = $query ? $query->row() : null;
+        return $sum_of_leaves->sum ?? 0;
 		
 	}
 	function monthlyLeaveBalance($staffid, $doj, $month, $year)
     {
-		
-		
+		$staffid = (int) $staffid;
+		$month = (int) $month;
+		$year = (int) $year;
+		if ($staffid <= 0 || $month < 1 || $month > 12 || $year < 2000) {
+			return 0;
+		}
+
+		$carry = (float) $this->carryForward($staffid, $doj, $month, $year);
+		$earned = (float) $this->calculateEarnedLeaves($doj, $staffid, $month, $year);
+		$overrides = $this->get_earned_leave_overrides_batch([$staffid], $month, $year);
+		if (isset($overrides[$staffid])) {
+			$earned = (float) $overrides[$staffid];
+		}
+		$taken = (float) $this->monthlyLeave($staffid, $month, $year);
+
+		return $this->compute_monthly_leave_balance($carry, $earned, $taken);
+    }
+
+    /**
+     * Batch-enrich leave balance rows (replaces per-staff query loops).
+     *
+     * @param array $rows
+     * @param int   $month
+     * @param int   $year
+     * @return array
+     */
+    public function enrich_leave_balance_month(array $rows, $month, $year)
+    {
+        if (empty($rows)) {
+            return $rows;
+        }
+
+        $month = (int) $month;
+        $year = (int) $year;
+        if ($month < 1 || $month > 12 || $year < 2000) {
+            return $rows;
+        }
+
+        $staff_ids = [];
+        foreach ($rows as $row) {
+            $sid = (int) ($row['staffid'] ?? 0);
+            if ($sid > 0) {
+                $staff_ids[$sid] = $sid;
+            }
+        }
+        if (empty($staff_ids)) {
+            return $rows;
+        }
+
+        $id_list = implode(',', array_values($staff_ids));
         $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
+        $day = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $firstDay = "$year-$monthFormatted-01 00:00:00";
+        $firstDayDate = "$year-$monthFormatted-01";
+        $lastDay = "$year-$monthFormatted-$day";
+        $lastDayTs = "$lastDay 00:00:00";
 
-        $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
-        $leaveRate = $this->calculateEarnedLeaves($doj);
-        $lastDayOfTheMonth = "$year-$monthFormatted-$day 00:00:00";
-      
+        $carry_forward = [];
+        $leave_balance = [];
+        $leave_taken = [];
+        $absent_status = [];
+        $status_approve = [];
 
-        //$totalLeavesEarned = $this->noOfMonthsFromTo($doj, $lastDayOfTheMonth) * $leaveRate;
+        $q = $this->db->query(
+            "SELECT r.staff_id, r.carry_forward
+            FROM tbltimesheets_requisition_leave r
+            INNER JOIN (
+                SELECT staff_id, MAX(id) AS max_id
+                FROM tbltimesheets_requisition_leave
+                WHERE staff_id IN ($id_list) AND start_time <= ?
+                GROUP BY staff_id
+            ) latest ON r.id = latest.max_id",
+            [$firstDay]
+        );
+        foreach ($q->result_array() as $r) {
+            $carry_forward[(int) $r['staff_id']] = $r['carry_forward'];
+        }
 
-        // $sql = "SELECT SUM(number_of_leaving_day) as sum_of_leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND MONTH(start_time) <= $month;";
-       // $sql = "SELECT SUM(number_of_leaving_day) as sum_of_leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND start_time <= '$lastDayOfTheMonth'";
-	   $sql = "SELECT number_of_days,number_of_leaving_day,carry_forward,leave_balance FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time <= '$lastDayOfTheMonth' ORDER by id DESC LIMIT 1";
-        
-        $query = $this->db->query($sql);
-        $sum_of_leaves = $query->row();
-		//print_r($sum_of_leaves);die;
-        
-        // return $totalLeavesEarned ;
-        // return " staff id - ". $staffid . " , total leaves earned -" . $totalLeavesEarned  ; 
-        
-        // echo $sum_of_leaves; die;
-        // echo  $totalLeavesEarned . " - " . $sum_of_leaves; die;
-        return $sum_of_leaves->leave_balance;
-		
-	}
+        $q = $this->db->query(
+            "SELECT r.staff_id, r.leave_balance
+            FROM tbltimesheets_requisition_leave r
+            INNER JOIN (
+                SELECT staff_id, MAX(id) AS max_id
+                FROM tbltimesheets_requisition_leave
+                WHERE staff_id IN ($id_list) AND start_time <= ?
+                GROUP BY staff_id
+            ) latest ON r.id = latest.max_id",
+            [$lastDayTs]
+        );
+        foreach ($q->result_array() as $r) {
+            $leave_balance[(int) $r['staff_id']] = $r['leave_balance'];
+        }
+
+        $q = $this->db->query(
+            "SELECT staff_id, SUM(number_of_leaving_day) AS total
+            FROM tbltimesheets_requisition_leave
+            WHERE staff_id IN ($id_list)
+              AND start_time BETWEEN ? AND ?
+              AND end_time BETWEEN ? AND ?
+              AND status = 1
+            GROUP BY staff_id",
+            [$firstDayDate, $lastDay, $firstDayDate, $lastDay]
+        );
+        foreach ($q->result_array() as $r) {
+            $leave_taken[(int) $r['staff_id']] = (float) $r['total'];
+        }
+
+        $q = $this->db->query(
+            "SELECT staff_id, COUNT(status) AS total
+            FROM tbltimesheets_requisition_leave
+            WHERE staff_id IN ($id_list)
+              AND start_time BETWEEN ? AND ?
+              AND status = 4
+            GROUP BY staff_id",
+            [$firstDayDate, $lastDay]
+        );
+        foreach ($q->result_array() as $r) {
+            $absent_status[(int) $r['staff_id']] = (int) $r['total'];
+        }
+
+        $q = $this->db->query(
+            "SELECT staff_id, COUNT(status) AS total
+            FROM tbltimesheets_requisition_leave
+            WHERE staff_id IN ($id_list)
+              AND start_time BETWEEN ? AND ?
+              AND status IN (2, 0)
+            GROUP BY staff_id",
+            [$firstDayDate, $lastDay]
+        );
+        foreach ($q->result_array() as $r) {
+            $status_approve[(int) $r['staff_id']] = (int) $r['total'];
+        }
+
+        $earned_overrides = $this->get_earned_leave_overrides_batch(array_values($staff_ids), $month, $year);
+
+        foreach ($rows as &$leaveData) {
+            $sid = (int) $leaveData['staffid'];
+            $leaveData['carry_forward'] = $carry_forward[$sid] ?? 0;
+            $default_earned = $this->calculateEarnedLeaves($leaveData['doj'] ?? null, $sid, $month, $year);
+            $leaveData['earned_leave'] = isset($earned_overrides[$sid])
+                ? (float) $earned_overrides[$sid]
+                : $default_earned;
+            $leaveData['earned_leave_is_override'] = isset($earned_overrides[$sid]);
+            $leaveData['earned_leave_default'] = $default_earned;
+            $leaveData['monthly_leaves'] = $leave_balance[$sid] ?? 0;
+            $leaveData['leave_taken'] = $leave_taken[$sid] ?? 0;
+            $leaveData['status'] = $absent_status[$sid] ?? 0;
+            $leaveData['status_approve'] = $status_approve[$sid] ?? 0;
+            $leaveData['leave_balance'] = $this->compute_monthly_leave_balance(
+                $leaveData['carry_forward'],
+                $leaveData['earned_leave'],
+                $leaveData['leave_taken']
+            );
+        }
+        unset($leaveData);
+
+        return $rows;
+    }
+
+    /**
+     * Standard monthly leave balance for report display.
+     */
+    public function compute_monthly_leave_balance($carry_forward, $earned_leave, $leave_taken)
+    {
+        return round((float) $carry_forward + (float) $earned_leave - (float) $leave_taken, 2);
+    }
 
     function noOfMonthsFromTo($doj, $date)
     {
@@ -2106,163 +2433,165 @@ class Staff_model extends App_Model
         return $this->db->insert_id();
     }
 
+    /**
+     * Send PEDMA-related mail using configured SMTP From (required for AWS SES).
+     * Returns false if no valid recipients / send failed; never throws.
+     */
+    private function send_pedma_mail($to, $subject, $message, $cc = [], $reply_to = null)
+    {
+        $to = array_values(array_filter(array_map('trim', (array) $to)));
+        $cc = array_values(array_filter(array_map('trim', (array) $cc)));
+        $to = array_values(array_filter($to, function ($email) {
+            return filter_var($email, FILTER_VALIDATE_EMAIL);
+        }));
+        $cc = array_values(array_filter($cc, function ($email) {
+            return filter_var($email, FILTER_VALIDATE_EMAIL);
+        }));
+        // Avoid duplicate addresses across to/cc
+        $cc = array_values(array_diff($cc, $to));
+
+        if (empty($to)) {
+            log_activity('PEDMA email skipped (no valid To): ' . $subject);
+            return false;
+        }
+
+        $from_email = get_option('smtp_email');
+        if (empty($from_email) || !filter_var($from_email, FILTER_VALIDATE_EMAIL)) {
+            $from_email = 'noreply@t2gworkroom.com';
+        }
+        $from_name = get_option('companyname') ?: 'Tech2globe Workroom';
+
+        try {
+            $this->load->library('email');
+            $this->email->clear(true);
+            $this->email->initialize();
+            $this->email->set_mailtype('html');
+            $this->email->from($from_email, $from_name);
+            $this->email->to($to);
+            if (!empty($cc)) {
+                $this->email->cc($cc);
+            }
+            if (!empty($reply_to) && filter_var($reply_to, FILTER_VALIDATE_EMAIL)) {
+                $this->email->reply_to($reply_to);
+            }
+            $this->email->subject($subject);
+            $this->email->message($message);
+            $ok = (bool) $this->email->send(false);
+            if (!$ok) {
+                log_activity('PEDMA email failed: ' . $subject . ' | ' . $this->email->print_debugger(['headers']));
+            }
+            return $ok;
+        } catch (Exception $e) {
+            log_activity('PEDMA email exception: ' . $subject . ' | ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function send_performance_email($staffid, $data)
     {
-
         $time = strtotime($data['date_created']);
         $year = date('Y', $time);
         $month = date('F', $time);
 
         $user_email = get_staff_email_id($data['staffid']);
         $manager_email = get_staff_email_id(get_staff_user_id());
-        $this->email->set_mailtype("html");
-        $this->email->from('noreply@tech2globe.com', 'Tech2globe');
-        $this->email->to($user_email);
-        $this->email->cc(array('sarabjeet@tech2globe.net',$manager_email));
-        $subject = ' Performance Feedback - ' . $month . ' ' . $year . ' -' . get_staff_full_name($data['staffid']);
+        $subject = 'Performance Feedback - ' . $month . ' ' . $year . ' - ' . get_staff_full_name($data['staffid']);
 
-        $message = '<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="X-UA-Compatible" content="IE=edge">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Performance review</title>
-        </head>
-        <body>
-            <p> Dear ' . get_staff_full_name($data['staffid']) . ',</p>
-            <p>Your monthly review has been submitted by your manager. Below are the details:</p></br></br>
-            <p><b>Employee Name : </b>' . get_staff_full_name($data['staffid']) . ' </p>
-            <p><b>Employee ID:  </b>' . get_staff_emp_id($data['staffid']) . ' </p>
-            <p><b>Average Score : </b>' . $data['avg_score'] . '%</p></br>
-            <p><b>Overall Feedback:  </b>' . $data['overall_feedback'] . ' </p>
-            <p><b>Click here for more details :</b> https://t2gworkroom.com/admin/staff/pedma </p></br>
+        $message = '<p>Dear ' . html_escape(get_staff_full_name($data['staffid'])) . ',</p>';
+        $message .= '<p>Your monthly review has been submitted by your manager. Below are the details:</p>';
+        $message .= '<p><b>Employee Name:</b> ' . html_escape(get_staff_full_name($data['staffid'])) . '</p>';
+        $message .= '<p><b>Employee ID:</b> ' . html_escape((string) get_staff_emp_id($data['staffid'])) . '</p>';
+        $message .= '<p><b>Average Score:</b> ' . html_escape((string) $data['avg_score']) . '%</p>';
+        $message .= '<p><b>Overall Feedback:</b> ' . $data['overall_feedback'] . '</p>';
+        $message .= '<p><b>Click here for more details:</b> <a href="' . admin_url('staff/pedma') . '">' . admin_url('staff/pedma') . '</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe</em></p>';
 
-            <p><em>Kind Regards,<br>
-            Tech2globe</em></p>
-        </body>
-        </html>
-        ';
-        $this->email->subject($subject);
-        $this->email->message($message);
-        $this->email->send();
+        return $this->send_pedma_mail(
+            $user_email,
+            $subject,
+            $message,
+            ['sarabjeet@tech2globe.net', $manager_email, 'hr@tech2globe.com']
+        );
     }
 
     public function send_performance_email_reply($staffid, $comment, $month, $year, $score)
     {
-
         $user_email = get_staff_email_id($staffid);
         $manager_email = get_staff_email_id(get_staff_user_id());
-        $this->email->set_mailtype("html");
-        $this->email->from($user_email, get_staff_full_name($staffid));
-        $this->email->to(array('sarabjeet@tech2globe.net',$manager_email));
-        $this->email->cc(array('hr@tech2globe.com'));
-        $subject = ' Performance Feedback Reply - ' . $month . ' ' . $year . ' -' . get_staff_full_name($staffid);
+        // Prefer assigned manager if available
+        $staff = $this->db->select('team_manage')->where('staffid', (int) $staffid)->get(db_prefix() . 'staff')->row();
+        if ($staff && (int) $staff->team_manage > 0) {
+            $assigned_manager_email = get_staff_email_id((int) $staff->team_manage);
+            if (!empty($assigned_manager_email)) {
+                $manager_email = $assigned_manager_email;
+            }
+        }
 
-        $message = '<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="X-UA-Compatible" content="IE=edge">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Performance review</title>
-        </head>
-        <body>
-            <p> Hello Sir,</p>
-            <p>My monthly review has been submitted by our manager. Below are the details:</p></br></br>
-            <p><b>Employee Name : </b>' . get_staff_full_name($staffid) . ' </p>
-            <p><b>Employee ID:  </b>' . get_staff_emp_id($staffid) . ' </p>
-            <p><b>Average Score : </b>' . $score . '</p></br>
+        $subject = 'Performance Feedback Reply - ' . $month . ' ' . $year . ' - ' . get_staff_full_name($staffid);
 
-            <p><b>Comment : </b>' . $comment . '</p></br>
-            
+        $message = '<p>Hello,</p>';
+        $message .= '<p>An employee has replied to their monthly PEDMA review. Details below:</p>';
+        $message .= '<p><b>Employee Name:</b> ' . html_escape(get_staff_full_name($staffid)) . '</p>';
+        $message .= '<p><b>Employee ID:</b> ' . html_escape((string) get_staff_emp_id($staffid)) . '</p>';
+        $message .= '<p><b>Average Score:</b> ' . html_escape((string) $score) . '</p>';
+        $message .= '<p><b>Comment:</b> ' . nl2br(html_escape((string) $comment)) . '</p>';
+        $message .= '<p><em>Kind Regards,<br>' . html_escape(get_staff_full_name($staffid)) . '</em></p>';
 
-            <p><em>Kind Regards,<br>
-            '. get_staff_full_name($staffid) .'</em></p>
-        </body>
-        </html>
-        ';
-        $this->email->subject($subject);
-        $this->email->message($message);
-        $this->email->send();
+        return $this->send_pedma_mail(
+            ['sarabjeet@tech2globe.net', $manager_email],
+            $subject,
+            $message,
+            ['hr@tech2globe.com'],
+            $user_email
+        );
     }
 
     public function send_fatal_error_performance_email($staffid, $score, $months, $comment)
     {
-
         $user_email = get_staff_email_id($staffid);
         $manager_email = get_staff_email_id(get_staff_user_id());
-        $this->email->set_mailtype("html");
-        $this->email->from('noreply@tech2globe.com', 'Tech2globe');
-        $this->email->to($user_email);
-        $this->email->cc(array('sarabjeet@tech2globe.net',$manager_email));
-        $subject = ' Performance Score Adjustment - ' . get_staff_full_name($staffid);
+        $subject = 'Performance Score Adjustment - ' . get_staff_full_name($staffid);
 
-        $message = '<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="X-UA-Compatible" content="IE=edge">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Performance score adjustment</title>
-        </head>
-        <body>
-            <p> Dear ' . get_staff_full_name($staffid) . ',</p>
-            <p>Your monthly review has been adjusted by your manager. Below are the details:</p></br></br>
-            <p><b>Employee Name : </b>' . get_staff_full_name($staffid) . ' </p>
-            <p><b>Employee ID:  </b>' . get_staff_emp_id($staffid) . ' </p>
-            <p><b>Reduction Score Percentage : </b>' . $score . '%</p></br>
-            <p><b>Effected Months :  </b>' . implode(', ',$months) . ' </p>
-            <p><b>Reason : </b>' . $comment . '</p></br>
-            <p><b>Click here for more details :</b> https://t2gworkroom.com/admin/staff/pedma </p></br>
+        $message = '<p>Dear ' . html_escape(get_staff_full_name($staffid)) . ',</p>';
+        $message .= '<p>Your monthly review has been adjusted by your manager. Below are the details:</p>';
+        $message .= '<p><b>Employee Name:</b> ' . html_escape(get_staff_full_name($staffid)) . '</p>';
+        $message .= '<p><b>Employee ID:</b> ' . html_escape((string) get_staff_emp_id($staffid)) . '</p>';
+        $message .= '<p><b>Reduction Score Percentage:</b> ' . html_escape((string) $score) . '%</p>';
+        $message .= '<p><b>Effected Months:</b> ' . html_escape(implode(', ', (array) $months)) . '</p>';
+        $message .= '<p><b>Reason:</b> ' . nl2br(html_escape((string) $comment)) . '</p>';
+        $message .= '<p><b>Click here for more details:</b> <a href="' . admin_url('staff/pedma') . '">' . admin_url('staff/pedma') . '</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe</em></p>';
 
-            <p><em>Kind Regards,<br>
-            Tech2globe</em></p>
-        </body>
-        </html>
-        ';
-        $this->email->subject($subject);
-        $this->email->message($message);
-        $this->email->send();
+        return $this->send_pedma_mail(
+            $user_email,
+            $subject,
+            $message,
+            ['sarabjeet@tech2globe.net', $manager_email, 'hr@tech2globe.com']
+        );
     }
 
     public function send_add_on_performance_email($staffid, $score, $months, $comment)
     {
-
         $user_email = get_staff_email_id($staffid);
         $manager_email = get_staff_email_id(get_staff_user_id());
-        $this->email->set_mailtype("html");
-        $this->email->from('noreply@tech2globe.com', 'Tech2globe');
-        $this->email->to($user_email);
-        $this->email->cc(array('sarabjeet@tech2globe.net',$manager_email));
-        $subject = ' Performance Score Adjustment - ' . get_staff_full_name($staffid);
+        $subject = 'Performance Score Adjustment - ' . get_staff_full_name($staffid);
 
-        $message = '<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="X-UA-Compatible" content="IE=edge">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Performance score adjustment</title>
-        </head>
-        <body>
-            <p> Dear ' . get_staff_full_name($staffid) . ',</p>
-            <p>Your monthly review has been adjusted by your manager. Below are the details:</p></br></br>
-            <p><b>Employee Name : </b>' . get_staff_full_name($staffid) . ' </p>
-            <p><b>Employee ID:  </b>' . get_staff_emp_id($staffid) . ' </p>
-            <p><b>Add On Score Percentage : </b>' . $score . '%</p></br>
-            <p><b>Effected Months :  </b>' . implode(', ',$months) . ' </p>
-            <p><b>Reason : </b>' . $comment . '</p></br>
-            <p><b>Click here for more details :</b> https://t2gworkroom.com/admin/staff/pedma </p></br>
+        $message = '<p>Dear ' . html_escape(get_staff_full_name($staffid)) . ',</p>';
+        $message .= '<p>Your monthly review has been adjusted by your manager. Below are the details:</p>';
+        $message .= '<p><b>Employee Name:</b> ' . html_escape(get_staff_full_name($staffid)) . '</p>';
+        $message .= '<p><b>Employee ID:</b> ' . html_escape((string) get_staff_emp_id($staffid)) . '</p>';
+        $message .= '<p><b>Add On Score Percentage:</b> ' . html_escape((string) $score) . '%</p>';
+        $message .= '<p><b>Effected Months:</b> ' . html_escape(implode(', ', (array) $months)) . '</p>';
+        $message .= '<p><b>Reason:</b> ' . nl2br(html_escape((string) $comment)) . '</p>';
+        $message .= '<p><b>Click here for more details:</b> <a href="' . admin_url('staff/pedma') . '">' . admin_url('staff/pedma') . '</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe</em></p>';
 
-            <p><em>Kind Regards,<br>
-            Tech2globe</em></p>
-        </body>
-        </html>
-        ';
-        $this->email->subject($subject);
-        $this->email->message($message);
-        $this->email->send();
+        return $this->send_pedma_mail(
+            $user_email,
+            $subject,
+            $message,
+            ['sarabjeet@tech2globe.net', $manager_email, 'hr@tech2globe.com']
+        );
     }
 
     public function check_if_review_added($staffid, $date)
@@ -2343,10 +2672,17 @@ class Staff_model extends App_Model
             $this->db->select('kra.*');
             $this->db->from('tblstaff_performance_kra kra');
             $this->db->where('kra.departmentid IS NULL', null, false);
+            $this->db->where('kra.type', '0');
         }
     
         // Execute the query
         $kraResult = $this->db->get()->result();
+
+        // If department has no Default KRAs configured, fall back to that
+        // department's Custom KRAs so Default option still auto-fills criteria.
+        if (empty($kraResult) && !empty($departmentId)) {
+            $kraResult = $this->get_custom_kra_based_on_department($departmentId);
+        }
     
         return $kraResult;
     }
@@ -2420,5 +2756,601 @@ class Staff_model extends App_Model
         return $this->db->affected_rows();
     }
 
-    
+    public function ensure_pedma_feedback_ack_columns()
+    {
+        if (!$this->db->table_exists('tblstaff_performance')) {
+            return;
+        }
+
+        if (!$this->db->field_exists('feedback_accepted', 'tblstaff_performance')) {
+            $this->db->query('ALTER TABLE `tblstaff_performance`
+                ADD `feedback_accepted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `staff_comment`,
+                ADD `feedback_accepted_at` DATETIME NULL DEFAULT NULL AFTER `feedback_accepted`');
+        }
+    }
+
+    /**
+     * Pending PEDMA reports awaiting employee response.
+     * feedback_accepted: 0=pending, 1=accepted, 2=need meeting
+     */
+    public function get_pending_pedma_ack($staffid)
+    {
+        $this->ensure_pedma_feedback_ack_columns();
+
+        $this->db->from('tblstaff_performance');
+        $this->db->where('staffid', (int) $staffid);
+        $this->db->where('status !=', 0);
+        $this->db->where('feedback_accepted', 0);
+        $this->db->where('overall_feedback IS NOT NULL', null, false);
+        $this->db->where("TRIM(overall_feedback) !=", '');
+        $this->db->order_by('date_created', 'DESC');
+        $rows = $this->db->get()->result_array();
+
+        $pending = [];
+        foreach ($rows as $row) {
+            $plain = trim(html_entity_decode(strip_tags((string) $row['overall_feedback']), ENT_QUOTES, 'UTF-8'));
+            if ($plain === '' || $plain === '-') {
+                continue;
+            }
+            $pending[] = $row;
+        }
+
+        return $pending;
+    }
+
+    public function respond_pedma_feedback($staffid, $month, $status)
+    {
+        $this->ensure_pedma_feedback_ack_columns();
+        $status = (int) $status;
+        if (!in_array($status, [1, 2], true)) {
+            return ['success' => false, 'accepted_at' => null, 'status' => 0, 'row' => null];
+        }
+
+        $this->db->where('staffid', (int) $staffid);
+        $this->db->where("DATE_FORMAT(date_created, '%Y-%m')=", $month);
+        $this->db->where('status !=', 0);
+        $row = $this->db->get('tblstaff_performance')->row();
+
+        if (!$row) {
+            return ['success' => false, 'accepted_at' => null, 'status' => 0, 'row' => null];
+        }
+
+        if ((int) $row->feedback_accepted === $status) {
+            return [
+                'success'     => true,
+                'accepted_at' => $row->feedback_accepted_at,
+                'status'      => (int) $row->feedback_accepted,
+                'row'         => $row,
+            ];
+        }
+        if ((int) $row->feedback_accepted !== 0) {
+            return [
+                'success'     => true,
+                'accepted_at' => $row->feedback_accepted_at,
+                'status'      => (int) $row->feedback_accepted,
+                'row'         => $row,
+            ];
+        }
+
+        $accepted_at = date('Y-m-d H:i:s');
+        $this->db->where('id', (int) $row->id);
+        $this->db->update('tblstaff_performance', [
+            'feedback_accepted'    => $status,
+            'feedback_accepted_at' => $accepted_at,
+        ]);
+
+        $ok = $this->db->affected_rows() > 0;
+        if ($ok) {
+            $row->feedback_accepted = $status;
+            $row->feedback_accepted_at = $accepted_at;
+        }
+
+        return [
+            'success'     => $ok,
+            'accepted_at' => $ok ? $accepted_at : null,
+            'status'      => $ok ? $status : 0,
+            'row'         => $ok ? $row : null,
+        ];
+    }
+
+    public function acknowledge_pedma_feedback($staffid, $month)
+    {
+        return $this->respond_pedma_feedback($staffid, $month, 1);
+    }
+
+    public function pedma_need_meeting($staffid, $month)
+    {
+        $result = $this->respond_pedma_feedback($staffid, $month, 2);
+        if ($result['success'] && $result['row']) {
+            $this->send_pedma_need_meeting_email($staffid, $result['row']);
+        }
+
+        return $result;
+    }
+
+    public function send_pedma_need_meeting_email($staffid, $row)
+    {
+        $staffid = (int) $staffid;
+        $staff = $this->db->select('team_manage, email, firstname, lastname')->where('staffid', $staffid)->get(db_prefix() . 'staff')->row();
+        if (!$staff) {
+            return false;
+        }
+
+        $manager_id = (int) $staff->team_manage;
+        $manager_email = $manager_id > 0 ? get_staff_email_id($manager_id) : '';
+        if (empty($manager_email)) {
+            $manager_email = 'hr@tech2globe.com';
+        }
+
+        $time  = strtotime($row->date_created);
+        $year  = date('Y', $time);
+        $month = date('F', $time);
+        $ascore = (float) $row->avg_score;
+        $fscore = !empty($row->fatal_error_score) ? ((float) $row->fatal_error_score / 100) * $ascore : 0;
+        $addscore = !empty($row->add_on_score) ? ((float) $row->add_on_score / 100) * $ascore : 0;
+        $nscore = number_format($ascore - $fscore + $addscore, 2);
+
+        $employee_name = get_staff_full_name($staffid);
+        $emp_id = get_staff_emp_id($staffid);
+
+        $message = '<p>Hello,</p>';
+        $message .= '<p><b>' . html_escape($employee_name) . '</b> has requested a meeting regarding their PEDMA feedback and is not accepting it as-is.</p>';
+        $message .= '<p><b>Employee Name:</b> ' . html_escape($employee_name) . '</p>';
+        $message .= '<p><b>Employee ID:</b> ' . html_escape((string) $emp_id) . '</p>';
+        $message .= '<p><b>Month:</b> ' . html_escape($month . ' ' . $year) . '</p>';
+        $message .= '<p><b>Score:</b> ' . html_escape($nscore) . '%</p>';
+        $message .= '<p><b>Overall Feedback:</b><br>' . $row->overall_feedback . '</p>';
+        $message .= '<p><a href="' . admin_url('staff/manage_pedma') . '">Open Manage PEDMA</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe Workroom</em></p>';
+
+        return $this->send_pedma_mail(
+            $manager_email,
+            'PEDMA Need Meeting - ' . $month . ' ' . $year . ' - ' . $employee_name,
+            $message,
+            ['hr@tech2globe.com', 'sarabjeet@tech2globe.net'],
+            get_staff_email_id($staffid)
+        );
+    }
+
+    /**
+     * Previous calendar month in YYYY-MM (PEDMA evaluation cycle).
+     */
+    public function get_pedma_eval_target_month($asOfDate = null)
+    {
+        $ts = $asOfDate ? strtotime($asOfDate) : time();
+        return date('Y-m', strtotime('first day of previous month', $ts));
+    }
+
+    /**
+     * Active team members assigned to a manager who still need published PEDMA for a month.
+     */
+    public function get_manager_pending_pedma_team($manager_id, $monthYm = null)
+    {
+        $manager_id = (int) $manager_id;
+        if ($manager_id <= 0) {
+            return [];
+        }
+
+        if ($monthYm === null || !preg_match('/^\d{4}-\d{2}$/', $monthYm)) {
+            $monthYm = $this->get_pedma_eval_target_month();
+        }
+
+        $this->db->select('staffid, firstname, lastname, email, staff_identifi');
+        $this->db->from(db_prefix() . 'staff');
+        $this->db->where('active', 1);
+        $this->db->where('team_manage', $manager_id);
+        $team = $this->db->get()->result_array();
+        if (empty($team)) {
+            return [];
+        }
+
+        $pending = [];
+        foreach ($team as $member) {
+            $staffid = (int) $member['staffid'];
+            $this->db->from(db_prefix() . 'staff_performance');
+            $this->db->where('staffid', $staffid);
+            $this->db->where("DATE_FORMAT(date_created, '%Y-%m')=", $monthYm);
+            $this->db->where('status', 1); // published only counts as filled
+            $exists = $this->db->count_all_results() > 0;
+            if (!$exists) {
+                $pending[] = [
+                    'staffid'        => $staffid,
+                    'name'           => trim($member['firstname'] . ' ' . $member['lastname']),
+                    'email'          => $member['email'],
+                    'staff_identifi' => $member['staff_identifi'],
+                ];
+            }
+        }
+
+        return $pending;
+    }
+
+    /**
+     * Managers (role family) who still have pending PEDMA evaluations for a month.
+     */
+    public function get_managers_with_pending_pedma_eval($monthYm = null)
+    {
+        if ($monthYm === null || !preg_match('/^\d{4}-\d{2}$/', $monthYm)) {
+            $monthYm = $this->get_pedma_eval_target_month();
+        }
+
+        $this->db->select('staffid, firstname, lastname, email, role');
+        $this->db->from(db_prefix() . 'staff');
+        $this->db->where('active', 1);
+        $this->db->where('email !=', '');
+        $staffRows = $this->db->get()->result_array();
+
+        $managers = [];
+        foreach ($staffRows as $row) {
+            $staffid = (int) $row['staffid'];
+            if (!function_exists('can_evaluate_pedma') || !can_evaluate_pedma($staffid)) {
+                continue;
+            }
+            // Remind managers with a team; skip pure admins with no assignees
+            $pending = $this->get_manager_pending_pedma_team($staffid, $monthYm);
+            if (empty($pending)) {
+                continue;
+            }
+            $managers[] = [
+                'staffid'  => $staffid,
+                'name'     => trim($row['firstname'] . ' ' . $row['lastname']),
+                'email'    => $row['email'],
+                'role'     => $row['role'],
+                'pending'  => $pending,
+                'pending_count' => count($pending),
+                'month'    => $monthYm,
+            ];
+        }
+
+        return $managers;
+    }
+
+    public function send_pedma_evaluation_reminder_email($manager, $dayOfMonth)
+    {
+        if (empty($manager['email']) || empty($manager['pending'])) {
+            return false;
+        }
+
+        $monthYm = $manager['month'];
+        $monthLabel = date('F Y', strtotime($monthYm . '-01'));
+        $pendingCount = (int) $manager['pending_count'];
+        $evalUrl = admin_url('staff/pedma_admin');
+
+        $listHtml = '<ul>';
+        foreach ($manager['pending'] as $member) {
+            $listHtml .= '<li>' . html_escape($member['name']);
+            if (!empty($member['staff_identifi'])) {
+                $listHtml .= ' (#' . html_escape($member['staff_identifi']) . ')';
+            }
+            $listHtml .= '</li>';
+        }
+        $listHtml .= '</ul>';
+
+        $subject = 'PEDMA Evaluation Reminder (' . $monthLabel . ') - ' . $pendingCount . ' pending';
+        $message = '<p>Dear ' . html_escape($manager['name']) . ',</p>';
+        $message .= '<p>This is a reminder to complete <b>PEDMA Evaluation</b> for <b>' . html_escape($monthLabel) . '</b>.</p>';
+        $message .= '<p>You still have <b>' . $pendingCount . '</b> team member(s) without a published evaluation:</p>';
+        $message .= $listHtml;
+        if ((int) $dayOfMonth === 1) {
+            $message .= '<p><b>Schedule:</b> Reminder day 1 of the month.</p>';
+        } elseif ((int) $dayOfMonth === 5) {
+            $message .= '<p><b>Schedule:</b> Reminder day 5 of the month.</p>';
+        } elseif ((int) $dayOfMonth === 10) {
+            $message .= '<p><b>Schedule:</b> Reminder day 10 of the month. After today, Workroom will also show a popup every 30 minutes until evaluations are completed.</p>';
+        } else {
+            $message .= '<p><b>Overdue:</b> PEDMA evaluations are past the 10th. Please complete them as soon as possible.</p>';
+        }
+        $message .= '<p><a href="' . $evalUrl . '">Open PEDMA Evaluation</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe Workroom</em></p>';
+
+        return $this->send_pedma_mail(
+            $manager['email'],
+            $subject,
+            $message,
+            ['hr@tech2globe.com', 'sarabjeet@tech2globe.net']
+        );
+    }
+
+    /**
+     * PEDMA grade bands for dashboard filtering.
+     * D is below 70 (user scale A+/A/B/C then D).
+     */
+    public function pedma_grade_score_bounds($grade)
+    {
+        $grade = strtoupper(trim((string) $grade));
+        $map = [
+            'A+' => [98, 100],
+            'A'  => [90, 97.999],
+            'B'  => [80, 89.999],
+            'C'  => [70, 79.999],
+            'D'  => [0, 69.999],
+        ];
+
+        return isset($map[$grade]) ? $map[$grade] : null;
+    }
+
+    public function compute_pedma_final_score_row($row)
+    {
+        $ascore = (float) (is_array($row) ? ($row['avg_score'] ?? 0) : ($row->avg_score ?? 0));
+        $fatal = is_array($row) ? ($row['fatal_error_score'] ?? null) : ($row->fatal_error_score ?? null);
+        $addon = is_array($row) ? ($row['add_on_score'] ?? null) : ($row->add_on_score ?? null);
+        $fscore = !empty($fatal) ? (((float) $fatal) / 100) * $ascore : 0;
+        $addscore = !empty($addon) ? (((float) $addon) / 100) * $ascore : 0;
+
+        return round($ascore - $fscore + $addscore, 2);
+    }
+
+    public function extract_pedma_hr_notes($kra_data_json)
+    {
+        $notes = [];
+        if (!$kra_data_json) {
+            return '';
+        }
+        $kra = json_decode($kra_data_json, true);
+        if (!is_array($kra)) {
+            return '';
+        }
+        foreach ($kra as $item) {
+            if (!empty($item['hr_remarks'])) {
+                $prefix = !empty($item['name']) ? ($item['name'] . ': ') : '';
+                $notes[] = $prefix . $item['hr_remarks'];
+            }
+            if (!empty($item['kpiData']) && is_array($item['kpiData'])) {
+                foreach ($item['kpiData'] as $kpi) {
+                    if (!empty($kpi['hr_remarks'])) {
+                        $prefix = !empty($kpi['name']) ? ($kpi['name'] . ': ') : '';
+                        $notes[] = $prefix . $kpi['hr_remarks'];
+                    }
+                }
+            }
+        }
+
+        return implode(' | ', $notes);
+    }
+
+    public function pedma_score_to_grade($score)
+    {
+        $score = (float) $score;
+        if ($score >= 98) {
+            return 'A+';
+        }
+        if ($score >= 90) {
+            return 'A';
+        }
+        if ($score >= 80) {
+            return 'B';
+        }
+        if ($score >= 70) {
+            return 'C';
+        }
+
+        return 'D';
+    }
+
+    /**
+     * List published PEDMA rows within month range.
+     * Optional grade filter; optional department filter.
+     * Empty grade = all scores.
+     */
+    public function get_pedma_rows_by_grade($grade, $fromMonth, $toMonth, $departmentId = '', $staffActive = '1')
+    {
+        $grade = strtoupper(trim((string) $grade));
+        $bounds = $grade !== '' ? $this->pedma_grade_score_bounds($grade) : [0, 100];
+
+        if ($bounds === null || !preg_match('/^\d{4}-\d{2}$/', $fromMonth) || !preg_match('/^\d{4}-\d{2}$/', $toMonth)) {
+            return [];
+        }
+
+        // Department listing requires a department (or grade for admin/HR).
+        if ($grade === '' && ($departmentId === '' || $departmentId === null)) {
+            return [];
+        }
+
+        if ($fromMonth > $toMonth) {
+            $tmp = $fromMonth;
+            $fromMonth = $toMonth;
+            $toMonth = $tmp;
+        }
+
+        $fromDate = $fromMonth . '-01';
+        $toDate = date('Y-m-t', strtotime($toMonth . '-01'));
+
+        $this->db->select('p.id, p.staffid, p.avg_score, p.fatal_error_score, p.add_on_score, p.kra_data, p.overall_feedback, p.date_created, p.status, s.firstname, s.lastname, s.email, s.staff_identifi, s.active');
+        $this->db->from('tblstaff_performance p');
+        $this->db->join('tblstaff s', 's.staffid = p.staffid', 'inner');
+        $this->db->where('p.status !=', 0);
+        if ($staffActive === '0' || $staffActive === '1') {
+            $this->db->where('s.active', (int) $staffActive);
+        }
+        $this->db->where('p.date_created >=', $fromDate);
+        $this->db->where('p.date_created <=', $toDate);
+
+        if ($departmentId !== '' && $departmentId !== null) {
+            $this->db->where('p.staffid IN (SELECT staffid FROM tblstaff_departments WHERE departmentid = ' . (int) $departmentId . ')', null, false);
+        }
+
+        $this->db->order_by('p.date_created', 'DESC');
+        $rows = $this->db->get()->result_array();
+
+        $min = $bounds[0];
+        $max = $bounds[1];
+        $out = [];
+        $deptCache = [];
+
+        foreach ($rows as $row) {
+            $score = $this->compute_pedma_final_score_row($row);
+            if ($score < $min || $score > $max) {
+                continue;
+            }
+
+            $sid = (int) $row['staffid'];
+            if (!isset($deptCache[$sid])) {
+                $deptRows = $this->db->select('d.name')
+                    ->from('tblstaff_departments sd')
+                    ->join('tbldepartments d', 'd.departmentid = sd.departmentid', 'inner')
+                    ->where('sd.staffid', $sid)
+                    ->get()
+                    ->result_array();
+                $names = array_column($deptRows, 'name');
+                $deptCache[$sid] = implode(', ', $names);
+            }
+
+            $rowGrade = $this->pedma_score_to_grade($score);
+            $out[] = [
+                'performance_id' => (int) $row['id'],
+                'staffid'        => $sid,
+                'emp_id'         => $row['staff_identifi'] !== null && $row['staff_identifi'] !== '' ? $row['staff_identifi'] : (string) $sid,
+                'emp_name'       => trim($row['firstname'] . ' ' . $row['lastname']),
+                'email'          => $row['email'],
+                'department'     => $deptCache[$sid],
+                'score'          => number_format($score, 2, '.', ''),
+                'grade'          => $grade !== '' ? $grade : $rowGrade,
+                'hr_notes'       => $this->extract_pedma_hr_notes($row['kra_data']),
+                'month'          => date('Y-m', strtotime($row['date_created'])),
+                'month_label'    => date('F Y', strtotime($row['date_created'])),
+                'date_created'   => $row['date_created'],
+            ];
+        }
+
+        return $out;
+    }
+
+    public function send_pedma_schedule_meeting_email($staffid, $monthLabel, $score, $grade)
+    {
+        $staff = $this->get($staffid);
+        if (!$staff || empty($staff->email)) {
+            return false;
+        }
+
+        $subject = 'PEDMA Meeting Scheduled - ' . $monthLabel . ' (Grade ' . $grade . ')';
+        $message = '<p>Dear ' . html_escape(trim($staff->firstname . ' ' . $staff->lastname)) . ',</p>';
+        $message .= '<p>HR/Admin has requested a PEDMA discussion meeting for <b>' . html_escape($monthLabel) . '</b>.</p>';
+        $message .= '<p><b>Score:</b> ' . html_escape($score) . '% &nbsp;|&nbsp; <b>Grade:</b> ' . html_escape($grade) . '</p>';
+        $message .= '<p>Please coordinate a suitable meeting slot with your manager / HR.</p>';
+        $message .= '<p><a href="' . admin_url('staff/pedma') . '">Open your PEDMA</a></p>';
+        $message .= '<p><em>Kind Regards,<br>Tech2globe Workroom</em></p>';
+
+        return $this->send_pedma_mail(
+            $staff->email,
+            $subject,
+            $message,
+            ['hr@tech2globe.com']
+        );
+    }
+
+    /**
+     * Ensure override table exists (safe on live if migration not run yet).
+     */
+    public function ensure_earned_leave_override_table()
+    {
+        $table = db_prefix() . 'staff_earned_leave_override';
+        if ($this->db->table_exists($table)) {
+            return $table;
+        }
+
+        $this->db->query('CREATE TABLE `' . $table . '` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `staff_id` INT(11) NOT NULL,
+            `month` TINYINT(2) NOT NULL,
+            `year` SMALLINT(4) NOT NULL,
+            `earned_days` DECIMAL(6,2) NOT NULL DEFAULT 0,
+            `updated_by` INT(11) NOT NULL DEFAULT 0,
+            `date_updated` DATETIME NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `staff_month_year` (`staff_id`, `month`, `year`),
+            KEY `idx_year_month` (`year`, `month`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
+
+        return $table;
+    }
+
+    /**
+     * @param array $staff_ids
+     * @param int   $month
+     * @param int   $year
+     * @return array<int,float> staff_id => earned_days
+     */
+    public function get_earned_leave_overrides_batch(array $staff_ids, $month, $year)
+    {
+        $staff_ids = array_values(array_filter(array_map('intval', $staff_ids)));
+        $month = (int) $month;
+        $year = (int) $year;
+        if (empty($staff_ids) || $month < 1 || $month > 12 || $year < 2000) {
+            return [];
+        }
+
+        $table = $this->ensure_earned_leave_override_table();
+        $rows = $this->db->select('staff_id, earned_days')
+            ->from($table)
+            ->where_in('staff_id', $staff_ids)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->get()
+            ->result_array();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['staff_id']] = (float) $row['earned_days'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Save manual earned leave for one staff/month.
+     */
+    public function save_earned_leave_override($staff_id, $month, $year, $earned_days, $updated_by = 0)
+    {
+        $staff_id = (int) $staff_id;
+        $month = (int) $month;
+        $year = (int) $year;
+        $earned_days = round((float) $earned_days, 2);
+        $updated_by = (int) ($updated_by ?: get_staff_user_id());
+
+        if ($staff_id <= 0 || $month < 1 || $month > 12 || $year < 2000 || $earned_days < 0) {
+            return false;
+        }
+
+        $table = $this->ensure_earned_leave_override_table();
+        $existing = $this->db->where('staff_id', $staff_id)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->get($table)
+            ->row();
+
+        $payload = [
+            'earned_days' => $earned_days,
+            'updated_by' => $updated_by,
+            'date_updated' => date('Y-m-d H:i:s'),
+        ];
+
+        if ($existing) {
+            $this->db->where('id', (int) $existing->id)->update($table, $payload);
+            return true;
+        }
+
+        $payload['staff_id'] = $staff_id;
+        $payload['month'] = $month;
+        $payload['year'] = $year;
+        $this->db->insert($table, $payload);
+
+        return $this->db->affected_rows() > 0;
+    }
+
+    /**
+     * Bulk save same earned leave for multiple staff.
+     *
+     * @return int number saved
+     */
+    public function bulk_save_earned_leave_overrides(array $staff_ids, $month, $year, $earned_days, $updated_by = 0)
+    {
+        $saved = 0;
+        foreach (array_unique(array_map('intval', $staff_ids)) as $staff_id) {
+            if ($staff_id > 0 && $this->save_earned_leave_override($staff_id, $month, $year, $earned_days, $updated_by)) {
+                $saved++;
+            }
+        }
+
+        return $saved;
+    }
 }

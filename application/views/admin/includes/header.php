@@ -7,14 +7,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <style>
     /* adding the css for check out button and checkin/out info */
 
-#timesheets-form-check-in{
-	width: 10% !important;
-    position: absolute !important;
-    left: 20% !important;
-}
-#timesheets-form-check-out{
-	    left: 100px !important;
-    position: absolute!important;
+#timesheets-form-check-in,
+#timesheets-form-check-out {
+    position: static !important;
+    left: auto !important;
+    width: auto !important;
+    display: inline-block !important;
+    margin: 0 !important;
 }
     nav .alert {
         padding: 3px 9px;
@@ -45,7 +44,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     @media screen and (min-width: 1100px) {
         .check-time-btn {
-            display: block !important;
+            display: inline-flex !important;
             /* or any other display property you want */
         }
     }
@@ -69,7 +68,18 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     <?php
     $CI = &get_instance();
+    if (!function_exists('get_timesheets_option')) {
+        $CI->load->helper('timesheets/timesheets');
+    }
     $CI->load->model('timesheets/timesheets_model');
+
+    $allows_updating_check_in_time = 0;
+    if (function_exists('get_timesheets_option')) {
+        $data_allows_updating = get_timesheets_option('allows_updating_check_in_time');
+        if ($data_allows_updating !== null && $data_allows_updating !== '') {
+            $allows_updating_check_in_time = $data_allows_updating;
+        }
+    }
 
     $type_check_in_out = '';
 
@@ -225,65 +235,81 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
                     <li>
-
-                        <!-- Creating privacy policy page -->
-                    <li>
-
                         <a href="/admin/company_policies">Company Policies</a>
-
                     </li>
 
-                    </li>
-
-                    <!-- This list will show checkout button on header -->
-
-
-					<!--<a href="/EMT.zip" download style="color:#fff; text-decoration: underline !important;"><i class="fa fa-download" aria-hidden="true"></i> EMT Download</a>-->
-                    <li id='checkOutBtn' class="icon dropdown tw-relative tw-block notifications-wrapper header-notifications rtl:tw-ml-3 check-time-btn" style="width: 7%; padding: 13px 10px;">
+                    <!-- Suggestion + Check in/out: one aligned button group -->
+                    <li id="headerActionButtons" class="header-action-buttons check-time-btn">
+                        <button type="button" id="openStaffSuggestionModal" class="btn btn-info btn-suggestion-header" title="<?php echo _l('suggestion_box'); ?>" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;">
+                            <i class="fa fa-lightbulb-o"></i> <?php echo _l('suggestion_box'); ?>
+                        </button>
 
                         <?php
-
-						
                         if (($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin()) && $time_from_checkin >= 15) {
-                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()')); ?>
-
+                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
                             <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-
                             <input type="hidden" name="type_check" value="1">
-
                             <input type="hidden" name="edit_date" value="">
-
                             <input type="hidden" name="point_id" value="">
-
                             <input type="hidden" name="location_user" value="">
-
-                            <button class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
-
+                            <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
                         <?php echo form_close();
                         } ?>
+
                         <?php
                         if ($type_check_in_out == 1 || is_admin()) {
-
-                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()'));
-
-                        ?>
-
+                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
                             <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-
                             <input type="hidden" name="type_check" value="2">
-
                             <input type="hidden" name="edit_date" value="">
-
                             <input type="hidden" name="point_id" value="">
-
                             <input type="hidden" name="location_user" value="">
-
-
-                            <button class="btn btn-danger check_out"><?php echo _l('check_out'); ?></button>
-
+                            <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
                         <?php echo form_close();
                         } ?>
                     </li>
+
+                    <style>
+                        #headerActionButtons.header-action-buttons {
+                            display: inline-flex !important;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 8px 10px !important;
+                            width: auto !important;
+                            vertical-align: middle;
+                            list-style: none;
+                        }
+                        #headerActionButtons .header-action-form {
+                            display: inline-block !important;
+                            position: static !important;
+                            left: auto !important;
+                            width: auto !important;
+                            margin: 0 !important;
+                        }
+                        #headerActionButtons .btn {
+                            margin: 0 !important;
+                            vertical-align: middle;
+                            white-space: nowrap;
+                        }
+                        #headerActionButtons .btn-suggestion-header {
+                            background-color: #0ea5e9 !important;
+                            border: 1px solid #38bdf8 !important;
+                            color: #fff !important;
+                            font-weight: 600;
+                            box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
+                        }
+                        #headerActionButtons .btn-suggestion-header:hover,
+                        #headerActionButtons .btn-suggestion-header:focus {
+                            background-color: #0284c7 !important;
+                            border-color: #7dd3fc !important;
+                            color: #fff !important;
+                        }
+                        @media screen and (max-width: 1099px) {
+                            #headerActionButtons.header-action-buttons {
+                                display: none !important;
+                            }
+                        }
+                    </style>
                 </ul>
 
             </div>
@@ -585,5 +611,192 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
     </nav>
+
+<!-- Suggestion popup: outside nav/ul so it always opens -->
+<div id="staffSuggestionModal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" id="closeStaffSuggestionModalX" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title"><?php echo _l('suggestion_box'); ?></h4>
+            </div>
+            <form id="staff-suggestion-form" method="post" action="<?php echo admin_url('suggestions/submit'); ?>">
+                <div class="modal-body">
+                    <p class="text-muted"><?php echo _l('suggestion_box_help'); ?></p>
+                    <div class="form-group">
+                        <label for="suggestion_subject"><?php echo _l('suggestion_subject'); ?> <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="suggestion_subject" name="subject" maxlength="255" required placeholder="<?php echo _l('suggestion_subject_placeholder'); ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="suggestion_message"><?php echo _l('suggestion_message'); ?> <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="suggestion_message" name="message" rows="5" required placeholder="<?php echo _l('suggestion_message_placeholder'); ?>"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" id="closeStaffSuggestionModalBtn"><?php echo _l('close'); ?></button>
+                    <button type="submit" class="btn btn-primary" id="suggestion-submit-btn"><?php echo _l('suggestion_submit'); ?></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<style>
+#staffSuggestionModal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 99999 !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.45);
+}
+#staffSuggestionModal .modal-dialog {
+    margin: 8vh auto;
+    max-width: 560px;
+    width: 92%;
+    z-index: 100000 !important;
+}
+#staffSuggestionModal.in,
+#staffSuggestionModal.show {
+    display: block !important;
+    opacity: 1 !important;
+}
+</style>
+<script>
+(function () {
+    function getSuggestionModal() {
+        return document.getElementById('staffSuggestionModal');
+    }
+    function openStaffSuggestionModal(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        var modal = getSuggestionModal();
+        if (!modal) {
+            alert('Suggestion popup missing');
+            return false;
+        }
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
+        modal.style.display = 'block';
+        modal.classList.add('in');
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        return false;
+    }
+    function closeStaffSuggestionModal(e) {
+        if (e) {
+            e.preventDefault();
+        }
+        var modal = getSuggestionModal();
+        if (!modal) {
+            return false;
+        }
+        modal.style.display = 'none';
+        modal.classList.remove('in');
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        return false;
+    }
+    window.openStaffSuggestionModal = openStaffSuggestionModal;
+    window.closeStaffSuggestionModal = closeStaffSuggestionModal;
+
+    // Move modal to body immediately
+    var m = getSuggestionModal();
+    if (m && m.parentNode !== document.body) {
+        document.body.appendChild(m);
+    }
+
+    document.addEventListener('click', function (e) {
+        var t = e.target;
+        while (t && t !== document) {
+            if (t.id === 'openStaffSuggestionModal') {
+                openStaffSuggestionModal(e);
+                return;
+            }
+            if (t.id === 'closeStaffSuggestionModalBtn' || t.id === 'closeStaffSuggestionModalX') {
+                closeStaffSuggestionModal(e);
+                return;
+            }
+            if (t.id === 'staffSuggestionModal' && e.target === t) {
+                closeStaffSuggestionModal(e);
+                return;
+            }
+            t = t.parentNode;
+        }
+    }, true);
+
+    function bindSuggestionSubmit() {
+        if (typeof jQuery === 'undefined') {
+            return;
+        }
+        var $ = jQuery;
+        var $form = $('#staff-suggestion-form');
+        if (!$form.length || $form.data('suggestion-bound')) {
+            return;
+        }
+        $form.data('suggestion-bound', true);
+        $form.on('submit', function (ev) {
+            ev.preventDefault();
+            var $btn = $('#suggestion-submit-btn');
+            $btn.prop('disabled', true).text(<?php echo json_encode(_l('wait_text')); ?>);
+            var data = {
+                subject: $('#suggestion_subject').val(),
+                message: $('#suggestion_message').val()
+            };
+            if (typeof csrfData !== 'undefined') {
+                data[csrfData.token_name] = csrfData.hash;
+            }
+            $.ajax({
+                url: <?php echo json_encode(admin_url('suggestions/submit')); ?>,
+                type: 'POST',
+                dataType: 'json',
+                data: data,
+                success: function (response) {
+                    if (response && response.success) {
+                        if (typeof alert_float === 'function') {
+                            alert_float('success', response.message);
+                        } else {
+                            alert(response.message || 'Submitted');
+                        }
+                        closeStaffSuggestionModal();
+                        $form[0].reset();
+                    } else {
+                        var fail = (response && response.message) ? response.message : <?php echo json_encode(_l('suggestion_submit_failed')); ?>;
+                        if (typeof alert_float === 'function') {
+                            alert_float('danger', fail);
+                        } else {
+                            alert(fail);
+                        }
+                    }
+                },
+                error: function () {
+                    var msg = <?php echo json_encode(_l('suggestion_submit_failed')); ?>;
+                    if (typeof alert_float === 'function') {
+                        alert_float('danger', msg);
+                    } else {
+                        alert(msg);
+                    }
+                },
+                complete: function () {
+                    $btn.prop('disabled', false).text(<?php echo json_encode(_l('suggestion_submit')); ?>);
+                }
+            });
+        });
+    }
+    if (typeof jQuery !== 'undefined') {
+        jQuery(bindSuggestionSubmit);
+    } else {
+        document.addEventListener('DOMContentLoaded', bindSuggestionSubmit);
+        window.addEventListener('load', bindSuggestionSubmit);
+    }
+})();
+</script>
 
 </div>

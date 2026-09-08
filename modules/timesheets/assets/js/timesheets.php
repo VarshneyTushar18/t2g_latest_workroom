@@ -10,8 +10,6 @@
 
     var dataObject = <?php echo json_encode($staff_row_tk); ?>;
 
-    console.log(dataObject);
-
     var dataCol = <?php echo html_entity_decode($set_col_tk); ?>;
 
     var dataHeader = <?php echo html_entity_decode($day_by_month_tk); ?>;
@@ -124,7 +122,18 @@
 
     var hot = new Handsontable(hotElement, hotSettings);
 
-
+    // Load attendance grid after page paint.
+    // Default to current user only so managers don't wait for the full team grid.
+    if ($('.timesheets_filter').length) {
+      setTimeout(function() {
+        var currentStaffId = '<?php echo (int) get_staff_user_id(); ?>';
+        var $staffSelect = $('select[name="staff_timesheets[]"]');
+        if ($staffSelect.length && currentStaffId) {
+          $staffSelect.selectpicker('val', [currentStaffId]);
+        }
+        $('.timesheets_filter').trigger('click');
+      }, 50);
+    }
 
     appValidateForm($('#import-timesheets-form'), {
 

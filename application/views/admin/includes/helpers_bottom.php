@@ -1,6 +1,17 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php include_once(APPPATH . 'views/admin/includes/modals/post_likes.php'); ?>
 <?php include_once(APPPATH . 'views/admin/includes/modals/post_comment_likes.php'); ?>
+<?php // Suggestion modal is rendered in header.php (self-contained) ?>
+<?php
+$pedmaAckPopup = APPPATH . 'views/admin/includes/modals/pedma_ack_popup.php';
+if (is_file($pedmaAckPopup)) {
+    include_once($pedmaAckPopup);
+}
+$pedmaEvalReminderPopup = APPPATH . 'views/admin/includes/modals/pedma_eval_reminder_popup.php';
+if (is_file($pedmaEvalReminderPopup)) {
+    include_once($pedmaEvalReminderPopup);
+}
+?>
 <div id="event"></div>
 <div id="newsfeed" class="animated fadeIn hide" <?php if ($this->session->flashdata('newsfeed_auto')) {
                                                   echo 'data-newsfeed-auto';

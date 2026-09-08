@@ -316,6 +316,14 @@ class Tasks extends AdminController
         if ($this->input->post()) {
             $data                = $this->input->post();
             $data['description'] = html_purify($this->input->post('description', false));
+            $task_template_ids   = isset($data['task_template_id']) ? $data['task_template_id'] : [];
+            $save_to_template_id = !empty($data['save_to_template_id']) ? $data['save_to_template_id'] : null;
+            unset($data['task_template_id'], $data['save_to_template_id']);
+
+            if (!is_array($task_template_ids)) {
+                $task_template_ids = $task_template_ids ? [$task_template_ids] : [];
+            }
+            $task_template_ids = array_values(array_filter($task_template_ids));
             if ($id == '') {
                 if (!has_permission('tasks', '', 'create')) {
                     header('HTTP/1.0 400 Bad error');
@@ -325,6 +333,32 @@ class Tasks extends AdminController
                     ]);
                     die;
                 }
+
+                if (count($task_template_ids) > 0) {
+                    if (!can_manage_task_templates()) {
+                        header('HTTP/1.0 400 Bad error');
+                        echo json_encode([
+                            'success' => false,
+                            'message' => _l('access_denied'),
+                        ]);
+                        die;
+                    }
+
+                    $this->load->model('task_templates_model');
+                    $created = $this->task_templates_model->create_tasks_from_templates($task_template_ids, [
+                        'rel_type'  => isset($data['rel_type']) ? $data['rel_type'] : '',
+                        'rel_id'    => isset($data['rel_id']) ? $data['rel_id'] : '',
+                        'startdate' => isset($data['startdate']) ? $data['startdate'] : _d(date('Y-m-d')),
+                    ]);
+
+                    echo json_encode([
+                        'success' => $created > 0,
+                        'id'      => false,
+                        'message' => $created > 0 ? _l('task_template_tasks_created', $created) : _l('problem_adding', _l('task_lowercase')),
+                    ]);
+                    die;
+                }
+
                 $id      = $this->tasks_model->add($data);
                 $_id     = false;
                 $success = false;
@@ -337,6 +371,15 @@ class Tasks extends AdminController
                     if ($uploadedFiles && is_array($uploadedFiles)) {
                         foreach ($uploadedFiles as $file) {
                             $this->misc_model->add_attachment_to_database($id, 'task', [$file]);
+                        }
+                    }
+
+                    if ($save_to_template_id) {
+                        if (can_manage_task_templates()) {
+                            $this->load->model('task_templates_model');
+                            if ($this->task_templates_model->add_item($save_to_template_id, $data)) {
+                                $message .= ' ' . _l('task_template_task_saved_to_template');
+                            }
                         }
                     }
                 }
@@ -370,6 +413,14 @@ class Tasks extends AdminController
 
         $data['milestones']         = [];
         $data['checklistTemplates'] = $this->tasks_model->get_checklist_templates();
+        $data['taskTemplates']      = [];
+        if (can_manage_task_templates()) {
+            $this->load->model('task_templates_model');
+            $data['taskTemplates'] = $this->task_templates_model->get();
+            if (!is_array($data['taskTemplates'])) {
+                $data['taskTemplates'] = [];
+            }
+        }
         if ($id == '') {
             $title = _l('add_new', _l('task_lowercase'));
         } else {

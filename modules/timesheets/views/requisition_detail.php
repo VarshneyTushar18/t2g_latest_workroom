@@ -39,7 +39,7 @@ $check = $this->input->get('check'); ?>
 
           
             <div class="row">
-			<?php if($manager == true or is_admin()){ ?>
+			<?php if($manager == true){ ?>
               <div class="col-md-12 ">
 			 <?php if($manager_comm_status == 0) { ?>
 			  <a href="#" onclick="approve_leave(); return false;" class="btn mright5 btn-danger pull-right display-block" data-toggle="sidebar-right" data-target=".approve_leave_ap">

@@ -525,27 +525,26 @@ class Staff extends AdminController
         if ($selectedYear == '') {
             $selectedYear = $currentYear;
         }
-		
-        // $monthQuery = ($selectedMonth == 0) ? '' : " WHERE (MONTH(tbltimesheets_requisition_leave.start_time) = ? AND YEAR(tbltimesheets_requisition_leave.start_time) = ?) OR tbltimesheets_requisition_leave.start_time IS NULL";
 
-        // $sql = "SELECT tblstaff_info.empid, tblstaff_info.staffid , tbltimesheets_requisition_leave.type_of_leave_text	,MONTH(tbltimesheets_requisition_leave.start_time) AS month, DAY(LAST_DAY(tbltimesheets_requisition_leave.start_time)) AS number_of_days, SUM(tbltimesheets_requisition_leave.number_of_leaving_day) AS Leaves_taken, MIN(tbltimesheets_requisition_leave.number_of_days) AS remaining_leaves , tblstaff_info.leave_earned , tblstaff_info.doj
-        // FROM tblstaff_info
-        // INNER JOIN tbltimesheets_requisition_leave ON tblstaff_info.staffid=tbltimesheets_requisition_leave.staff_id " . $monthQuery . " GROUP BY tblstaff_info.staffid ;";
+        $this->load->helper('timesheets/timesheets');
 
-        $addQuery = (is_admin(get_staff())) ? ' WHERE tblstaff.active = 1 ' : " WHERE tblstaff.staffid=" . get_staff()->staffid;
-
-
-        if (is_admin()) {
-            $addQuery = ' WHERE tblstaff.active = 1 ';
-        } else if (attendance_permission()) {
-            $all_departments_array = get_department_by_staffid(get_staff_user_id());
-            $all_departments_id = array_column($all_departments_array, 'departmentid');
-            $all_departments_id_str = implode(",", $all_departments_id);
-            $addQuery = " WHERE tblstaff_departments.departmentid IN ($all_departments_id_str) AND tblstaff.active = 1 ";
-            // echo $addQuery ; die;
-        } else {
-            $addQuery = " WHERE tblstaff.staffid=" . get_staff()->staffid;
+        $view_staff_id = (int) get_staff_user_id();
+        $picked_staff = $this->input->post('staff_id') ?: $this->input->get('staff_id');
+        if ($picked_staff && timesheets_can_view_staff((int) $picked_staff)) {
+            $view_staff_id = (int) $picked_staff;
         }
+
+        $team_ids = timesheets_get_team_staff_ids();
+
+        if (timesheets_hr_can_view_all_staff()) {
+            $addQuery = ' WHERE tblstaff.active = 1 ';
+        } elseif (is_array($team_ids) && count($team_ids) > 1) {
+            $addQuery = ' WHERE tblstaff.staffid IN (' . implode(',', array_map('intval', $team_ids)) . ') AND tblstaff.active = 1 ';
+        } else {
+            $addQuery = ' WHERE tblstaff.staffid=' . (int) get_staff_user_id();
+        }
+
+        $data['table_data'] = [];
 		
         $sqlAdmin = "SELECT
         tblstaff.staffid,
@@ -574,52 +573,126 @@ class Staff extends AdminController
                 //                $data['table_data'][$month_in_number] = array();
 
                 $data['table_data'][$month_in_number] = $this->db->query($sqlAdmin, [$month_in_number, $selectedYear])->result_array();
-				//print_r($data['table_data'][$month_in_number]);
-                foreach ($data['table_data'][$month_in_number] as &$leaveData) {
-                    //                    print_r($leaveData); die;
-                    $leaveData['carry_forward'] = $this->staff_model->carryForward($leaveData['staffid'], $leaveData['doj'], $month_in_number, $selectedYear);
-                    $leaveData['earned_leave'] = $this->staff_model->calculateEarnedLeaves($leaveData['doj']);
-                    $leaveData['monthly_leaves'] = $this->staff_model->monthlyLeaveBalance($leaveData['staffid'], $leaveData['doj'], $month_in_number, $selectedYear);
-					$leaveData['leave_taken'] = $this->staff_model->monthlyLeave($leaveData['staffid'], $month_in_number, $selectedYear);
-					$leaveData['status'] = $this->staff_model->monthlystatus($leaveData['staffid'], $month_in_number, $selectedYear);
-					$leaveData['status_approve'] = $this->staff_model->status_approve($leaveData['staffid'], $month_in_number, $selectedYear);
-                }
+                $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
+                    $data['table_data'][$month_in_number],
+                    $month_in_number,
+                    $selectedYear
+                );
             }
         } else {
 
-            // Prepare the query and bind the selected month parameter if needed
-            //            $data['table_data'] = $this->db->query($sqlAdmin, [$selectedMonth, $selectedYear])->result_array();
-            //            foreach ($data['table_data'] as &$leaveData) {
-            //                $leaveData['carry_forward'] = $this->staff_model->carryForward($leaveData['staffid'], $leaveData['doj'], $selectedMonth);
-            //                $leaveData['earned_leave'] = $this->staff_model->calculateEarnedLeaves($leaveData['doj']);
-            //                $leaveData['monthly_leaves'] = $this->staff_model->monthlyLeaveBalance($leaveData['staffid'], $leaveData['doj'], $selectedMonth);
-            //            }
             $month_in_number = $selectedMonth;
             $data['table_data'][$month_in_number] = $this->db->query($sqlAdmin, [$month_in_number, $selectedYear])->result_array();
-	
-            // print_r($data['table_data'][$month_in_number]);die;
-            foreach ($data['table_data'][$month_in_number] as &$leaveData) {
-                $leaveData['carry_forward'] = $this->staff_model->carryForward($leaveData['staffid'], $leaveData['doj'], $month_in_number, $selectedYear);
-                $leaveData['earned_leave'] = $this->staff_model->calculateEarnedLeaves($leaveData['doj']);
-                $leaveData['monthly_leaves'] = $this->staff_model->monthlyLeaveBalance($leaveData['staffid'], $leaveData['doj'], $month_in_number, $selectedYear);
-				$leaveData['leave_taken'] = $this->staff_model->monthlyLeave($leaveData['staffid'], $month_in_number, $selectedYear);
-				$leaveData['status'] = $this->staff_model->monthlystatus($leaveData['staffid'], $month_in_number, $selectedYear);
-				$leaveData['status_approve'] = $this->staff_model->status_approve($leaveData['staffid'], $month_in_number, $selectedYear);
-				//print_r($leaveData);
-            }
+            $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
+                $data['table_data'][$month_in_number],
+                $month_in_number,
+                $selectedYear
+            );
         }
 
 
         $data['currentMonth'] = $selectedMonth;
         $data['currentYear'] = $currentYear;
         $data['selectedYear'] = $selectedYear;
-		
-		
 
-	//print_r($data);die;
+        $data['summary'] = null;
+        if ($selectedMonth != 0 && isset($data['table_data'][$selectedMonth])) {
+            foreach ($data['table_data'][$selectedMonth] as $row) {
+                if ((int) $row['staffid'] !== $view_staff_id) {
+                    continue;
+                }
+                $data['summary'] = [
+                    'carry_forward' => $row['carry_forward'],
+                    'leave_taken' => $row['leave_taken'],
+                    'earned_leave' => $row['earned_leave'],
+                    'leave_balance' => $row['leave_balance'],
+                    'absent' => $row['status'],
+                    'month' => (int) $selectedMonth,
+                    'month_name' => date('F', mktime(0, 0, 0, (int) $selectedMonth, 1)),
+                ];
+                break;
+            }
+        }
 
+        $data['leave_balance_cards'] = [];
+        $data['leave_balance_year'] = (int) $selectedYear;
+        $data['userid'] = $view_staff_id;
+        $data['can_pick_staff'] = timesheets_user_can_pick_staff();
+        $data['staff_list'] = $data['can_pick_staff'] ? timesheets_get_viewable_staff_list() : [];
+        $data['is_team_manager'] = timesheets_is_team_manager();
+        $data['is_hr_viewer'] = timesheets_hr_can_view_all_staff();
+        $data['can_edit_earned_leave'] = $data['is_hr_viewer'];
+        if (is_dir(module_dir_path('timesheets'))) {
+            $this->load->model('timesheets/timesheets_model');
+            $card_month = ((int) $selectedMonth > 0) ? (int) $selectedMonth : null;
+            $data['leave_balance_month'] = $card_month ? (int) $card_month : 0;
+            $data['leave_balance_cards'] = $this->timesheets_model->get_staff_leave_balance_cards(
+                $view_staff_id,
+                (int) $selectedYear,
+                $card_month
+            );
+        }
 
         $this->load->view('admin/staff/leave_balance', $data);
+    }
+
+    /**
+     * HR: bulk set earned leave by department (like Manage Saturday).
+     */
+    public function manage_earned_leave()
+    {
+        $this->load->helper('timesheets/timesheets');
+        if (!timesheets_hr_can_view_all_staff()) {
+            access_denied('manage_earned_leave');
+        }
+
+        $this->load->model('departments_model');
+
+        $data['title'] = 'Manage Earned Leave';
+        $data['departments'] = $this->departments_model->get();
+        $data['staffs'] = [];
+        $data['current_year'] = (int) date('Y');
+        $data['current_month'] = (int) date('m');
+
+        $this->load->view('admin/staff/manage_earned_leave', $data);
+    }
+
+    /**
+     * AJAX: save earned leave for one or many staff for a month.
+     */
+    public function save_earned_leave_bulk()
+    {
+        $this->load->helper('timesheets/timesheets');
+        if (!timesheets_hr_can_view_all_staff()) {
+            ajax_access_denied();
+        }
+
+        $staff_ids = $this->input->post('staffids');
+        if (!is_array($staff_ids)) {
+            $single = (int) $this->input->post('staff_id');
+            $staff_ids = $single > 0 ? [$single] : [];
+        }
+        $staff_ids = array_values(array_filter(array_map('intval', $staff_ids)));
+
+        $month = (int) $this->input->post('month');
+        $year = (int) $this->input->post('year');
+        $earned_days = $this->input->post('earned_days');
+
+        if (empty($staff_ids) || $month < 1 || $month > 12 || $year < 2000 || $earned_days === null || $earned_days === '') {
+            echo json_encode(['success' => false, 'message' => 'Staff, month, year and earned days are required.']);
+            die;
+        }
+
+        $saved = $this->staff_model->bulk_save_earned_leave_overrides($staff_ids, $month, $year, $earned_days);
+
+        echo json_encode([
+            'success' => $saved > 0,
+            'message' => $saved > 0
+                ? ('Updated earned leave for ' . $saved . ' employee(s).')
+                : 'Could not save earned leave.',
+            'saved' => $saved,
+        ]);
+        die;
     }
 
     public function get_leave_data()
@@ -647,12 +720,8 @@ class Staff extends AdminController
     /*  Performance of Employee List  */
     public function pedma_admin()
     {
-
-
-        // if (!is_manager()) {
-        if (!attendance_permission()) {
-
-            access_denied('timesheets');
+        if (!can_evaluate_pedma()) {
+            access_denied('pedma');
         }
 
         $this->load->model('departments_model');
@@ -660,9 +729,9 @@ class Staff extends AdminController
         $data['departments'] = $this->departments_model->get_staff_departments();
         $isManager = $this->db->query('SELECT manageleave from tblstaff_info WHERE staffid = ' . get_staff_user_id())->result_array();
 
-        $staffs = $this->staff_model->get_staff_based_on_department();
-
-        $data['staffs'] = $staffs;
+        // Show department staff list (do not over-filter by team_manage,
+        // otherwise Employee dropdown becomes empty after department select).
+        $data['staffs'] = $this->staff_model->get_staff_based_on_department();
 
         $data['title'] = _l('timesheets');
 
@@ -671,12 +740,8 @@ class Staff extends AdminController
 
     public function pedma_admin_old()
     {
-
-
-        // if (!is_manager()) {
-        if (!attendance_permission()) {
-
-            access_denied('timesheets');
+        if (!can_evaluate_pedma()) {
+            access_denied('pedma');
         }
 
         $this->load->model('departments_model');
@@ -706,12 +771,8 @@ class Staff extends AdminController
 
     public function pedma_admin_kra()
     {
-
-
-        // if (!is_manager()) {
-        if (!attendance_permission()) {
-
-            access_denied('timesheets');
+        if (!can_manage_pedma_kra()) {
+            access_denied('pedma');
         }
 
         $data['kra'] = $this->staff_model->get_kra_based_on_department();
@@ -721,9 +782,8 @@ class Staff extends AdminController
 
     public function pedma_admin_kra_action($id = '')
     {
-        if (!attendance_permission()) {
-
-            access_denied('timesheets');
+        if (!can_manage_pedma_kra()) {
+            access_denied('pedma');
         }
 
         if ($this->input->method() === 'post') {
@@ -819,6 +879,12 @@ class Staff extends AdminController
 
     public function pedma()
     {
+        if (!can_view_own_pedma()) {
+            access_denied('pedma');
+        }
+
+        $this->staff_model->ensure_pedma_feedback_ack_columns();
+
         $id = get_staff_user_id(); 
         // $performance = $this->db->get_where('tblstaff_performance', ['staffid' => $id]);
 
@@ -832,7 +898,10 @@ class Staff extends AdminController
 
     public function manage_pedma()
     {
-        
+        if (!can_manage_pedma()) {
+            access_denied('pedma');
+        }
+
 		$staff_id = $this->staff_model->get_kra_based_on_department();
 
         $data['result'] = $this->departments_model->get_staff_departments();
@@ -841,6 +910,10 @@ class Staff extends AdminController
 
     public function manage_pedma_staff()
 	{
+        if (!can_manage_pedma()) {
+            access_denied('pedma');
+        }
+
 		$id = $this->input->post('data');
 		//$id = get_staff_user_id(); 
 		
@@ -850,12 +923,119 @@ class Staff extends AdminController
 
         // $data['staffid'] = $id;
         $data['performance_values'] = $performance->result_array();
+
+        // Include staff join date so UI can compute "days of data" accurately
+        // for employees who joined mid-period.
+        $joinDate = null;
+        $staffInfo = $this->db->select('doj')
+            ->from('tblstaff_info')
+            ->where('staffid', (int) $id)
+            ->get()
+            ->row_array();
+        if (!empty($staffInfo['doj'])) {
+            $joinDate = date('Y-m-d', strtotime($staffInfo['doj']));
+        } else {
+            $staffRow = $this->db->select('datecreated')
+                ->from('tblstaff')
+                ->where('staffid', (int) $id)
+                ->get()
+                ->row_array();
+            if (!empty($staffRow['datecreated'])) {
+                $joinDate = date('Y-m-d', strtotime($staffRow['datecreated']));
+            }
+        }
+
+        if ($joinDate) {
+            foreach ($data['performance_values'] as &$row) {
+                $row['staff_join_date'] = $joinDate;
+            }
+            unset($row);
+        }
 		
 		echo json_encode($data['performance_values']);
 	}
 
+    public function manage_pedma_by_grade()
+    {
+        header('Content-Type: application/json');
+
+        $grade = trim((string) $this->input->post('grade'));
+        $from = $this->input->post('from');
+        $to = $this->input->post('to');
+        $department = $this->input->post('department');
+        $staffActive = (string) $this->input->post('staff_active');
+
+        // Grade filter: Admin / Super Admin / HR only.
+        // Department-only list (no grade): any Manage PEDMA user.
+        if ($grade !== '') {
+            if (!can_view_pedma_grade_filter()) {
+                echo json_encode(['success' => false, 'message' => 'Access denied', 'rows' => []]);
+                return;
+            }
+        } elseif (!can_manage_pedma()) {
+            echo json_encode(['success' => false, 'message' => 'Access denied', 'rows' => []]);
+            return;
+        }
+
+        if ($grade === '' && ($department === '' || $department === null)) {
+            echo json_encode(['success' => false, 'message' => 'Select a department.', 'rows' => []]);
+            return;
+        }
+
+        $rows = $this->staff_model->get_pedma_rows_by_grade($grade, $from, $to, $department, $staffActive);
+
+        $avg = 0;
+        if (count($rows)) {
+            $sum = 0;
+            foreach ($rows as $r) {
+                $sum += (float) $r['score'];
+            }
+            $avg = round($sum / count($rows), 2);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'grade' => strtoupper((string) $grade),
+            'mode' => $grade !== '' ? 'grade' : 'department',
+            'count' => count($rows),
+            'avg_score' => $avg,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function pedma_schedule_meeting()
+    {
+        header('Content-Type: application/json');
+
+        if (!can_manage_pedma()) {
+            echo json_encode(['success' => false, 'message' => 'Access denied']);
+            return;
+        }
+
+        $staffid = (int) $this->input->post('staffid');
+        $monthLabel = trim((string) $this->input->post('month_label'));
+        $score = trim((string) $this->input->post('score'));
+        $grade = trim((string) $this->input->post('grade'));
+
+        if ($staffid <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Invalid employee.']);
+            return;
+        }
+
+        $ok = $this->staff_model->send_pedma_schedule_meeting_email($staffid, $monthLabel ?: 'selected period', $score, $grade);
+
+        echo json_encode([
+            'success' => (bool) $ok,
+            'message' => $ok ? 'Meeting request email sent to the employee.' : 'Could not send meeting email.',
+        ]);
+    }
+
     public function pedma_old()
     {
+        if (!can_view_own_pedma()) {
+            access_denied('pedma');
+        }
+
         $id = get_staff_user_id();
         $performance = $this->db->get_where('tblstaff_performance2', ['staffid' => $id]);
 
@@ -888,6 +1068,10 @@ class Staff extends AdminController
     }
     
     public function pedma_staff_reply() {
+        if (!can_view_own_pedma()) {
+            access_denied('pedma');
+        }
+
         $staffid = $this->input->post('staffid');
         $comment = $this->input->post('comment');
         $monthName = $this->input->post('month');
@@ -911,6 +1095,138 @@ class Staff extends AdminController
         }
 
     }
+
+    public function pedma_acknowledge_feedback()
+    {
+        if (!can_view_own_pedma()) {
+            echo json_encode(['success' => false, 'message' => 'Access denied']);
+            return;
+        }
+
+        header('Content-Type: application/json');
+
+        $staffid = (int) get_staff_user_id();
+        $month   = trim((string) $this->input->post('month')); // YYYY-MM
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid month selected.']);
+            return;
+        }
+
+        $this->staff_model->ensure_pedma_feedback_ack_columns();
+        $result = $this->staff_model->acknowledge_pedma_feedback($staffid, $month);
+
+        echo json_encode([
+            'success' => (bool) $result['success'],
+            'message' => $result['success']
+                ? 'Thank you. You have accepted this feedback.'
+                : 'Could not accept feedback. Please try again.',
+            'accepted_at' => $result['accepted_at'],
+            'status' => isset($result['status']) ? (int) $result['status'] : ($result['success'] ? 1 : 0),
+        ]);
+    }
+
+    public function pedma_need_meeting()
+    {
+        if (!can_view_own_pedma()) {
+            echo json_encode(['success' => false, 'message' => 'Access denied']);
+            return;
+        }
+
+        header('Content-Type: application/json');
+
+        $staffid = (int) get_staff_user_id();
+        $month   = trim((string) $this->input->post('month'));
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid month selected.']);
+            return;
+        }
+
+        $this->staff_model->ensure_pedma_feedback_ack_columns();
+        $result = $this->staff_model->pedma_need_meeting($staffid, $month);
+
+        echo json_encode([
+            'success' => (bool) $result['success'],
+            'message' => $result['success']
+                ? 'Your manager has been notified. A meeting request was sent.'
+                : 'Could not send meeting request. Please try again.',
+            'accepted_at' => $result['accepted_at'],
+            'status' => isset($result['status']) ? (int) $result['status'] : ($result['success'] ? 2 : 0),
+        ]);
+    }
+
+    public function pedma_pending_ack()
+    {
+        header('Content-Type: application/json');
+
+        if (!is_staff_logged_in() || !can_view_own_pedma()) {
+            echo json_encode(['success' => true, 'pending' => []]);
+            return;
+        }
+
+        $this->staff_model->ensure_pedma_feedback_ack_columns();
+        $rows = $this->staff_model->get_pending_pedma_ack(get_staff_user_id());
+        $pending = [];
+
+        foreach ($rows as $row) {
+            $ascore = (float) $row['avg_score'];
+            $fscore = !empty($row['fatal_error_score']) ? ((float) $row['fatal_error_score'] / 100) * $ascore : 0;
+            $addscore = !empty($row['add_on_score']) ? ((float) $row['add_on_score'] / 100) * $ascore : 0;
+            $nscore = number_format($ascore - $fscore + $addscore, 2);
+            $time = strtotime($row['date_created']);
+            $pending[] = [
+                'id' => (int) $row['id'],
+                'month_key' => date('Y-m', $time),
+                'month_label' => date('F', $time),
+                'year_label' => date('Y', $time),
+                'score' => $nscore,
+                'overall_feedback' => $row['overall_feedback'],
+            ];
+        }
+
+        echo json_encode(['success' => true, 'pending' => $pending]);
+    }
+
+    /**
+     * Manager PEDMA evaluation reminder payload (after 10th of month).
+     */
+    public function pedma_eval_pending_reminder()
+    {
+        header('Content-Type: application/json');
+
+        if (!is_staff_logged_in() || !can_evaluate_pedma()) {
+            echo json_encode(['success' => true, 'show' => false, 'pending' => []]);
+            return;
+        }
+
+        if (function_exists('pedma_eval_reminders_are_active') && !pedma_eval_reminders_are_active()) {
+            echo json_encode([
+                'success' => true,
+                'show'    => false,
+                'pending' => [],
+                'reason'  => 'starts_' . (function_exists('pedma_eval_reminders_start_date') ? pedma_eval_reminders_start_date() : '2026-09-01'),
+            ]);
+            return;
+        }
+
+        $day = (int) date('j');
+        if ($day <= 10) {
+            echo json_encode(['success' => true, 'show' => false, 'pending' => [], 'reason' => 'before_10th']);
+            return;
+        }
+
+        $monthYm = $this->staff_model->get_pedma_eval_target_month();
+        $pending = $this->staff_model->get_manager_pending_pedma_team(get_staff_user_id(), $monthYm);
+
+        echo json_encode([
+            'success'     => true,
+            'show'        => count($pending) > 0,
+            'month'       => $monthYm,
+            'month_label' => date('F Y', strtotime($monthYm . '-01')),
+            'pending'     => $pending,
+        ]);
+    }
     
     // get staff data in ajax
     public function get_staff_json()
@@ -926,6 +1242,10 @@ class Staff extends AdminController
 
     public function staff_performance()
     {
+        if (!can_evaluate_pedma()) {
+            access_denied('pedma');
+        }
+
         $staffid =  $this->input->post('staffid');
         $date_created =  $this->input->post('performance_month');
         $type =  $this->input->post('kraOption');
@@ -937,6 +1257,14 @@ class Staff extends AdminController
         $status =  $this->input->post('status');
 
         $staff_name = get_staff_full_name($staffid);
+
+        // "previous" is a UI template choice — persist as the underlying default/custom type.
+        if ($type == 'previous') {
+            $type = $this->input->post('previous_kra_save_type');
+            if ($type !== 'default' && $type !== 'custom') {
+                $type = !empty($kraData2) ? 'custom' : 'default';
+            }
+        }
 
         if($type == "default"){
             $kraData = json_encode($kraData1);
@@ -953,7 +1281,10 @@ class Staff extends AdminController
             'avg_score' => $average,
             'overall_feedback' => $overall_feedback,
             'status' => $status,
-            'date_created' => $date_created . '-01'
+            'date_created' => $date_created . '-01',
+            // Manager changed the report — employee must re-acknowledge
+            'feedback_accepted' => 0,
+            'feedback_accepted_at' => null,
         );
 
         if ($this->staff_model->check_if_review_added($staffid, $date_created)) {
@@ -1013,40 +1344,65 @@ class Staff extends AdminController
         echo json_encode($staff_performance_data[0]);
     }
 
-    public function get_previous_month_custom_kra_data(){
-        $search_date =  $this->input->post('date');
-
-
+    public function get_previous_month_custom_kra_data()
+    {
+        $search_date = $this->input->post('date');
         $staff_id = $this->input->post('staffid');
+
+        if (empty($search_date) || empty($staff_id)) {
+            echo json_encode(null);
+            return;
+        }
+
         $this->db->select('*');
         $this->db->from('tblstaff_performance');
         $this->db->where('staffid', $staff_id);
         $this->db->where("DATE_FORMAT(date_created, '%Y-%m')=", $search_date);
-        $staff_performance_data = $this->db->get()->result_array();
+        $this->db->order_by('id', 'DESC');
+        $this->db->limit(1);
+        $row = $this->db->get()->row_array();
 
-        echo json_encode($staff_performance_data[0]);
+        echo json_encode(!empty($row) ? $row : null);
     }
 
     public function get_staff_department_json()
     {
         $departmentid = $this->input->post('department');
-        $data[] = $this->staff_model->get_staff_based_on_department($departmentid);
-        echo json_encode($data[0]);
+        $active = $this->input->post('staff_active');
+        if ($active === null || $active === '') {
+            $active = 1;
+        }
+        $staffs = $this->staff_model->get_staff_based_on_department($departmentid, $active);
+
+        // Keep department employees visible. Prefer assigned team when available,
+        // but fall back to full department list so dropdown is never empty.
+        $assigned = $this->staff_model->filter_staff_for_pedma_evaluation($staffs);
+        if (count($assigned) > 0) {
+            $staffs = $assigned;
+        }
+
+        echo json_encode(array_values($staffs));
     }
 
     public function get_staff_performance_month_and_id()
     {
-        $search_date =  $this->input->post('month');
-
-
+        $search_date = $this->input->post('month');
         $staff_id = $this->input->post('staffid');
+
+        if (empty($search_date) || empty($staff_id)) {
+            echo json_encode(null);
+            return;
+        }
+
         $this->db->select('*');
         $this->db->from('tblstaff_performance');
         $this->db->where('staffid', $staff_id);
         $this->db->where("DATE_FORMAT(date_created, '%Y-%m')=", $search_date);
-        $staff_performance_data = $this->db->get()->result_array();
+        $this->db->order_by('id', 'DESC');
+        $this->db->limit(1);
+        $row = $this->db->get()->row_array();
 
-        echo json_encode($staff_performance_data[0]);
+        echo json_encode(!empty($row) ? $row : null);
     }
 
     public function get_staff_performance_month_and_id_old()

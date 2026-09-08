@@ -148,6 +148,19 @@ function get_available_staff_permissions($data = [])
             'name'         => _l('estimate_request'),
             'capabilities' => $allPermissionsArray,
         ],
+        'pedma' => [
+            'name'         => _l('pedma'),
+            'capabilities' => [
+                'view'   => _l('permission_pedma_view'),
+                'create' => _l('permission_pedma_create'),
+                'edit'   => _l('permission_pedma_edit'),
+            ],
+            'help' => [
+                'view'   => _l('help_pedma_permission_view'),
+                'create' => _l('help_pedma_permission_create'),
+                'edit'   => _l('help_pedma_permission_edit'),
+            ],
+        ],
     ];
 
     $addLeadsPermission = true;

@@ -1,0 +1,12 @@
+{
+  "workroom_url": "https://t2gworkroom.com/biometric_sync/attendance",
+  "workroom_health_url": "https://t2gworkroom.com/biometric_sync/health",
+  "workroom_token": "PASTE_BIOMETRIC_SYNC_TOKEN_HERE",
+  "poll_interval_seconds": 120,
+  "lookback_days": 2,
+  "biomax_api_url": "http://192.168.1.9:82/api/v2/WebAPI/GetDeviceLogs",
+  "biomax_api_key": "490813092603",
+  "biomax_serial_number": "",
+  "checkpoint_file": "checkpoint.json",
+  "log_file": "logs/bridge.log"
+}

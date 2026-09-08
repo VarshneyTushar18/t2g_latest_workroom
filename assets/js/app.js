@@ -1052,13 +1052,16 @@ function get_datatable_buttons(table) {
 }
 
 // Check if table export button should be hidden based on settings
-// Admin area only
+// Admin area only — only_admins includes Super Admin / Admin / Manager family
 function table_export_button_is_hidden() {
   if (app.options.show_table_export_button != "to_all") {
+    var canExport =
+      typeof app.user_can_export !== "undefined"
+        ? app.user_can_export == 1 || app.user_can_export === "1"
+        : app.user_is_admin == 1 || app.user_is_admin === "1";
     if (
       app.options.show_table_export_button === "hide" ||
-      (app.options.show_table_export_button === "only_admins" &&
-        app.user_is_admin == 0)
+      (app.options.show_table_export_button === "only_admins" && !canExport)
     ) {
       return true;
     }

@@ -15,20 +15,31 @@ class Utilization_model extends App_Model
        return $this->db->get(db_prefix() . 'departments')->result_array();
 		//return  $this->db->get()->result_array();
     }
-	public function getDepartmentemp($deptid)
+	public function getDepartmentemp($deptid, $active = 1)
 	{
-		$valuesArray = array_values($deptid); 
+		if (!is_array($deptid)) {
+			$deptid = [$deptid];
+		}
+		$valuesArray = array_values(array_filter($deptid, function ($v) {
+			return $v !== '' && $v !== null;
+		}));
+		if (empty($valuesArray)) {
+			return [];
+		}
 
-		$dept_id = implode(", ", $valuesArray);
-		//echo $dept_id;
+		$dept_id = implode(',', array_map('intval', $valuesArray));
+		$activeClause = '';
+		if ($active !== 'all' && $active !== null && $active !== '') {
+			$active = ((int) $active === 0) ? 0 : 1;
+			$activeClause = ' AND tblstaff.active=' . (int) $active;
+		}
 		$result = $this->db->query('select tblstaff_departments.staffid,tblstaff_departments.departmentid,tbldepartments.name,tblstaff.staffid,tblstaff.firstname,
-						tblstaff.lastname,tblstaff.staff_identifi
+						tblstaff.lastname,tblstaff.staff_identifi,tblstaff.active
 						from tblstaff_departments
 						left join tblstaff on tblstaff_departments.staffid = tblstaff.staffid
 						left join tbldepartments on tblstaff_departments.departmentid= tbldepartments.departmentid
-						where tblstaff_departments.departmentid IN('.$dept_id.') AND active=1 GROUP by tblstaff.staffid;');
+						where tblstaff_departments.departmentid IN('.$dept_id.')' . $activeClause . ' GROUP by tblstaff.staffid ORDER BY tblstaff.active DESC, tblstaff.firstname ASC, tblstaff.lastname ASC;');
 		return	$result->result_array();
-		//$query = $this->db->get('mytable');
 	}
 	public function getFilterData($deptid,$empid)
 	{

@@ -233,6 +233,10 @@ $staffData = json_encode($performance_values);
                                     Overall Feedback
                                 </div>
                                 <div class="card-body pb-3 pt-1 comment" id="overall_feedback"></div>
+                                <div id="feedback_acknowledge_box" class="px-3 pb-3" style="display:none;">
+                                    <hr class="tw-my-2">
+                                    <div id="feedback_accepted_status" class="alert tw-mb-0" style="display:none;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -247,16 +251,6 @@ $staffData = json_encode($performance_values);
                             </select>
                         </div>
                         <div class="col-md-12 p-0" style="margin-top: 10px;">
-                            <!-- Line Chart for One Year Avg PEDMA Score -->
-
-                            <div class="card">
-                                <div class="card-body">
-                                    <canvas id="pedmaChart" width="400" height="200"></canvas>
-                                </div>
-                            </div>
-
-                        </div>
-                        <div class="col-md-12 p-0">
                             <table class="table table-bordered">
                                 <thead class="table-light">
                                     <tr>
@@ -343,11 +337,13 @@ $staffData = json_encode($performance_values);
 
                 <!-- Modal footer -->
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal" data-dismiss="modal">Close</button>
                 </div>
-
             </div>
         </div>
+    </div>
+
+    <!-- Old page-level acknowledge modal removed: global fullscreen popup handles Submit / Need Meeting -->
     </div>
     <?php init_tail(); ?>
 
@@ -359,6 +355,21 @@ $staffData = json_encode($performance_values);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
     <script>
+        function safeParseKraData(rawValue) {
+            if (Array.isArray(rawValue)) {
+                return rawValue;
+            }
+            if (!rawValue) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(rawValue);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
         $(document).ready(function() {
             const startYear = 2024; // Starting year
             const currentYear = new Date().getFullYear(); // Current year
@@ -433,7 +444,7 @@ $staffData = json_encode($performance_values);
                         var fscore = kra.fatal_error_score ? (kra.fatal_error_score / 100) * ascore : 0;
                         var addscore = kra.add_on_score ? (kra.add_on_score / 100) * ascore : 0;
                         var nscore = (ascore - fscore + addscore).toFixed(2);
-                        totalScore += nscore;
+                        totalScore += parseFloat(nscore);
                         maxTotalScore += 100; // Assuming 100 as max score per KRA
                     });
                     return (totalScore / maxTotalScore * 100).toFixed(2); // Calculate percentage
@@ -462,71 +473,7 @@ $staffData = json_encode($performance_values);
                 }
 
                 function lineChartByYear(kraDataForMonths) {
-                    // Extract months and their average PEDMA scores from the dynamic data
-                    const labels = [];
-                    const data = [];
-
-                    for (const [month, kraData] of Object.entries(kraDataForMonths)) {
-                        labels.push(month); // Add the month to labels
-                        const avgScore = calculateAvgScore(kraData); // Calculate average PEDMA score for the month
-                        data.push(avgScore); // Add the average score to data
-                    }
-
-                    // Sort labels and data by month order (optional, depending on how you want to display)
-                    const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                    const sortedData = monthOrder.map((month) => {
-                        const index = labels.indexOf(month);
-                        return index !== -1 ? data[index] : null; // Match data with the month, or set null if no data
-                    });
-
-                    // Load the Chart.js script and render the chart
-                    // const chartScript = document.createElement('script');
-                    // chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-                    // chartScript.onload = () => {
-                    const pedmaData = {
-                        labels: monthOrder, // Using predefined month order
-                        datasets: [{
-                            label: 'Average PEDMA Score',
-                            data: sortedData, // Use the dynamically sorted data
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                            borderWidth: 2,
-                            fill: true
-                        }]
-                    };
-
-                    // PEDMA Line Chart
-                    const pedmaCtx = document.getElementById('pedmaChart').getContext('2d');
-                    const pedmaChart = new Chart(pedmaCtx, {
-                        type: 'line',
-                        data: pedmaData,
-                        options: {
-                            scales: {
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Month'
-                                    }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Score'
-                                    }
-                                }
-                            },
-                            plugins: {
-                                title: {
-                                    display: true,
-                                    text: 'One Year Average PEDMA Score'
-                                }
-                            }
-                        }
-                    });
-                    // };
-
-                    //document.head.appendChild(chartScript);
+                    // Line chart removed
                 }
 
 
@@ -541,6 +488,26 @@ $staffData = json_encode($performance_values);
                         const addScore = kraData.reduce((total, item) => total + Number(item.add_on_score || 0), 0); // Total add_on_score
                         const fScore = kraData.reduce((total, item) => total + Number(item.fatal_error_score || 0), 0); // Total fatal_error_score
                         const staffComment = findStaffComment(kraData);
+                        const rowData = kraData[0] || {};
+                        const monthKeyParts = String(rowData.date_created || '').substring(0, 10).split('-');
+                        const monthKey = monthKeyParts.length >= 2 ? (monthKeyParts[0] + '-' + monthKeyParts[1]) : '';
+                        const ackStatus = parseInt(rowData.feedback_accepted, 10) || 0;
+                        const feedbackText = stripHtml(rowData.overall_feedback || '');
+                        let actionButtons = '';
+
+                        if (ackStatus === 1) {
+                            actionButtons += `<span class="label label-success" style="margin-right:6px;">Accepted</span>`;
+                        } else if (ackStatus === 2) {
+                            actionButtons += `<span class="label label-danger" style="margin-right:6px;">Need Meeting</span>`;
+                        } else if (feedbackText) {
+                            actionButtons += `<span class="label label-warning" style="margin-right:6px;">Pending Response</span>`;
+                        }
+
+                        if (staffComment) {
+                            actionButtons += `<button type="button" class="btn btn-primary commentViewbutton" data-comment="${String(staffComment).replace(/"/g, '&quot;')}">View</button>`;
+                        } else {
+                            actionButtons += `<button type="button" class="btn btn-primary commentbutton" data-month="${month}" data-year="${year}" data-score="${avgScore}">Reply</button>`;
+                        }
 
                         // Create the row for the month with expandable content
                         tableContent += `
@@ -550,10 +517,7 @@ $staffData = json_encode($performance_values);
                             </td>
                             <td colspan="" class="toggle-row" data-index="${monthIndex}">Avg Score: ${avgScore}% ${(addScore != 0 || fScore != 0) ? `<small>(Add on Score: ${addScore}%, Fatal Error Score:${fScore}%)<small>`:''}</td>
                             <td colspan="">
-                                ${staffComment ? 
-                                    `<button type="button" class="btn btn-primary commentViewbutton" data-comment="${staffComment}">View</button>` : 
-                                    `<button type="button" class="btn btn-primary commentbutton" data-month="${month}" data-year="${year}" data-score="${avgScore}">Reply</button>`
-                                }
+                                ${actionButtons}
                             </td>
                         </tr>
                         <tr id="collapse-${monthIndex}" class="collapse-content">
@@ -571,7 +535,7 @@ $staffData = json_encode($performance_values);
 
                         // Loop through each KRA and its associated KPIs
                         kraData.forEach(kra => {
-                            const kraDataParsed = JSON.parse(kra.kra_data); // Parse `kra_data` field
+                            const kraDataParsed = safeParseKraData(kra.kra_data); // Parse `kra_data` field safely
 
                             kraDataParsed.forEach(kraItem => {
                                 let totalKpiMaxScore = 0;
@@ -628,8 +592,6 @@ $staffData = json_encode($performance_values);
                     });
                 }
 
-                //Call the line chart function
-                lineChartByYear(kraDataForMonths);
                 // Call the function to render the table after the page loads
                 renderExpandableTable(kraDataForMonths);
             }
@@ -685,10 +647,11 @@ $staffData = json_encode($performance_values);
 
         let kraChart = null; // Define chart instances outside the change event
         let kraDoughnutChart = null;
+        window.pedmaStaffData = <?php echo $staffData; ?>;
 
         $('#performance_month').on('change', function() {
             var selectedMonth = $(this).val(); // Get selected month in "YYYY-MM" format
-            let staffData = <?php echo $staffData; ?>; // Ensure we pass only performance_values
+            let staffData = window.pedmaStaffData || []; // Ensure we pass only performance_values
             const kraCardData = $("#kra-card-data");
             kraCardData.empty();
 
@@ -707,6 +670,7 @@ $staffData = json_encode($performance_values);
                 kraCardData.html("No Data available for this month");
                 $('#avg_score').html('-');
                 $('#overall_feedback').html('-');
+                $('#feedback_acknowledge_box').hide();
                 $('#twoChart').hide();
 
             } else {
@@ -714,7 +678,7 @@ $staffData = json_encode($performance_values);
 
                 filteredData.forEach((data) => {
                     // Parse kra_data from the item
-                    let kra_data = JSON.parse(data.kra_data);
+                    let kra_data = safeParseKraData(data.kra_data);
 
                     kra_data.forEach((item) => {
                         // KRA Row
@@ -753,13 +717,17 @@ $staffData = json_encode($performance_values);
                             item.kpiData.forEach((kpi) => {
                                 cardHTML += `
                                     <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${kpi.max_score}</b></p>
-                                    <p class="">Feedback: ${kpi.comment}</p>
+                                    <p class="">Manager Comment: ${kpi.comment || '-'}</p>
+                                    <p class="">HR Remarks: ${kpi.hr_remarks || '-'}</p>
                                 `;
                             });
                         } else {
                             cardHTML += `
                                 <div class="comment">
-                                    <span style="font-weight: bold;">Feedback : </span>${item.comment}
+                                    <span style="font-weight: bold;">Manager Comment : </span>${item.comment || '-'}
+                                </div>
+                                <div class="comment">
+                                    <span style="font-weight: bold;">HR Remarks : </span>${item.hr_remarks || '-'}
                                 </div>
                             `;
                         }
@@ -781,10 +749,16 @@ $staffData = json_encode($performance_values);
                 var nscore = (ascore - fscore + addscore).toFixed(2);
                 $('#avg_score').html(`${nscore}%`);
                 $('#overall_feedback').html(filteredData[0].overall_feedback);
+                updateFeedbackAcknowledgeUI(filteredData[0], false);
 
                 $('[data-toggle="popover"]').popover();
 
-                const kraData = filteredData.map(item => JSON.parse(item.kra_data));
+                const kraData = filteredData.map(item => safeParseKraData(item.kra_data)).filter(item => item.length > 0);
+
+                if (kraData.length === 0) {
+                    $('#twoChart').hide();
+                    return;
+                }
 
                 const kraLabels = kraData[0].map(item => item.name);
                 const kraScores = kraData[0].map(item => {
@@ -874,6 +848,40 @@ $staffData = json_encode($performance_values);
             }
         });
 
+
+        function stripHtml(html) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = html || '';
+            return (tmp.textContent || tmp.innerText || '').trim();
+        }
+
+        function updateFeedbackAcknowledgeUI(row, autoOpen) {
+            var $box = $('#feedback_acknowledge_box');
+            var $status = $('#feedback_accepted_status');
+            var feedbackText = stripHtml(row && row.overall_feedback ? row.overall_feedback : '');
+            var ackStatus = parseInt(row && row.feedback_accepted != null ? row.feedback_accepted : 0, 10) || 0;
+
+            if (!row || !feedbackText || feedbackText === '-') {
+                $box.hide();
+                return;
+            }
+
+            $box.show();
+            var when = row.feedback_accepted_at ? row.feedback_accepted_at : '';
+            if (ackStatus === 1) {
+                $status.removeClass('alert-warning alert-danger').addClass('alert-success')
+                    .html('<i class="fa fa-check-circle"></i> You accepted this feedback' + (when ? ' on <b>' + when + '</b>' : '') + '.')
+                    .show();
+            } else if (ackStatus === 2) {
+                $status.removeClass('alert-warning alert-success').addClass('alert-danger')
+                    .html('<i class="fa fa-users"></i> Need Meeting requested' + (when ? ' on <b>' + when + '</b>' : '') + '.')
+                    .show();
+            } else {
+                $status.removeClass('alert-success alert-danger').addClass('alert-warning')
+                    .html('<i class="fa fa-clock-o"></i> Pending response — the full-screen popup will ask you to Submit or Need Meeting.')
+                    .show();
+            }
+        }
 
         function check_comments(val) {
             if (!val) {

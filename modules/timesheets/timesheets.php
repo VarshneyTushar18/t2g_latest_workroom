@@ -23,6 +23,12 @@ define('PAY_SLIP', FCPATH);
 
 hooks()->add_action('admin_init', 'timesheets_permissions');
 hooks()->add_action('admin_init', 'timesheets_module_init_menu_items');
+hooks()->add_action('admin_init', function () {
+	if (function_exists('super_hr_staff_can_filter') && empty($GLOBALS['super_hr_staff_can_filter_registered'])) {
+		$GLOBALS['super_hr_staff_can_filter_registered'] = true;
+		hooks()->add_filter('staff_can', 'super_hr_staff_can_filter', 10, 4);
+	}
+});
 hooks()->add_action('app_admin_head', 'timesheets_add_head_components');
 hooks()->add_action('app_admin_footer', 'timesheets_load_js');
 hooks()->add_action('app_search', 'timesheets_load_search');
@@ -171,82 +177,145 @@ function timesheets_module_init_menu_items() {
 			'position' => 5,
 		]);
 
-		//  adding timesheet report into the Performance menu
-		// $CI->app_menu->add_sidebar_children_item('timesheets', [
-		// 	'slug' => 'timesheets-reports',
-		// 	'name' => 'Timesheet Report',
-		// 	'href' => (is_admin() || is_manager()) ? admin_url('staff/timesheets?view=all') : admin_url('staff/timesheets'),
-		// 	// 'href'     => admin_url('staff/timesheets?view=all'),
-		// 	'position' => 25,
-		// 	'badge' => [],
-		// ]);
+		// ── Group: Attendance ──────────────────────────────────────────
+		$CI->app_menu->add_sidebar_children_item('timesheets', [
+			'slug' => 'timesheets_attendance',
+			'name' => 'Attendance',
+			'href' => '#',
+			'position' => 1,
+		]);
 
-		if (has_permission('attendance_management', '', 'view_own') || has_permission('attendance_management', '', 'view') || is_admin()) {
-			$CI->app_menu->add_sidebar_children_item('timesheets', [
-				'slug' => 'timesheets_timekeeping',
-				'name' => 'Calendar',
-				'href' => admin_url('timesheets/timekeeping'),
-				// 'icon' => 'fa fa-calendar',
-				'position' => 1,
+		$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+			'slug' => 'timesheets_attendance_info',
+			'name' => 'Attendance Info',
+			'href' => admin_url('timesheets/my_attendance'),
+			'position' => 1,
+		]);
+
+		$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+			'slug' => 'timesheets_attendance_regularization',
+			'name' => 'Regularization & Permission',
+			'href' => admin_url('timesheets/attendance_regularization'),
+			'position' => 2,
+		]);
+
+		if (has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin()
+			|| has_permission('attendance_management', '', 'view_own') || has_permission('attendance_management', '', 'view')) {
+			$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+				'slug' => 'timesheets_biometric_attendance',
+				'name' => 'Biometric Attendance',
+				'href' => admin_url('biometric'),
+				'position' => 3,
 			]);
 		}
+
 		if (has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin()) {
-			$CI->app_menu->add_sidebar_children_item('timesheets', [
-				'slug' => 'timesheets_timekeeping_mnrh',
-				'name' => 'Manage Attendance',
-				// 'icon' => 'fa fa-clipboard',
-				'href' => admin_url('timesheets/requisition_manage'),
-				'position' => 2,
-
-			]);
-
-			if(is_admin() || is_super_admin() || is_manager() || is_HR() || is_admin2()){
-				$CI->app_menu->add_sidebar_children_item('timesheets', [
-					'slug' => 'timesheets_timekeeping_mnrh',
+			if (is_admin() || is_super_admin() || is_manager() || is_HR() || is_admin2()) {
+				$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+					'slug' => 'timesheets_check_employee_attendance',
 					'name' => 'Check Employee Attendance',
-					// 'icon' => 'fa fa-calendar',
 					'href' => admin_url('timesheets/check_employee_attendance'),
-					'position' => 3,
-	
+					'position' => 4,
 				]);
-
+				$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+					'slug' => 'timesheets_regularisation_approvals',
+					'name' => 'Regularization Approvals',
+					'href' => admin_url('timesheets/requisition_manage?tab=additional_timesheets'),
+					'position' => 5,
+				]);
 			}
 		}
 
-        /*adding custom link and menu in sidebar*/
-        if (has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin()) {
-            $CI->app_menu->add_sidebar_children_item('timesheets', [
-                'slug' => 'timesheets_timekeeping_mnrh',
-                'name' => 'Leave Balance',
-                // 'icon' => 'fa fa-clipboard',
-                'href' => admin_url('staff/leave_balance'),
-                'position' => 10,
-
-            ]);
-			 
-        }
+		// ── Group: Leave ───────────────────────────────────────────────
 		if (has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin()) {
-            $CI->app_menu->add_sidebar_children_item('timesheets', [
-                'slug' => 'timesheets_timekeeping_mnrh',
-                'name' => 'Biometric Attendance',
-                // 'icon' => 'fa fa-clipboard',
-                'href' => admin_url('biometric'),
-                'position' => 11,
-
-            ]);
-			 
-        }
-		
-		if(is_admin() || is_manager() || is_super_admin() || is_HR() || is_admin2()){
 			$CI->app_menu->add_sidebar_children_item('timesheets', [
-			   'slug' => 'timesheets_manage_saturday',
-			   'name' => 'Manage Saturday',
-			   // 'icon' => 'fa fa-exchange',
-			   'href' => admin_url('holiday/manageHoliday'),
-			   'position' => 12,
+				'slug' => 'timesheets_leave',
+				'name' => 'Leave',
+				'href' => '#',
+				'position' => 2,
+			]);
 
-		   ]);
-	   	}
+			$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+				'slug' => 'timesheets_apply_leave',
+				'name' => 'Apply for Leave',
+				'href' => admin_url('timesheets/requisition_manage'),
+				'position' => 1,
+			]);
+
+			$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+				'slug' => 'timesheets_leave_balance',
+				'name' => 'Leave Balance',
+				'href' => admin_url('staff/leave_balance'),
+				'position' => 2,
+			]);
+
+			$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+				'slug' => 'timesheets_holiday_calendar',
+				'name' => 'Holiday Calendar',
+				'href' => admin_url('holiday/calendar'),
+				'position' => 3,
+			]);
+
+			if (is_admin() || is_manager() || is_super_admin() || is_HR() || is_admin2()) {
+				$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+					'slug' => 'timesheets_manage_saturday',
+					'name' => 'Manage Saturday',
+					'href' => admin_url('holiday/manageHoliday'),
+					'position' => 4,
+				]);
+			}
+
+			if (is_admin() || is_super_admin() || is_HR() || is_super_hr()) {
+				$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+					'slug' => 'timesheets_manage_earned_leave',
+					'name' => 'Manage Earned Leave',
+					'href' => admin_url('staff/manage_earned_leave'),
+					'position' => 5,
+				]);
+			}
+		} else {
+			// Still show holiday calendar when leave module is not granted but user can open HRMS
+			$CI->app_menu->add_sidebar_children_item('timesheets', [
+				'slug' => 'timesheets_holiday_calendar',
+				'name' => 'Holiday Calendar',
+				'href' => admin_url('holiday/calendar'),
+				'position' => 2,
+			]);
+		}
+
+		// ── Group: Shift ───────────────────────────────────────────────
+		$can_shift = has_permission('table_shiftwork_management', '', 'view_own')
+			|| has_permission('table_shiftwork_management', '', 'view')
+			|| is_admin();
+		if ($can_shift) {
+			$CI->app_menu->add_sidebar_children_item('timesheets', [
+				'slug' => 'timesheets_shift',
+				'name' => 'Shift',
+				'href' => '#',
+				'position' => 3,
+			]);
+
+			$CI->app_menu->add_sidebar_children_item('timesheets_shift', [
+				'slug' => 'timesheets_table_shiftwork',
+				'name' => _l('shiftwork'),
+				'href' => admin_url('timesheets/table_shiftwork'),
+				'position' => 1,
+			]);
+
+			$CI->app_menu->add_sidebar_children_item('timesheets_shift', [
+				'slug' => 'timesheets_shift_management',
+				'name' => _l('shift_management'),
+				'href' => admin_url('timesheets/shift_management'),
+				'position' => 2,
+			]);
+
+			$CI->app_menu->add_sidebar_children_item('timesheets_shift', [
+				'slug' => 'timesheets_shift_type',
+				'name' => _l('shift_type'),
+				'href' => admin_url('timesheets/manage_shift_type'),
+				'position' => 3,
+			]);
+		}
 
 		if (has_permission('route_management', '', 'view_own') || has_permission('route_management', '', 'view') || is_admin()) {
 			$allow_attendance_by_route = 0;
@@ -258,40 +327,12 @@ function timesheets_module_init_menu_items() {
 				$CI->app_menu->add_sidebar_children_item('timesheets', [
 					'slug' => 'timesheets_route_management',
 					'name' => _l('route_management'),
-					// 'icon' => 'fa fa-map-signs',
 					'href' => admin_url('timesheets/route_management?tab=route'),
-					'position' => 3,
-
+					'position' => 4,
 				]);
 			}
 		}
-		if (has_permission('table_shiftwork_management', '', 'view_own') || has_permission('table_shiftwork_management', '', 'view') || is_admin()) {
-			$CI->app_menu->add_sidebar_children_item('timesheets', [
-				'slug' => 'timesheets_table_shiftwork',
-				'name' => _l('shiftwork'),
-				'href' => admin_url('timesheets/table_shiftwork'),
-				// 'icon' => 'fa fa-ticket',
-				'position' => 4,
-			]);
-		}
-		if (has_permission('table_shiftwork_management', '', 'view_own') || has_permission('table_shiftwork_management', '', 'view') || is_admin()) {
-			$CI->app_menu->add_sidebar_children_item('timesheets', [
-				'slug' => 'timesheets_shift_management',
-				'name' => _l('shift_management'),
-				'href' => admin_url('timesheets/shift_management'),
-				// 'icon' => 'fa fa-calendar',
-				'position' => 4,
-			]);
-		}
-		if (has_permission('table_shiftwork_management', '', 'view_own') || has_permission('table_shiftwork_management', '', 'view') || is_admin()) {
-			$CI->app_menu->add_sidebar_children_item('timesheets', [
-				'slug' => 'timesheets_shift_type',
-				'name' => _l('shift_type'),
-				'href' => admin_url('timesheets/manage_shift_type'),
-				// 'icon' => 'fa fa-magic',
-				'position' => 5,
-			]);
-		}
+
 		$data_attendance_by_coordinates = get_timesheets_option('allow_attendance_by_coordinates');
 		if ($data_attendance_by_coordinates) {
 			if ($data_attendance_by_coordinates == 1) {
@@ -300,8 +341,7 @@ function timesheets_module_init_menu_items() {
 						'slug' => 'timesheets_workplace_mgt',
 						'name' => _l('workplace_mgt'),
 						'href' => admin_url('timesheets/workplace_mgt?group=workplace_assign'),
-						// 'icon' => 'fa fa-street-view',
-						'position' => 7,
+						'position' => 5,
 					]);
 				}
 			}
@@ -312,7 +352,6 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets-report',
 				'name' => _l('reports'),
 				'href' => admin_url('timesheets/reports'),
-				// 'icon' => 'fa fa-line-chart',
 				'position' => 8,
 			]);
 		}
@@ -321,7 +360,6 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_setting',
 				'name' => _l('settings'),
 				'href' => admin_url('timesheets/setting?group=manage_leave'),
-				// 'icon' => 'fa fa-gears',
 				'position' => 9,
 			]);
 		}
@@ -671,6 +709,11 @@ function auto_notification_of_approval_expiration() {
 }
 
 function timesheets_appint(){
+    // Local PHP built-in server often fails license IP checks and auto-deactivates the module.
+    $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : (isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : '');
+    if (strpos($host, '127.0.0.1') !== false || strpos($host, 'localhost') !== false) {
+        return;
+    }
     $CI = & get_instance();    
     require_once 'libraries/gtsslib.php';
     $timesheets_api = new TimesheetLic();
@@ -719,4 +762,5 @@ function timesheets_uninstall($module_name){
         $timesheets_api = new TimesheetLic();
         $timesheets_api->deactivate_license();
     }
+}
 }

@@ -340,8 +340,29 @@ div.dataTables_wrapper div.dataTables_paginate {
 }
 
 .table-loading {
-  background: url(../images/table-loading.png);
-  background-repeat: repeat-x;
+  background: unset;
+  position: relative;
+}
+
+.table-loading::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #64748b;
+  border-radius: 50%;
+  animation: table-loading-spin 0.8s linear infinite;
+  z-index: 10;
+}
+
+@keyframes table-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 [dir="rtl"] .dataTables_paginate {

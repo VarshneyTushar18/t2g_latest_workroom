@@ -1,4 +1,77 @@
 <?php init_head(); ?>
+<style>
+  .biometric-table-wrap {
+    position: relative;
+    min-height: 180px;
+  }
+  .biometric-table-wrap.is-loading .biometric-table-overlay {
+    display: flex;
+  }
+  .biometric-table-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.75);
+    z-index: 5;
+    align-items: center;
+    justify-content: center;
+  }
+  .table-loading {
+    background: unset;
+  }
+  .t2g-sync-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    border: 1px solid #99f6e4;
+    background: linear-gradient(90deg, #f0fdfa, #fff);
+  }
+  .t2g-sync-banner.is-stale {
+    border-color: #fcd34d;
+    background: linear-gradient(90deg, #fffbeb, #fff);
+  }
+  .t2g-sync-banner h5 {
+    margin: 0 0 4px;
+    font-weight: 700;
+    color: #0f766e;
+  }
+  .t2g-sync-banner.is-stale h5 { color: #b45309; }
+  .t2g-sync-meta { font-size: 12px; color: #64748b; }
+  .t2g-sync-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .t2g-sync-pill.live { background: #dcfce7; color: #166534; }
+  .t2g-sync-pill.waiting { background: #fef3c7; color: #92400e; }
+  .bio-tabs { margin: 18px 0 8px; border-bottom: 1px solid #e2e8f0; }
+  .bio-tabs > li > a {
+    padding: 10px 16px;
+    font-weight: 600;
+    color: #64748b;
+    border: none !important;
+    background: transparent !important;
+  }
+  .bio-tabs > li.active > a,
+  .bio-tabs > li.active > a:hover,
+  .bio-tabs > li.active > a:focus {
+    color: #0f766e !important;
+    border-bottom: 2px solid #14b8a6 !important;
+    background: transparent !important;
+  }
+  /* Ensure merged tab panes actually show */
+  #wrapper .tab-content > .tab-pane { display: none; }
+  #wrapper .tab-content > .tab-pane.active { display: block !important; }
+</style>
 
 <div id="wrapper">
   <div class="content">
@@ -6,20 +79,49 @@
       <div class="col-md-12">
         <div class="panel_s">
           <div class="panel-body">
-		  <?php if(is_admin() || get_staff_user_id()==267){ ?>
-            <a href="#" id="import_data_btn" class="btn btn-info mleft5">Import Attendance Data</a>
-		  <?php }?>
+            <?php
+              $sync = $sync_status ?? [];
+              $is_live = !empty($sync['is_live']);
+              $last_sync = $sync['last_sync_at'] ?? '';
+              $age = isset($sync['last_sync_age_s']) ? (int) $sync['last_sync_age_s'] : null;
+              $age_label = $age === null ? 'No sync yet' : ($age < 60 ? $age . 's ago' : round($age / 60) . ' min ago');
+            ?>
+            <div class="t2g-sync-banner <?= $is_live ? '' : 'is-stale' ?>" id="t2g_sync_banner">
+              <div>
+                <h5>Live Biomax sync</h5>
+                <div class="t2g-sync-meta">
+                  Auto-sync every <strong>2 minutes</strong> (faster than typical 15–30 min HRMS delays).
+                  Manual Excel upload is <strong>disabled</strong>.
+                </div>
+                <div class="t2g-sync-meta mtop5" id="t2g_sync_detail">
+                  Last sync: <strong id="t2g_sync_last"><?= $last_sync ? html_escape($last_sync) : '—' ?></strong>
+                  · <span id="t2g_sync_age"><?= html_escape($age_label) ?></span>
+                  · Today: <strong id="t2g_sync_today"><?= (int) ($sync['today_rows'] ?? 0) ?></strong> rows
+                </div>
+              </div>
+              <span class="t2g-sync-pill <?= $is_live ? 'live' : 'waiting' ?>" id="t2g_sync_pill">
+                <?= $is_live ? 'Live' : 'Waiting for bridge' ?>
+              </span>
+            </div>
+
+            <ul class="nav nav-tabs bio-tabs" role="tablist">
+              <li role="presentation" class="active"><a href="#bio_tab_daily" aria-controls="bio_tab_daily" role="tab" data-toggle="tab">Daily Attendance</a></li>
+              <li role="presentation"><a href="#bio_tab_swipes" aria-controls="bio_tab_swipes" role="tab" data-toggle="tab">Biometric Swipes</a></li>
+            </ul>
+
+            <div class="tab-content">
+              <div role="tabpanel" class="tab-pane active" id="bio_tab_daily">
 		
 				<div class="row mb-2 mtop20">
 		  <div class="col-md-3">
-			<input type="month" id="filter_month" class="form-control" value="<?= date('Y-m') ?>">
+			<input type="month" id="filter_month" class="form-control" value="<?= html_escape($default_month ?? date('Y-m')) ?>">
 		  </div>
-		   <?php if(is_admin() || is_manager() ){ ?>
+		   <?php if (!empty($can_filter_all)) { ?>
 		  <div class="col-md-3">
 			<select id="filter_department" class="form-control">
-			  <option value="#">All Departments</option>
+			  <option value="">All Departments</option>
 			  <?php foreach ($result as $dept): ?>
-				<option value="<?= $dept['departmentid'] ?>"><?= $dept['name'] ?></option>
+				<option value="<?= html_escape($dept['departmentid']) ?>"><?= html_escape($dept['name']) ?></option>
 			  <?php endforeach; ?>
 			</select>
 		  </div>
@@ -35,7 +137,10 @@
 		  </div>
 		</div>
  
-            <div class="table-responsive mtop20">
+            <div class="table-responsive mtop20 biometric-table-wrap" id="biometric_table_wrap">
+              <div class="biometric-table-overlay" id="biometric_table_overlay">
+                <div class="dt-loader"></div>
+              </div>
               <table class="table table-bordered">
                 <thead>
                   <tr>
@@ -52,7 +157,38 @@
                   </tr>
                 </thead>
                 <tbody id="attendance_tbody">
-                  <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                  <?php if (!empty($initial_rows)) { ?>
+                    <?php $sn = 1; foreach ($initial_rows as $row) {
+                      $isAbsent = ($row['status'] ?? '') === 'A';
+                      $btnClass = $isAbsent ? 'btn-danger' : 'btn-primary';
+                      $btnLabel = $isAbsent ? 'Absent' : 'View Punch';
+                      $btnDisabled = $isAbsent ? 'disabled' : '';
+                      $punch = htmlspecialchars($row['punch_records'] ?? '', ENT_QUOTES, 'UTF-8');
+                      $date = htmlspecialchars($row['attendance_date'] ?? '', ENT_QUOTES, 'UTF-8');
+                      $name = htmlspecialchars($row['employee_name'] ?? '', ENT_QUOTES, 'UTF-8');
+                    ?>
+                    <tr>
+                      <td><?= $sn++ ?></td>
+                      <td><?= html_escape($row['attendance_date'] ?? '') ?></td>
+                      <td><?= html_escape($row['a_in_time'] ?? '') ?></td>
+                      <td><?= html_escape($row['a_out_time'] ?? '') ?></td>
+                      <td><?= html_escape($row['employee_code'] ?? '') ?></td>
+                      <td><?= html_escape($row['employee_name'] ?? '') ?></td>
+                      <td><?= html_escape($row['status'] ?? '') ?></td>
+                      <td><?= html_escape($row['t_duration'] ?? '') ?></td>
+                      <td><?= html_escape($row['break_time'] ?? '') ?></td>
+                      <td>
+                        <button class="btn btn-sm <?= $btnClass ?> mt-1"
+                          onclick="showPunchModal('<?= $punch ?>', '<?= $date ?>', '<?= $name ?>')"
+                          <?= $btnDisabled ?>>
+                          <?= $btnLabel ?>
+                        </button>
+                      </td>
+                    </tr>
+                    <?php } ?>
+                  <?php } else { ?>
+                    <tr><td colspan="10" class="text-center">No records found for this filter.</td></tr>
+                  <?php } ?>
                 </tbody>
               </table>
             </div>
@@ -62,6 +198,56 @@
                 <!-- Pagination will be generated here -->
               </ul>
             </nav>
+              </div><!-- /#bio_tab_daily -->
+
+              <div role="tabpanel" class="tab-pane" id="bio_tab_swipes">
+                <div class="row mtop20">
+                  <div class="col-md-3">
+                    <label>From date</label>
+                    <input type="date" id="swipe_from" class="form-control" value="<?= html_escape(date('Y-m-d', strtotime('-7 days'))) ?>">
+                  </div>
+                  <div class="col-md-3">
+                    <label>To date</label>
+                    <input type="date" id="swipe_to" class="form-control" value="<?= html_escape(date('Y-m-d')) ?>">
+                  </div>
+                  <?php if (!empty($can_filter_all)) { ?>
+                  <div class="col-md-3">
+                    <label>Employee</label>
+                    <select id="swipe_staff" class="form-control">
+                      <option value="">All Staff</option>
+                    </select>
+                  </div>
+                  <?php } else { ?>
+                  <div class="col-md-3">
+                    <label>Employee</label>
+                    <input type="text" class="form-control" value="<?= html_escape(get_staff_full_name()) ?>" readonly>
+                  </div>
+                  <?php } ?>
+                  <div class="col-md-3">
+                    <label>&nbsp;</label>
+                    <button type="button" id="swipe_filter" class="btn btn-info btn-block">Filter</button>
+                  </div>
+                </div>
+                <div class="table-responsive mtop15">
+                  <table class="table table-striped table-hover" id="swipes_table">
+                    <thead>
+                      <tr>
+                        <th>Employee Name</th>
+                        <th>Swipe Time &amp; Date</th>
+                        <th>Shift</th>
+                        <th>In/Out</th>
+                        <th>Received On</th>
+                        <th>Door/Address</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="swipes_body">
+                      <tr><td colspan="7" class="text-center text-muted">Open this tab or click Filter to load punch swipes.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div><!-- /#bio_tab_swipes -->
+            </div><!-- /.tab-content -->
 
           </div>
         </div>
@@ -70,26 +256,6 @@
   </div>
 </div>
 
-<!-- Import Modal -->
-<div class="modal fade" id="import_data" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Import Attendance Data</h5>
-      </div>
-      <?php echo form_open_multipart(admin_url("biometric/save_attendance_bulk_data"), ['id' => 'attendance-bulk-upload-form']); ?>
-      <div class="modal-body">
-        <input type="file" class="form-control" name="excelFile" accept=".xls,.xlsx" required style="margin-bottom: 15px;">
-        <a href="/uploads/attendance_template.xlsx" download>Download Sample Format</a>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-        <button type="submit" class="btn btn-primary">Upload</button>
-      </div>
-      </form>
-    </div>
-  </div>
-</div>
 <div class="modal fade" id="punchModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -125,60 +291,92 @@
 <script>
 let currentPage = 1;
 const limit = 10;
-let totalPages = 1;
+let totalPages = <?= max(1, (int) ceil(((int) ($initial_total ?? 0)) / 10)) ?>;
+
+function setBiometricLoading(isLoading) {
+  $('#biometric_table_wrap').toggleClass('is-loading', !!isLoading);
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function loadAttendanceData(page = 1) {
   currentPage = page;
   const offset = (page - 1) * limit;
-  const month = $('#filter_month').val();
-  const department = $('#filter_department').val();
-  const staff = $('#filter_staff').val();
+  const month = $('#filter_month').val() || '';
+  let department = $('#filter_department').length ? ($('#filter_department').val() || '') : '';
+  let staff = $('#filter_staff').length ? ($('#filter_staff').val() || '') : '';
 
-  $.get("<?= admin_url('biometric/fetch_attendance_data') ?>", {
-    limit,
-    offset,
-    month,
-    department,
-    staff
-  }, function(response) {
-    const res = JSON.parse(response);
-    console.log(res);
+  if (department === '#' || department === 'all') {
+    department = '';
+  }
+  if (staff === '#' || staff === 'all') {
+    staff = '';
+  }
+
+  setBiometricLoading(true);
+
+  $.ajax({
+    url: "<?= admin_url('biometric/fetch_attendance_data') ?>",
+    method: "GET",
+    dataType: "json",
+    data: { limit, offset, month, department, staff },
+    timeout: 60000
+  }).done(function(res) {
+    setBiometricLoading(false);
     let rows = "";
-    let i = offset + 1; // So page 2 starts from 11
-    if (res.data.length > 0) {
-            res.data.forEach(row => {
-					const isAbsent = row.status === 'A';
-				    const buttonClass = isAbsent ? 'btn-danger' : 'btn-primary';
-					const buttonLabel = isAbsent ? 'Absent' : 'View Punch';
-					const buttonDisabled = isAbsent ? 'disabled' : '';
-                rows += `<tr>
-					<td>${i++}</td>
-					<td>${row.attendance_date}</td>
-					<td>${row.a_in_time}</td>
-					<td>${row.a_out_time}</td>
-					<td>${row.employee_code}</td>
-					<td>${row.employee_name}</td>
-					<td>${row.status}</td>
-					<td>${row.t_duration}</td>
-					<td>${row.break_time}</td>
-					<td>
-						<button class="btn btn-sm ${buttonClass} mt-1"
-                onclick="showPunchModal('${row.punch_records}', '${row.attendance_date}', '${row.employee_name}')"
-                ${buttonDisabled}>
-                ${buttonLabel}
+    let i = offset + 1;
+    if (res && res.data && res.data.length > 0) {
+      res.data.forEach(row => {
+        const isAbsent = row.status === 'A';
+        const buttonClass = isAbsent ? 'btn-danger' : 'btn-primary';
+        const buttonLabel = isAbsent ? 'Absent' : 'View Punch';
+        const buttonDisabled = isAbsent ? 'disabled' : '';
+        const punchSafe = escapeHtml(row.punch_records || '').replace(/&#39;/g, "\\'");
+        const dateSafe = escapeHtml(row.attendance_date || '');
+        const nameSafe = escapeHtml(row.employee_name || '').replace(/&#39;/g, "\\'");
+        rows += `<tr>
+          <td>${i++}</td>
+          <td>${escapeHtml(row.attendance_date)}</td>
+          <td>${escapeHtml(row.a_in_time)}</td>
+          <td>${escapeHtml(row.a_out_time)}</td>
+          <td>${escapeHtml(row.employee_code)}</td>
+          <td>${escapeHtml(row.employee_name)}</td>
+          <td>${escapeHtml(row.status)}</td>
+          <td>${escapeHtml(row.t_duration)}</td>
+          <td>${escapeHtml(row.break_time)}</td>
+          <td>
+            <button class="btn btn-sm ${buttonClass} mt-1"
+              onclick="showPunchModal('${punchSafe}', '${dateSafe}', '${nameSafe}')"
+              ${buttonDisabled}>
+              ${buttonLabel}
             </button>
-					</td>
-				</tr>`;
-
-            });
-        } else {
-            rows = `<tr><td colspan="7" class="text-center">No records found.</td></tr>`;
-        }
+          </td>
+        </tr>`;
+      });
+    } else {
+      rows = `<tr><td colspan="10" class="text-center">No records found for this filter. Try month <b>2025-08</b> or <b>2025-11</b>.</td></tr>`;
+    }
 
     $("#attendance_tbody").html(rows);
-
-    totalPages = Math.max(1, Math.ceil(res.total / limit));
+    totalPages = Math.max(1, Math.ceil(((res && res.total) || 0) / limit));
     buildPagination();
+  }).fail(function(xhr, textStatus) {
+    setBiometricLoading(false);
+    let detail = textStatus || 'Request failed';
+    if (xhr && xhr.status) {
+      detail += ' (HTTP ' + xhr.status + ')';
+    }
+    if (xhr && xhr.responseText) {
+      detail += ': ' + xhr.responseText.substring(0, 160);
+    }
+    $("#attendance_tbody").html(`<tr><td colspan="10" class="text-center text-danger">Failed to load attendance. ${escapeHtml(detail)}</td></tr>`);
   });
 }
 
@@ -210,12 +408,29 @@ function buildPagination() {
 
 
 $(document).ready(function() {
-    loadAttendanceData(1);
+    buildPagination();
 
-    $('#import_data_btn').click(function(e){
-        e.preventDefault();
-        $('#import_data').modal('show');
-    });
+    function refreshSyncStatus() {
+      $.getJSON("<?= admin_url('biometric/sync_status') ?>", function (s) {
+        if (!s) return;
+        var live = !!s.is_live;
+        $('#t2g_sync_banner').toggleClass('is-stale', !live);
+        $('#t2g_sync_pill').toggleClass('live', live).toggleClass('waiting', !live)
+          .text(live ? 'Live' : 'Waiting for bridge');
+        $('#t2g_sync_last').text(s.last_sync_at || '—');
+        if (s.last_sync_age_s == null) {
+          $('#t2g_sync_age').text('No sync yet');
+        } else if (s.last_sync_age_s < 60) {
+          $('#t2g_sync_age').text(s.last_sync_age_s + 's ago');
+        } else {
+          $('#t2g_sync_age').text(Math.round(s.last_sync_age_s / 60) + ' min ago');
+        }
+        $('#t2g_sync_today').text(s.today_rows || 0);
+      });
+    }
+
+    refreshSyncStatus();
+    setInterval(refreshSyncStatus, 30000);
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
@@ -489,15 +704,88 @@ $('#applyFilters').on('click', function () {
 });
 
 $('#filter_department').on('change', function () {
-  let deptId = $(this).val();
+  let deptId = $(this).val() || '';
+  if (deptId === '#' || deptId === 'all') {
+    deptId = '';
+  }
   $.get("<?= admin_url('biometric/get_staff_by_department') ?>", { dept_id: deptId }, function (res) {
-    const staffList = JSON.parse(res);
+    const staffList = (typeof res === 'string') ? JSON.parse(res) : res;
     let options = '<option value="">All Staff</option>';
-    staffList.forEach(staff => {
-      options += `<option value="${staff.staffid}">${staff.full_name}</option>`;
+    (staffList || []).forEach(staff => {
+      options += `<option value="${escapeHtml(staff.staffid)}">${escapeHtml(staff.full_name)}</option>`;
     });
     $('#filter_staff').html(options);
+    if ($('#swipe_staff').length) {
+      $('#swipe_staff').html(options);
+    }
   });
+});
+
+function loadSwipes() {
+  if (!$('#swipes_body').length) {
+    return;
+  }
+  $('#swipes_body').html('<tr><td colspan="7" class="text-center">Loading...</td></tr>');
+  var params = {
+    from: $('#swipe_from').val(),
+    to: $('#swipe_to').val()
+  };
+  if ($('#swipe_staff').length) {
+    params.staff = $('#swipe_staff').val() || '';
+  }
+  $.getJSON(admin_url + 'biometric/fetch_swipes', params).done(function (res) {
+    var rows = (res && res.data) ? res.data : [];
+    if (!rows.length) {
+      $('#swipes_body').html('<tr><td colspan="7" class="text-center">No swipes found for this date range. Try a wider From/To date.</td></tr>');
+      return;
+    }
+    var html = '';
+    rows.forEach(function (r) {
+      var badge = (String(r.in_out || '').toUpperCase() === 'IN') ? 'success' : 'warning';
+      html += '<tr>' +
+        '<td>' + escapeHtml(r.employee_name) + '<br><small>#' + escapeHtml(r.employee_code || '') + '</small></td>' +
+        '<td>' + escapeHtml((r.swipe_time || '') + ' ' + (r.swipe_date || '')) + '</td>' +
+        '<td>' + escapeHtml(r.shift || '-') + '</td>' +
+        '<td><span class="label label-' + badge + '">' + escapeHtml(r.in_out) + '</span></td>' +
+        '<td>' + escapeHtml(r.received_on || '') + '</td>' +
+        '<td>' + escapeHtml(r.door || '') + '</td>' +
+        '<td><span class="label label-success">' + escapeHtml(r.status || '') + '</span></td>' +
+        '</tr>';
+    });
+    $('#swipes_body').html(html);
+  }).fail(function (xhr) {
+    var msg = 'Could not load swipes.';
+    if (xhr && xhr.status) {
+      msg += ' (HTTP ' + xhr.status + ')';
+    }
+    $('#swipes_body').html('<tr><td colspan="7" class="text-center text-danger">' + msg + '</td></tr>');
+  });
+}
+
+$(function () {
+  $('#swipe_filter').on('click', function (e) {
+    e.preventDefault();
+    loadSwipes();
+  });
+
+  // Load whenever Biometric Swipes tab is shown
+  $(document).on('shown.bs.tab', 'a[href="#bio_tab_swipes"]', function () {
+    loadSwipes();
+  });
+  $(document).on('click', 'a[href="#bio_tab_swipes"]', function () {
+    setTimeout(loadSwipes, 100);
+  });
+
+  // Deep-link: /admin/biometric?tab=swipes
+  if ((window.location.search || '').indexOf('tab=swipes') !== -1) {
+    $('a[href="#bio_tab_swipes"]').tab('show');
+    setTimeout(loadSwipes, 150);
+  }
+
+  // Prefill swipe staff dropdown from daily filter list if already loaded
+  if ($('#filter_staff').length && $('#swipe_staff').length && $('#filter_staff option').length > 1) {
+    $('#swipe_staff').html($('#filter_staff').html());
+  }
 });
 
 </script>

@@ -505,8 +505,10 @@ render_datatable($table_data,'table_registration_leave',
                      <option value="1"><?php echo _l('sick_leave') ?></option>    
 
                      <?php 
-
-                     foreach ($type_of_leave as $value) { ?>
+                     $hidden_apply_leave_slugs = ['comp-off', 'work-from-home'];
+                     foreach ($type_of_leave as $value) {
+                      if (in_array($value['slug'], $hidden_apply_leave_slugs, true)) { continue; }
+                     ?>
 
                       <option value="<?php echo html_entity_decode($value['slug']); ?>"><?php echo html_entity_decode($value['type_name']); ?></option>    
 

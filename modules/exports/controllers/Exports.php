@@ -10,8 +10,8 @@ class Exports extends AdminController
     public function __construct()
     {
         parent::__construct();
-        if (!is_admin()) {
-            access_denied('admin');
+        if (!(function_exists('can_export_table_data') ? can_export_table_data() : is_admin())) {
+            access_denied('Export');
         }
         $this->load->library(EXPORTS_MODULE_NAME . '/exports_module');
     }

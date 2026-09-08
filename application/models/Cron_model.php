@@ -77,6 +77,8 @@ class Cron_model extends App_Model
         parent::__construct();
 
         $this->load->model('emails_model');
+        $this->load->model('birthday_model');
+
 
         $this->load->model('staff_model');
 
@@ -173,6 +175,9 @@ class Cron_model extends App_Model
             $this->send_delay_ticket_mail_run();
             // check in check out auto checkout
             $this->processCheckins();
+
+            // PEDMA evaluation reminders to managers (1st / 5th / 10th + daily after 10th)
+            $this->send_pedma_evaluation_reminders();
 
             /**
 
@@ -3480,9 +3485,7 @@ class Cron_model extends App_Model
 
     private function can_cron_run()
     {
-
         if ($this->app->is_db_upgrade_required()) {
-
             return false;
         }
 
@@ -3789,7 +3792,7 @@ class Cron_model extends App_Model
         try {
 
             $this->email->set_mailtype("html");
-            $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+            $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
             // $this->email->to('yogesh.gupta@tech2globe.in');
             // $this->email->cc('naved.ahamad1@tech2globe.in');
             /*$this->email->to('hr@tech2globe.com');
@@ -3971,7 +3974,7 @@ class Cron_model extends App_Model
 
         try {
             $this->email->set_mailtype("html");
-            $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+            $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
             $this->email->to('sarabjeet@tech2globe.net');
             $this->email->cc(array('ishan.negi@tech2globe.in', 'naved.ahamad@tech2globe.in', 'sarabjeet@tech2globe.com'));
 
@@ -4120,7 +4123,7 @@ class Cron_model extends App_Model
 
         try {
             $this->email->set_mailtype("html");
-            $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+            $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
             // $this->email->to('ishan.negi@tech2globe.in');
             $this->email->to('sarabjeet@tech2globe.net');
             $this->email->cc(array('ishan.negi@tech2globe.in', 'naved.ahamad@tech2globe.in', 'sarabjeet@tech2globe.com'));
@@ -4285,7 +4288,7 @@ class Cron_model extends App_Model
         $date = date('m/d/Y', strtotime("-1 days"));
         try {
             $this->email->set_mailtype("html");
-            $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+            $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
             $this->email->to('sarabjeet@tech2globe.net');
             $this->email->cc(array('ishan.negi@tech2globe.in', 'naved.ahamad@tech2globe.in', 'sarabjeet@tech2globe.com'));
 
@@ -4632,78 +4635,130 @@ class Cron_model extends App_Model
 
     public function update_pending_leaves_monthly()
     {
-
         $prev_month = date('n', strtotime('first day of previous month'));
 
-        $staff_query = "SELECT staffid from tblstaff where active = 1";
+        $staff_query = "SELECT staffid FROM tblstaff WHERE active = 1";
         $staffs = $this->db->query($staff_query)->result_array();
-
 
         foreach ($staffs as $staff) {
 
             $staffid = $staff['staffid'];
-            $query = "SELECT SUM(number_of_days) AS leaves FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND status = 0 AND MONTH(start_time) = $prev_month";
-            // echo $query; die;
+
+            // get total leaves
+            $query = "SELECT SUM(number_of_days) AS leaves 
+                    FROM tbltimesheets_requisition_leave 
+                    WHERE staff_id = $staffid 
+                    AND status = 0 
+                    AND MONTH(start_time) = $prev_month";
+
             $total_leaves = $this->db->query($query)->row()->leaves;
+
+            if (!$total_leaves) {
+                $total_leaves = 0;
+            }
 
             echo "Total leaves are : $total_leaves \n";
 
-            $query = "UPDATE tbltimesheets_requisition_leave SET leave_balance = leave_balance - $total_leaves WHERE staff_id = $staffid AND MONTH(start_time) = $prev_month ORDER BY id DESC LIMIT 1";
+            // get latest record id
+            $latest = $this->db->query("
+                SELECT id 
+                FROM tbltimesheets_requisition_leave
+                WHERE staff_id = $staffid
+                AND MONTH(start_time) = $prev_month
+                ORDER BY id DESC
+                LIMIT 1
+            ")->row();
 
-            $this->db->query($query);
+            // update leave balance for latest record
+            if ($latest) {
+                $update_query = "UPDATE tbltimesheets_requisition_leave 
+                                SET leave_balance = leave_balance - $total_leaves 
+                                WHERE id = {$latest->id}";
+
+                $this->db->query($update_query);
+            }
         }
 
         return true;
     }
-
     public function update_carry_and_leave_balance_monthly()
     {
         $prev_month = date('n', strtotime('first day of previous month'));
 
-        $staff_query = "SELECT staffid from tblstaff where active = 1";
+        $staff_query = "SELECT staffid FROM tblstaff WHERE active = 1";
         $staffs = $this->db->query($staff_query)->result_array();
 
         foreach ($staffs as $staff) {
 
             $staffid = $staff['staffid'];
-            $prev_month = date('n', strtotime('first day of previous month'));
 
-            $query = "SELECT * from tbltimesheets_requisition_leave WHERE staff_id = $staffid AND MONTH(start_time) = $prev_month ORDER BY id DESC LIMIT 1";
+            // Get latest leave record for previous month
+            $query = "SELECT * 
+                    FROM tbltimesheets_requisition_leave 
+                    WHERE staff_id = $staffid 
+                    AND MONTH(start_time) = $prev_month 
+                    ORDER BY id DESC 
+                    LIMIT 1";
+
             $result = $this->db->query($query)->row();
 
-            $leave_balance = $result->leave_balance;
+            // Prevent error if no record exists
+            $leave_balance = 0;
+            if ($result) {
+                $leave_balance = $result->leave_balance;
+            }
 
+            // Calculate carry forward
             if ($leave_balance < 0) {
                 $new_carry_forward = 0;
             } else {
                 $new_carry_forward = $leave_balance;
             }
 
+            // FY carry cap when entering April (prev month = March).
+            $curr_month = (int) date('n');
+            if ($curr_month === 4) {
+                if (!isset($this->staff_model)) {
+                    $this->load->model('staff_model');
+                }
+                $cap = (float) $this->staff_model->get_leave_carry_forward_cap($staffid);
+                if ($new_carry_forward > $cap) {
+                    $new_carry_forward = $cap;
+                }
+            }
+
+            // Get earned leaves (0 after resignation / first employment month, etc.)
             $earned_leaves = get_earned_leaves($staffid);
 
+            // Calculate new balance
             $new_leave_balance = $new_carry_forward + $earned_leaves;
 
-            echo "carry forward : " . $new_carry_forward . "\n leave balance : $new_leave_balance";
+            echo "carry forward : " . $new_carry_forward . "\n leave balance : " . $new_leave_balance . "\n";
+
             $curr_date_time = date('Y-m-d H:i:s');
 
+            // Cast numbers to avoid SQL issues
+            $new_carry_forward = (float)$new_carry_forward;
+            $new_leave_balance = (float)$new_leave_balance;
+
             $query = "INSERT INTO tbltimesheets_requisition_leave (
-            staff_id,
-            subject,
-            start_time,
-            end_time,
-            datecreated,
-            carry_forward,
-            leave_balance
-            )
-            VALUES(
+                staff_id,
+                subject,
+                start_time,
+                end_time,
+                datecreated,
+                carry_forward,
+                leave_balance
+            ) VALUES (
                 $staffid,
                 'Monthly carry forward and leave balance',
                 '$curr_date_time',
                 '$curr_date_time',
                 '$curr_date_time',
                 $new_carry_forward,
-                $new_leave_balance 
+                $new_leave_balance
             )";
+
             $this->db->query($query);
         }
     }
@@ -4935,7 +4990,7 @@ class Cron_model extends App_Model
         try {
 
             $this->email->set_mailtype("html");
-            $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+            $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
              $this->email->to('hr@tech2globe.com');
             //$this->email->to('naved.ahamad@tech2globe.in');
 
@@ -5067,7 +5122,7 @@ class Cron_model extends App_Model
                 try {
 
                     $this->email->set_mailtype("html");
-                    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+                    $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
                     $this->email->to($staff_email);
 
                     // $this->email->to('sarabjeet@tech2globe.net');
@@ -5277,7 +5332,7 @@ class Cron_model extends App_Model
                 try {
 
                     $this->email->set_mailtype("html");
-                    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+                    $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
   
                     $this->email->to($staff_email);
 
@@ -5942,8 +5997,8 @@ class Cron_model extends App_Model
 	   error_reporting(E_ALL);
     ini_set('display_errors', 1);
     $this->email->set_mailtype("html");
-    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
-	//echo "<prE>";print_r($data);die;
+    $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
+    //echo "<prE>";print_r($data);die;
 	   foreach ($data as $dept_id => $dept_data) {
 		if (empty($dept_data['team_data']) || !is_array($dept_data['team_data'])) {
 			continue;
@@ -6213,7 +6268,7 @@ private function build_department_report($dept_data) {
 	public function send_daily_timesheet_mail_less_then_9hour($data)
 		{
 			$this->email->set_mailtype("html");
-			$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+			$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 
 			$subject = "Daily Less Than 9 Hours Report: " . date('d-m-Y', strtotime('-1 day'));
 
@@ -6338,6 +6393,7 @@ private function build_department_report($dept_data) {
 
     public function send_daily_timesheet_report_run_less_then_9hour($manually = false)
     {
+log_message('error', '=== Cron function entered ===');
 
         if ($this->can_cron_run()) {
 
@@ -6356,9 +6412,10 @@ private function build_department_report($dept_data) {
 
                 log_activity('Cron Invoked Manually');
             }
+                       log_message('error', '=== Cron timesheet controller hit. Day: ' . date('D') . ' ===');
 
            // if (date('D') != 'Mon') {
-			if (date('D') != 'Mon') {
+	   if (date('D') != 'Mon') {
                 // running cron job for workroom
                 $data = $this->timesheet_summary_9hour();
                 $this->send_daily_timesheet_mail_less_then_9hour($data);
@@ -6483,7 +6540,7 @@ private function build_department_report($dept_data) {
 	 public function send_daily_timesheet_mail_less_then_10hour($data)
     {
 			$this->email->set_mailtype("html");
-			$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+			$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 
 			$subject = "Daily Greater Than 10 Hours Report: " . date('d-m-Y', strtotime('-1 day'));
 
@@ -6672,7 +6729,7 @@ private function build_department_report($dept_data) {
 public function send_daily_timesheet_optimise_report($data)
 {
     $this->email->set_mailtype("html");
-    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+    $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 
     $subject = "Daily Working Hours Report: " . date('d-m-Y', strtotime('-1 day'));
 
@@ -6941,7 +6998,7 @@ public function send_daily_timesheet_optimise_report($data)
         }
 
         $this->email->set_mailtype("html");
-        $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+        $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
         $this->email->to($dep_email);
 
         $subject = "Raise Ticket Delay Reminder";
@@ -7011,7 +7068,7 @@ public function send_daily_timesheet_optimise_report($data)
         $dep_name = $dep_name[0]['name'];
 
         $this->email->set_mailtype("html");
-        $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+        $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
         $this->email->to($data['email']);
 
         $subject = "Raise Ticket Delay Reminder";
@@ -7082,7 +7139,7 @@ public function send_daily_timesheet_optimise_report($data)
 
         $hr_names = $this->db->query($get_hr_name_query)->result_array();
 		 $this->email->set_mailtype("html");
-        $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+        $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
         $subject = "Daily Recruitment Report : $prev_date";
 		//$this->email->to('naved.ahamad1@tech2globe.net');	
 		$this->email->to('sarabjeet@tech2globe.net');
@@ -7174,7 +7231,7 @@ public function send_daily_timesheet_optimise_report($data)
 
 	public function send_daily_recrutment_report_to_hr_run(){
 		 $this->email->set_mailtype("html");
-		$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 		 $query = "SELECT
 					ticketid,
 					tbltickets.name as name,
@@ -7341,7 +7398,7 @@ public function send_daily_timesheet_optimise_report($data)
 			
 	public function send_daily_recrutment_report_to_hr_manager_run(){
 		 $this->email->set_mailtype("html");
-		$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 		 $query = "SELECT
 					ticketid,
 					tbltickets.name AS name,
@@ -7497,7 +7554,6 @@ public function send_daily_timesheet_optimise_report($data)
 		// $this->email->to('naved.ahamad1@tech2globe.net');
 		// $this->email->to('navneet.baid@tech2globe.in');
 		  $this->email->to('hr@tech2globe.com');
-        // $this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net']);
 		$this->email->subject($subject);
 		$this->email->message($message);
 
@@ -7513,7 +7569,7 @@ public function send_daily_timesheet_optimise_report($data)
 			
 	public function send_daily_recrutment_report_to_Sarabjeet_manager_run(){
 		 $this->email->set_mailtype("html");
-		$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 		 $query = "SELECT
 					ticketid,
 					tbltickets.name AS name,
@@ -7684,7 +7740,7 @@ public function send_daily_timesheet_optimise_report($data)
 			
 	public function send_daily_recrutment_report_to_ITSupport_manager_run(){
 		 $this->email->set_mailtype("html");
-		$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 		 $query = "SELECT
 					ticketid,
 					tbltickets.name AS name,
@@ -7855,7 +7911,7 @@ public function send_daily_timesheet_optimise_report($data)
 	public function send_daily_recrutment_report_to_PEDMA()
 		{
 			$this->email->set_mailtype("html");
-			$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+			$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 
 			// ✅ Refined Query
 			$query = "
@@ -7971,7 +8027,7 @@ public function send_daily_timesheet_optimise_report($data)
 	public function staff_login_status_last_week()
 			{
 				$this->email->set_mailtype("html");
-			$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+			$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 			$subject = 'Weekly Snapshot Login Report(Mon-Sat)';
 				// Get last Mon-Sat dates
 				$dates = [];
@@ -8062,17 +8118,20 @@ public function send_daily_timesheet_optimise_report($data)
 	public function weekly_deadline_missed_projects_report()
 		{
 			$today = date('Y-m-d');
+			// Only include projects that missed a deadline recently (skip years-old overdue rows).
+			$recent_cutoff = date('Y-m-d', strtotime('-30 days'));
 			$this->load->library('email');
 
-			// Get all overdue (missed deadline) projects
 			$this->db->select('name, start_date, deadline');
 			$this->db->from(db_prefix() . 'projects');
+			$this->db->where('deadline >=', $recent_cutoff);
 			$this->db->where('deadline <', $today);
-			$this->db->where('status !=', 4); // Exclude completed
+			$this->db->where('status !=', 4); // Exclude finished/completed
+			$this->db->order_by('deadline', 'DESC');
 			$projects = $this->db->get()->result();
 
 			if (empty($projects)) {
-				echo "✅ No projects with missed deadlines.";
+				echo "✅ No projects with missed deadlines in the last 30 days.";
 				return;
 			}
 
@@ -8094,12 +8153,15 @@ public function send_daily_timesheet_optimise_report($data)
 			$table .= '</tbody></table>';
 			print_r($table);
 			// Email setup
-		   $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+		   $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 			$this->email->to('sarabjeet@tech2globe.net');
 			$this->email->cc(['harpreet.singh@tech2globe.com','tech2globe@yopmail.com']); // Optional
 			//$this->email->to('naved.ahamad1@tech2globe.net'); // You can dynamically add recipients
 			$this->email->subject('Weekly Report: Projects Missed Deadline');
-			$this->email->message("<p>The following projects have missed their deadlines as of {$today}:</p>" . $table);
+			$this->email->message(
+				"<p>The following active projects missed their deadline within the last 30 days (as of {$today}). "
+				. "Older overdue projects are excluded from this report.</p>" . $table
+			);
 			$this->email->set_mailtype("html");
 
 			if ($this->email->send()) {
@@ -8116,7 +8178,7 @@ public function send_biometric_break_alerts($date = null)
     $this->load->library('email');
     $this->load->model('staff_model');
     $this->email->set_mailtype("html");
-    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe');
+    $this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
 
     if (!$date) {
         $date = date('d-M-Y', strtotime('-1 day'));
@@ -8254,7 +8316,7 @@ public function send_break_report_to_staff()
     }
 
     $this->email->set_mailtype("html");
-    $this->email->from('noreply_workroom@tech2globe.com', 'Tech2Globe');
+    $this->email->from('noreply@t2gworkroom.com', 'Tech2Globe');
     
     $summary = "";
     $exceeded_count = 0;
@@ -8306,7 +8368,7 @@ public function send_break_report_to_staff()
 	public function get_attendance_summary_table($date = null)
 		{
 			$this->email->set_mailtype("html");
-			$this->email->from('noreply_workroom@tech2globe.com', 'Tech2globe'); 
+			$this->email->from('noreply@t2gworkroom.com', 'Tech2globe'); 
 			$subject = 'Daily Biometric Report: '.date('d-M-Y', strtotime('-1 day'));
 			if (!$date) {
 				// Generate yesterday's date in d-M-Y format
@@ -8392,7 +8454,7 @@ public function send_break_report_to_staff()
 			$html .= '</tbody></table>';
 			//$this->email->to('naved.ahamad1@tech2globe.net');
 			 $this->email->to('harpreet.singh@tech2globe.com');
-			 $this->email->cc(['hr@tech2globe.com','shweta.sharma@tech2globe.in', 'sarabjeet@tech2globe.net']); // Optional
+			 $this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net']); // Optional
 				$this->email->subject('Break Time Report: ' . $date);
 				$this->email->message($html);
 			print_r($html);
@@ -8463,6 +8525,57 @@ public function send_break_report_to_staff()
 				return sprintf('%02d:%02d:%02d', $h, $m, $s);
 			}
 
+    /**
+     * Email PEDMA evaluation reminders to managers.
+     * Days 1 / 5 / 10 of month, then daily after the 10th until team PEDMAs are published.
+     */
+    public function send_pedma_evaluation_reminders($force = false)
+    {
+        if (!$force && function_exists('pedma_eval_reminders_are_active') && !pedma_eval_reminders_are_active()) {
+            return [
+                'skipped' => true,
+                'reason'  => 'starts_' . (function_exists('pedma_eval_reminders_start_date') ? pedma_eval_reminders_start_date() : '2026-09-01'),
+                'sent'    => 0,
+            ];
+        }
+
+        $day = (int) date('j');
+        $today = date('Y-m-d');
+        $shouldSend = in_array($day, [1, 5, 10], true) || $day > 10;
+
+        if (!$shouldSend && !$force) {
+            return ['skipped' => true, 'reason' => 'not_reminder_day', 'sent' => 0];
+        }
+
+        $optionKey = 'pedma_eval_reminder_sent_' . $today;
+        if (!$force && get_option($optionKey) === '1') {
+            return ['skipped' => true, 'reason' => 'already_sent_today', 'sent' => 0];
+        }
+
+        $this->load->model('staff_model');
+        $monthYm = $this->staff_model->get_pedma_eval_target_month();
+        $managers = $this->staff_model->get_managers_with_pending_pedma_eval($monthYm);
+
+        $sent = 0;
+        foreach ($managers as $manager) {
+            if ($this->staff_model->send_pedma_evaluation_reminder_email($manager, $day)) {
+                $sent++;
+            }
+        }
+
+        update_option($optionKey, '1');
+        log_activity('PEDMA evaluation reminders sent to ' . $sent . ' manager(s) for month ' . $monthYm . ' (day ' . $day . ')');
+
+        return [
+            'skipped' => false,
+            'month'   => $monthYm,
+            'day'     => $day,
+            'managers'=> count($managers),
+            'sent'    => $sent,
+        ];
+    }
+
 }
+
 
 

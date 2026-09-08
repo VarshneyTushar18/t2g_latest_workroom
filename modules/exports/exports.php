@@ -19,7 +19,7 @@ hooks()->add_action('admin_init', 'export_module_init_menu_items');
 function export_module_init_menu_items()
 {
     $CI = &get_instance();
-    if (is_admin()) {
+    if (function_exists('can_export_table_data') ? can_export_table_data() : is_admin()) {
         $CI->app_menu->add_sidebar_children_item('utilities', [
             'slug' => 'csv-export',
             'name' => _l('csv_export'),

@@ -470,6 +470,8 @@ class Api_timesheets extends API_timesheets_Controller {
 						}
 					}
 
+					$this->timesheets_model->assign_leave_approvers_only($result, $rel_type, (int) $data['staff_id']);
+
 					$followers_id = $data['followers_id'];
 					$staffid = $data['staff_id'];
 					$subject = $data['subject'];
@@ -491,6 +493,8 @@ class Api_timesheets extends API_timesheets_Controller {
 					}
 					// Send to receipient
 					$this->timesheets_model->notify_create_new_leave($result, $rel_type);
+					$this->timesheets_model->send_leave_application_approver_emails($result, $rel_type, (int) $data['staff_id']);
+					$this->timesheets_model->notify_manager_leave_application($result, (int) $data['staff_id']);
 					$this->response(
 						[
 							'status' => TRUE,

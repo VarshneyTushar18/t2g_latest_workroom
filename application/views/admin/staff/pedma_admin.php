@@ -235,6 +235,47 @@
         background-color: #6c757d;
         border-color: #6c757d;      
     }
+
+    #defaultKraSelect {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: center;
+    }
+    #defaultKraSelect .kra-list-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        width: auto;
+        max-width: none;
+    }
+    #defaultKraSelect .kra-list-item.unlocked {
+        background: transparent;
+        border: none;
+    }
+    #defaultKraSelect .kra-list-item.unlocked .form-check-label {
+        color: #15803d;
+        font-weight: 600;
+    }
+    #defaultKraSelect .kra-lock-icon {
+        min-width: 14px;
+        color: #b45309;
+        font-size: 12px;
+    }
+    #defaultKraSelect .kra-list-item.unlocked .kra-lock-icon {
+        color: #15803d;
+    }
+    #defaultKraSelect .form-check-label {
+        margin: 0;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+    }
 </style>
 <!-- <script src="https://cdn.ckeditor.com/ckeditor5/41.3.1/classic/ckeditor.js"></script> -->
 <script src="https://cdn.ckeditor.com/4.8.0/full-all/ckeditor.js"></script>
@@ -293,6 +334,18 @@
                                             Custom
                                         </label>
                                     </div>
+
+                                    <!-- Previous Month Template -->
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="kraOption" id="previousMonthOption" value="previous">
+                                        <label class="form-check-label" for="previousMonthOption">
+                                            Previous Month
+                                        </label>
+                                    </div>
+                                    <input type="hidden" name="previous_kra_save_type" id="previous_kra_save_type" value="">
+                                    <small id="previousMonthHint" class="text-muted" style="display:none;margin-top:4px;">
+                                        Loads last month's KRA as a blank template (scores/comments cleared).
+                                    </small>
                                 </div>
                             </div>
                         </div>
@@ -322,11 +375,21 @@
                         </table>
                     </div>
 
+                    <div class="col-md-12" id="defaultKraSelectWrapper" style="margin-left: 12px; display:none;">
+                        <label for="defaultKraSelect">Select Default KRAs</label>
+                        <small class="text-muted" style="display:block;margin-bottom:6px;">
+                            Items stay <i class="fa fa-lock"></i> locked until you tick the checkbox to unlock.
+                        </small>
+                        <div id="defaultKraSelectionSummary" class="alert alert-info tw-py-2 tw-mb-2" style="padding:10px 14px;margin-bottom:10px;">
+                            <strong>Selected:</strong> <span id="defaultKraSelectedCount">0</span> KRA(s)
+                            &nbsp;|&nbsp;
+                            <strong>Total Max Score:</strong> <span id="defaultKraTotalMaxScore">0</span> / 100
+                        </div>
+                        <div id="defaultKraSelect"></div>
+                    </div>
+
                     <div class="col-md-12" id="customKraSelectWrapper" style="margin-left: 12px;">
                         <label for="customKraSelect">Select KRAs</label>
-                        <!-- <select name="customKraSelect[]" id="customKraSelect" class="selectpicker" multiple="true" data-live-search="true" data-width="100%" data-none-selected-text="Select KRAs" data-selected-text-format="count > 0">
-                            
-                        </select> -->
                         <div id="customKraSelect">
 
                         </div>
@@ -338,20 +401,30 @@
 
                 <!-- Default KRA Table -->
                 <div id="defaultKraWrapper" style="display: block;">
-                    <table class="table performance-table table-bordered">
+                    <table class="table performance-table table-bordered" id="defaultKraTable">
                         <thead>
                             <tr>
                                 <th style="width: 3%;">S. NO.</th>
-                                <th style="width: 36%;">Performance Criteria</th>
-                                <th style="width: 13%;">Max Score</th>
-                                <th style="width: 12%">Score</th>
-                                <th style="width: 36%;">Comment</th>
+                                <th style="width: 28%;">Performance Criteria</th>
+                                <th style="width: 10%;">Max Score</th>
+                                <th style="width: 10%">Score</th>
+                                <th style="width: 24%;">Manager Comment</th>
+                                <th style="width: 25%;">HR Remarks / Notes</th>
                             </tr>
                         </thead>
                         <tbody id="default-kra-table-body">
 
 
                         </tbody>
+                        <tfoot id="default-kra-table-foot" style="display:none;">
+                            <tr class="active" style="background:#f8fafc;font-weight:600;">
+                                <td colspan="2" class="text-right">Total</td>
+                                <td id="defaultKraTableTotalMax">0</td>
+                                <td id="defaultKraTableTotalEntered">0</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
 
@@ -361,9 +434,10 @@
                         <thead>
                             <tr>
                                 <th rowspan="2">S.No.</th>
-                                <th rowspan="2" style="width:300px;">KRA</th>
+                                <th rowspan="2" style="width:220px;">KRA</th>
                                 <th colspan="3">KPI</th>
-                                <th rowspan="2">Feedback</th>
+                                <th rowspan="2" style="width:180px;">Manager Comment</th>
+                                <th rowspan="2" style="width:180px;">HR Remarks / Notes</th>
                             </tr>
                             <tr>
                                 <th style="width:200px;">KPI</th>
@@ -521,31 +595,509 @@
 
     const defaultOption = document.getElementById('defaultOption');
     const customOption = document.getElementById('customOption');
+    const previousMonthOption = document.getElementById('previousMonthOption');
     const defaultKraWrapper = document.getElementById('defaultKraWrapper');
     const customKraWrapper = document.getElementById('customKraWrapper');
     const customKraSelectWrapper = document.getElementById('customKraSelectWrapper');
     const default_performance_score = document.getElementById('default_performance_score');
     const custom_performance_score = document.getElementById('custom_performance_score');
-    // Function to toggle visibility based on the selected option
-    function toggleKraWrapper() {
-        if (defaultOption.checked) {
-            defaultKraWrapper.style.display = 'block';
-            customKraWrapper.style.display = 'none';
-            customKraSelectWrapper.style.display = 'none';
-            custom_performance_score.style.display = 'none';
-            default_performance_score.style.display = 'block';
-        } else if (customOption.checked) {
-            customKraWrapper.style.display = 'block';
-            defaultKraWrapper.style.display = 'none';
-            customKraSelectWrapper.style.display = 'block';
-            default_performance_score.style.display = 'none';
-            custom_performance_score.style.display = 'block';
+    const previousMonthHint = document.getElementById('previousMonthHint');
+    const defaultKraSelectWrapper = document.getElementById('defaultKraSelectWrapper');
+
+    function hasValue(v) {
+        return !(v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0));
+    }
+
+    function syncKraListLockIcon($checkbox) {
+        var $item = $checkbox.closest('.kra-list-item');
+        var unlocked = $checkbox.is(':checked');
+        var $icon = $item.find('.kra-lock-icon');
+        if (unlocked) {
+            $item.removeClass('locked').addClass('unlocked');
+            $icon.html('<i class="fa fa-unlock"></i>');
+        } else {
+            $item.removeClass('unlocked').addClass('locked');
+            $icon.html('<i class="fa fa-lock"></i>');
         }
     }
 
-    // Listen for changes on both radio options
-    defaultOption.addEventListener('change', toggleKraWrapper);
-    customOption.addEventListener('change', toggleKraWrapper);
+    function updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes) {
+        selectedIndexes = (selectedIndexes || []).map(String);
+        var selectedCount = selectedIndexes.length;
+        var totalMax = checkDefaultMaxScoreSum(allDefaultKra || [], selectedIndexes);
+        var $summary = $('#defaultKraSelectionSummary');
+
+        $('#defaultKraSelectedCount').text(selectedCount);
+        $('#defaultKraTotalMaxScore').text(totalMax);
+        $('#defaultKraTableTotalMax').text(totalMax);
+
+        if (!$summary.length) {
+            return;
+        }
+
+        $summary.removeClass('alert-info alert-success alert-danger');
+        if (totalMax > 100) {
+            $summary.addClass('alert-danger');
+        } else if (totalMax === 100) {
+            $summary.addClass('alert-success');
+        } else {
+            $summary.addClass('alert-info');
+        }
+
+        if (selectedCount > 0) {
+            $('#default-kra-table-foot').show();
+        } else {
+            $('#default-kra-table-foot').hide();
+            $('#defaultKraTableTotalEntered').text('0');
+        }
+    }
+
+    function updateDefaultTableEnteredTotal() {
+        var enteredTotal = 0;
+        $('#default-kra-table-body .rating1').each(function() {
+            var value = $(this).val();
+            if (value !== '') {
+                enteredTotal += parseFloat(value) || 0;
+            }
+        });
+        $('#defaultKraTableTotalEntered').text(enteredTotal);
+    }
+
+    function renderDefaultKraList(allDefaultKra, selectedIndexes) {
+        selectedIndexes = (selectedIndexes || []).map(String);
+        var html = '';
+        $.each(allDefaultKra || [], function(index, option) {
+            var isSelected = selectedIndexes.indexOf(String(index)) !== -1;
+            var lockClass = isSelected ? 'unlocked' : 'locked';
+            var lockIcon = isSelected ? 'fa-unlock' : 'fa-lock';
+            var checkedAttr = isSelected ? 'checked' : '';
+            html += `
+                <div class="form-check kra-list-item ${lockClass}">
+                    <input type="checkbox" class="form-check-input default-kra-check" id="default_kra_${index}" value="${index}" ${checkedAttr}>
+                    <span class="kra-lock-icon"><i class="fa ${lockIcon}"></i></span>
+                    <label class="form-check-label" for="default_kra_${index}">${option.name} (Max Score:${option.max_score})</label>
+                </div>
+            `;
+        });
+        $('#defaultKraSelect').html(html);
+        updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes);
+    }
+
+    function buildDefaultTableFromSelection(allDefaultKra, selectedIndexes, scoreMap) {
+        const default_tableBody = $('#default-kra-table-body');
+        default_tableBody.empty();
+        scoreMap = scoreMap || {};
+        selectedIndexes = (selectedIndexes || []).map(Number);
+
+        selectedIndexes.forEach(function(originalIndex, displayIndex) {
+            var item = allDefaultKra[originalIndex];
+            if (!item) {
+                return;
+            }
+            var scored = scoreMap[originalIndex] || scoreMap[item.name] || {};
+            var scoreVal = (scored.get_score !== undefined && scored.get_score !== null && scored.get_score !== '')
+                ? scored.get_score
+                : ((item.get_score !== undefined && item.get_score !== null) ? item.get_score : '');
+            var commentVal = (scored.comment !== undefined)
+                ? scored.comment
+                : (item.comment || '');
+            var hrRemarksVal = (scored.hr_remarks !== undefined)
+                ? scored.hr_remarks
+                : (item.hr_remarks || '');
+            var safeName = String(item.name || '').replace(/"/g, '&quot;');
+            var safeDesc = String(item.description || '').replace(/"/g, '&quot;');
+            var rowHTML = `
+                <tr data-original-index="${originalIndex}">
+                    <td>${displayIndex + 1}</td>
+                    <td class="performance-criteria">
+                        <b>${item.name}</b>
+                        <input type="hidden" name="kraData1[${displayIndex}][name]" value="${safeName}">
+                        <br>${item.description || ''}
+                        <input type="hidden" name="kraData1[${displayIndex}][description]" value="${safeDesc}">
+                    </td>
+                    <td>${item.max_score}</td>
+                    <input type="hidden" name="kraData1[${displayIndex}][max_score]" value="${item.max_score}">
+                    <td><input type="number" class="form-control rating1" name="kraData1[${displayIndex}][get_score]" max="${item.max_score}" min="0" value="${scoreVal}"></td>
+                    <td><textarea class="form-control comment" name="kraData1[${displayIndex}][comment]" placeholder="Manager comment...">${commentVal}</textarea></td>
+                    <td><textarea class="form-control hr-remarks" name="kraData1[${displayIndex}][hr_remarks]" placeholder="HR remarks / notes...">${hrRemarksVal}</textarea></td>
+                </tr>
+            `;
+            default_tableBody.append(rowHTML);
+        });
+        updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes.map(String));
+        updateDefaultTableEnteredTotal();
+        recalculateDefaultScore();
+    }
+
+    function getSelectedDefaultIndexes() {
+        return $('#defaultKraSelect .default-kra-check:checked').map(function() {
+            return $(this).val();
+        }).get();
+    }
+
+    function checkDefaultMaxScoreSum(allDefaultKra, selectedIndexes) {
+        var total = 0;
+        selectedIndexes.forEach(function(idx) {
+            var item = allDefaultKra[parseInt(idx, 10)];
+            if (item) {
+                total += parseInt(item.max_score, 10) || 0;
+            }
+        });
+        return total;
+    }
+
+    function recalculateDefaultScore() {
+        let sum = 0;
+        let count = 0;
+        $('#default-kra-table-body .rating1').each(function() {
+            let value = $(this).val();
+            let maxScore = parseInt($(this).attr('max'), 10) || 0;
+            if (value !== '') {
+                sum += parseFloat(value) || 0;
+                count += maxScore;
+            }
+        });
+        if (count > 0) {
+            let avg = ((sum / count) * 100).toFixed(2);
+            $('#avg_score_display1').html(avg + '%');
+            $('#avg_score1').val(avg);
+        } else {
+            $('#avg_score_display1').html('');
+            $('#avg_score1').val('');
+        }
+        updateDefaultTableEnteredTotal();
+    }
+
+    function getPreviousMonthValue(ym) {
+        if (!ym || ym.indexOf('-') === -1) {
+            return '';
+        }
+        let [year, month] = ym.split('-');
+        year = parseInt(year, 10);
+        month = parseInt(month, 10) - 1;
+        if (month < 1) {
+            month = 12;
+            year = year - 1;
+        }
+        return `${year}-${String(month).padStart(2, '0')}`;
+    }
+
+    // Keep only KRAs/KPIs that had a score in the previous month.
+    function filterPreviousMonthKraWithScores(kraList, isCustom) {
+        if (!Array.isArray(kraList)) {
+            return [];
+        }
+
+        return kraList.filter(function(item) {
+            if (!item) {
+                return false;
+            }
+
+            if (isCustom) {
+                if (Array.isArray(item.kpiData) && item.kpiData.length > 0) {
+                    return item.kpiData.some(function(kpi) {
+                        return kpi && kpi.get_score !== undefined && kpi.get_score !== null && String(kpi.get_score).trim() !== '';
+                    });
+                }
+
+                return item.get_score !== undefined && item.get_score !== null && String(item.get_score).trim() !== '';
+            }
+
+            return item.get_score !== undefined && item.get_score !== null && String(item.get_score).trim() !== '';
+        });
+    }
+
+    // Clear scores/comments so previous month is used as a blank template.
+    function stripScoresAsTemplate(kraList) {
+        if (!Array.isArray(kraList)) {
+            return [];
+        }
+        return kraList.map(function(item) {
+            var copy = Object.assign({}, item);
+            delete copy.get_score;
+            delete copy.comment;
+            delete copy.hr_remarks;
+            if (Array.isArray(copy.kpiData)) {
+                copy.kpiData = copy.kpiData.map(function(kpi) {
+                    var k = Object.assign({}, kpi);
+                    delete k.get_score;
+                    delete k.comment;
+                    delete k.hr_remarks;
+                    return k;
+                });
+            }
+            return copy;
+        });
+    }
+
+    function normalizePreviousMonthCustomTemplate(kraList) {
+        if (!Array.isArray(kraList)) {
+            return [];
+        }
+
+        return kraList.map(function(item) {
+            var copy = Object.assign({}, item);
+            delete copy.get_score;
+            delete copy.comment;
+            delete copy.hr_remarks;
+            if (Array.isArray(copy.kpiData)) {
+                copy.kpiData = copy.kpiData
+                    .filter(function(kpi) {
+                        return kpi && kpi.get_score !== undefined && kpi.get_score !== null && String(kpi.get_score).trim() !== '';
+                    })
+                    .map(function(kpi) {
+                        var k = Object.assign({}, kpi);
+                        delete k.get_score;
+                        delete k.comment;
+                        delete k.hr_remarks;
+                        return k;
+                    });
+            }
+            return copy;
+        });
+    }
+
+    function applyPreviousMonthTemplate(response, kraBasedOnDepartment) {
+        var existingData = {
+            default_kra: '',
+            custom_kra: [],
+            isUpdate: false,
+            isDraft: false
+        };
+
+        if (!response || !response.kra_data) {
+            alert('No previous month PEDMA found for this employee. Using Default KRA.');
+            $('#previous_kra_save_type').val('');
+            $("#defaultOption").prop('checked', true);
+            toggleKraWrapper();
+            updateKraTable(kraBasedOnDepartment, existingData);
+            return;
+        }
+
+        var kraData = [];
+        try {
+            kraData = JSON.parse(response.kra_data);
+        } catch (e) {
+            kraData = [];
+        }
+
+        var isCustomPrevious = response.type === 'custom';
+        kraData = filterPreviousMonthKraWithScores(kraData, isCustomPrevious);
+        if (!kraData.length) {
+            alert('No scored KRAs found in the previous month. Please use Default or Custom KRA.');
+            $('#previous_kra_save_type').val('');
+            $("#defaultOption").prop('checked', true);
+            toggleKraWrapper();
+            updateKraTable(kraBasedOnDepartment, existingData);
+            return;
+        }
+
+        if (response.type === 'custom') {
+            $('#previous_kra_save_type').val('custom');
+            existingData.custom_kra = normalizePreviousMonthCustomTemplate(kraData);
+            existingData.isPreviousMonthTemplate = true;
+            // Keep custom checkboxes usable while showing previous structure as draft-like rows
+            existingData.isDraft = true;
+            updateKraTable(kraBasedOnDepartment, existingData);
+            showPreviousAsCustom();
+        } else {
+            $('#previous_kra_save_type').val('default');
+            existingData.default_kra = stripScoresAsTemplate(kraData);
+            existingData.isPreviousMonthTemplate = true;
+            updateKraTable(kraBasedOnDepartment, existingData);
+            showPreviousAsDefault();
+        }
+
+        editor.setData('');
+        $("#avg_score_display1").html('');
+        $('#avg_score1').val('');
+        $("#avg_score_display2").html('');
+        $('#avg_score2').val('');
+        $("#staffResponseArea").hide();
+        $("#staffResp").val('');
+        $(".nonEditButton").show();
+        $(".editButton").hide();
+        enableSubmitButton();
+    }
+
+    function showPreviousAsDefault() {
+        defaultKraWrapper.style.display = 'block';
+        customKraWrapper.style.display = 'none';
+        customKraSelectWrapper.style.display = 'none';
+        if (defaultKraSelectWrapper) {
+            defaultKraSelectWrapper.style.display = 'block';
+        }
+        custom_performance_score.style.display = 'none';
+        default_performance_score.style.display = 'block';
+        if (previousMonthHint) {
+            previousMonthHint.style.display = 'block';
+        }
+    }
+
+    function showPreviousAsCustom() {
+        customKraWrapper.style.display = 'block';
+        defaultKraWrapper.style.display = 'none';
+        if (defaultKraSelectWrapper) {
+            defaultKraSelectWrapper.style.display = 'none';
+        }
+        // Keep original Previous Month custom behavior: show filled table, hide select list
+        customKraSelectWrapper.style.display = 'none';
+        default_performance_score.style.display = 'none';
+        custom_performance_score.style.display = 'block';
+        if (previousMonthHint) {
+            previousMonthHint.style.display = 'block';
+        }
+    }
+
+    function loadPreviousMonthKraTemplate() {
+        var staffid = $('#staffid').val();
+        var month = $('#performance_month').val();
+        var department = $('#departments').val();
+
+        if (!hasValue(staffid) || !hasValue(month)) {
+            alert('Please select Employee and Month first.');
+            $("#defaultOption").prop('checked', true);
+            toggleKraWrapper();
+            return;
+        }
+
+        var prevMonth = getPreviousMonthValue(month);
+        $('.loader').removeClass('hidden');
+
+        var kraPromise = (window.lastKraBasedOnDepartment)
+            ? $.Deferred().resolve(window.lastKraBasedOnDepartment).promise()
+            : fetchKRABasedOnDepartment(department);
+
+        kraPromise.done(function(kraBasedOnDepartment) {
+            window.lastKraBasedOnDepartment = kraBasedOnDepartment;
+            $.ajax({
+                url: "<?php echo base_url('admin/staff/get_previous_month_custom_kra_data'); ?>",
+                type: 'POST',
+                data: {
+                    staffid: staffid,
+                    date: prevMonth
+                },
+                dataType: 'json',
+                success: function(response) {
+                    applyPreviousMonthTemplate(response, kraBasedOnDepartment);
+                },
+                error: function() {
+                    alert('Failed to load previous month KRA. Please try again.');
+                    $("#defaultOption").prop('checked', true);
+                    toggleKraWrapper();
+                },
+                complete: function() {
+                    $('.loader').addClass('hidden');
+                }
+            });
+        }).fail(function() {
+            $('.loader').addClass('hidden');
+            alert('Failed to load department KRA list.');
+            $("#defaultOption").prop('checked', true);
+            toggleKraWrapper();
+        });
+    }
+
+    // Function to toggle visibility based on the selected option
+    function toggleKraWrapper() {
+        if (previousMonthHint) {
+            previousMonthHint.style.display = 'none';
+        }
+
+        if (defaultOption.checked) {
+            $('#previous_kra_save_type').val('');
+            defaultKraWrapper.style.display = 'block';
+            customKraWrapper.style.display = 'none';
+            customKraSelectWrapper.style.display = 'none';
+            if (defaultKraSelectWrapper) {
+                defaultKraSelectWrapper.style.display = 'block';
+            }
+            custom_performance_score.style.display = 'none';
+            default_performance_score.style.display = 'block';
+
+            // Ensure Default list/table exists when switching back to Default
+            if (window.lastKraBasedOnDepartment && $('#defaultKraSelect .default-kra-check').length === 0) {
+                updateKraTable(window.lastKraBasedOnDepartment, {
+                    default_kra: [],
+                    custom_kra: [],
+                    isUpdate: false,
+                    isDraft: false
+                });
+            }
+        } else if (customOption.checked) {
+            $('#previous_kra_save_type').val('');
+            customKraWrapper.style.display = 'block';
+            defaultKraWrapper.style.display = 'none';
+            if (defaultKraSelectWrapper) {
+                defaultKraSelectWrapper.style.display = 'none';
+            }
+            customKraSelectWrapper.style.display = 'block';
+            default_performance_score.style.display = 'none';
+            custom_performance_score.style.display = 'block';
+        } else if (previousMonthOption && previousMonthOption.checked) {
+            var saveType = $('#previous_kra_save_type').val();
+            if (saveType === 'custom') {
+                showPreviousAsCustom();
+            } else if (saveType === 'default') {
+                showPreviousAsDefault();
+            } else if (previousMonthHint) {
+                previousMonthHint.style.display = 'block';
+            }
+        }
+    }
+
+    // Listen for changes on radio options — always allow switching
+    defaultOption.addEventListener('change', function() {
+        if (!defaultOption.checked) {
+            return;
+        }
+        toggleKraWrapper();
+        if (window.lastKraBasedOnDepartment) {
+            updateKraTable(window.lastKraBasedOnDepartment, {
+                default_kra: [],
+                custom_kra: [],
+                isUpdate: false,
+                isDraft: false
+            });
+        }
+    });
+    customOption.addEventListener('change', function() {
+        if (!customOption.checked) {
+            return;
+        }
+        toggleKraWrapper();
+        if (window.lastKraBasedOnDepartment) {
+            updateKraTable(window.lastKraBasedOnDepartment, {
+                default_kra: [],
+                custom_kra: [],
+                isUpdate: false,
+                isDraft: false
+            });
+        }
+    });
+    if (previousMonthOption) {
+        previousMonthOption.addEventListener('change', function() {
+            if (previousMonthOption.checked) {
+                toggleKraWrapper();
+                loadPreviousMonthKraTemplate();
+            }
+        });
+    }
+
+    // List checkbox unlocks that KRA (Default only)
+    $('body').on('change', '.default-kra-check', function() {
+        var allDefault = (window.lastKraBasedOnDepartment && window.lastKraBasedOnDepartment.default_kra) || [];
+        syncKraListLockIcon($(this));
+        var selected = getSelectedDefaultIndexes();
+        var total = checkDefaultMaxScoreSum(allDefault, selected);
+        if (total > 100) {
+            alert('The total max score must not exceed 100.');
+            $(this).prop('checked', false);
+            syncKraListLockIcon($(this));
+            selected = getSelectedDefaultIndexes();
+        }
+        buildDefaultTableFromSelection(allDefault, selected, window.lastDefaultScoreMap || {});
+    });
 
     // Initial check to apply the right state on page load
     toggleKraWrapper();
@@ -555,6 +1107,9 @@
         // document.getElementsByClassName('submitBtn').disabled = true;
         $(".submitBtn").prop("disabled", true);
         $(".comment").each(function() {
+            $(this).prop("disabled", true);
+        });
+        $(".hr-remarks").each(function() {
             $(this).prop("disabled", true);
         });
         $(".rating1").each(function() {
@@ -577,6 +1132,9 @@
         $(".submitBtn").prop("disabled", false);
 
         $(".comment").each(function() {
+            $(this).prop("disabled", false);
+        });
+        $(".hr-remarks").each(function() {
             $(this).prop("disabled", false);
         });
 
@@ -622,30 +1180,7 @@
     }
 
     $('body').on('change', '.rating1', function() {
-        var sum = 0;
-        var count = 0;
-
-        $('.rating1').each(function() {
-            var value = parseFloat($(this).val()) || 0;
-            var maxScore = parseFloat($(this).attr('max')) || 0;
-
-            // Add to sum and count only if value is a valid number and not empty
-            if (!isNaN(value) && value !== 0) { 
-                sum += value;
-                count += maxScore;
-            }
-        });
-
-        if (count > 0) {
-            var average = sum / count;
-            var percentage = average * 100;
-            $('#avg_score_display1').html(percentage.toFixed(2) + "%");
-            $('#avg_score1').val(percentage.toFixed(2));
-
-        } else {
-            $('#avg_score_display1').html('No numbers selected.');
-            $('#avg_score1').val(null);
-        }
+        recalculateDefaultScore();
     });
 
 
@@ -709,14 +1244,15 @@
             dataType: 'json',
             success: function(response) {
                 let staff = '<option value=""></option>'; // Default empty option
+                let list = Array.isArray(response) ? response : [];
 
                 // Populate staff dropdown
-                response.forEach(element => {
-                    staff += `<option value="${element.staffid}">${element.firstname} ${element.lastname} ${element.staff_identifi}</option>`;
+                list.forEach(element => {
+                    staff += `<option value="${element.staffid}">${element.firstname} ${element.lastname} ${element.staff_identifi || ''}</option>`;
                 });
 
                 $('#staffid').html(staff); // Insert the staff options
-                $('.selectpicker').selectpicker('refresh'); // Refresh selectpicker UI
+                $('#staffid').selectpicker('refresh'); // Refresh selectpicker UI
             },
             error: function() {
                 alert('Failed to fetch staff. Please try again.');
@@ -752,46 +1288,48 @@
                 $('#department-name').empty();
                 if (response[1]) {
                     $('#department-name').append(response[1].name);
+                    // Prefer staff department for KRA loading when dropdown empty/mismatch
+                    if (response[1].departmentid) {
+                        department = response[1].departmentid;
+                        if (!$('#departments').val()) {
+                            $('#departments').selectpicker('val', String(department));
+                        }
+                    }
                 }
+
+                // Fetch performance data based on month and staffid
+                $.ajax({
+                    url: "<?php echo base_url('admin/staff/get_staff_performance_month_and_id'); ?>",
+                    type: 'POST',
+                    data: {
+                        staffid,
+                        month
+                    },
+                    dataType: 'json',
+                    success: function(perfResponse) {
+                        fetchKRABasedOnDepartment(department).done(function(kraResponse) {
+                            window.lastKraBasedOnDepartment = kraResponse;
+
+                            if (!perfResponse) {
+                                handleNoPerformanceData(kraResponse);
+                            } else {
+                                handlePerformanceData(perfResponse, kraResponse);
+                            }
+                            toggleKraWrapper();
+                        }).always(function() {
+                            $('.loader').addClass('hidden');
+                        });
+                    },
+                    error: function() {
+                        alert('Failed to fetch performance data. Please try again.');
+                        $('.loader').addClass('hidden');
+                    }
+                });
             },
             error: function() {
                 alert('Failed to fetch staff details. Please try again.');
+                $('.loader').addClass('hidden');
             }
-        });
-
-        // Fetch performance data based on month and staffid
-        $.ajax({
-            url: "<?php echo base_url('admin/staff/get_staff_performance_month_and_id'); ?>",
-            type: 'POST',
-            data: {
-                staffid,
-                month
-            },
-            dataType: 'json',
-            success: function(response) {
-                let kraBasedOnDepartment;
-
-                // Call the function with the desired department
-                fetchKRABasedOnDepartment(department).done(function(kraResponse) {
-                    kraBasedOnDepartment = kraResponse;
-
-                    // Check if there's no performance data
-                    if (!response) {
-                        handleNoPerformanceData(kraBasedOnDepartment);
-                    } else {
-                        handlePerformanceData(response, kraBasedOnDepartment);
-                    }
-
-                    // Clear editor and score displays
-
-                });
-
-                $('.loader').addClass('hidden');
-            },
-            error: function() {
-                alert('Failed to fetch performance data. Please try again.');
-                $('.loader').addClass('hidden');
-            },
         });
 
     });
@@ -820,6 +1358,7 @@
                 // Call the function with the desired department
                 fetchKRABasedOnDepartment(department).done(function(kraResponse) {
                     kraBasedOnDepartment = kraResponse;
+                    window.lastKraBasedOnDepartment = kraResponse;
 
                     // Check if there's no performance data
                     if (!response) {
@@ -827,6 +1366,7 @@
                     } else {
                         handlePerformanceData(response, kraBasedOnDepartment);
                     }
+                    toggleKraWrapper();
 
                     // Clear editor and score displays
 
@@ -845,11 +1385,15 @@
     function handleNoPerformanceData(kraBasedOnDepartment) {
         let existingData = {
             'default_kra': '',
-            'custom_kra': []
+            'custom_kra': [],
+            'isUpdate': false,
+            'isDraft': false
         };
 
         $("#defaultOption").prop('disabled', false).prop('checked', true);
         $("#customOption").prop('disabled', false).prop('checked', false);
+        $("#previousMonthOption").prop('disabled', false).prop('checked', false);
+        $('#previous_kra_save_type').val('');
         toggleKraWrapper();
 
         $("#staffResponseArea").hide();
@@ -857,75 +1401,30 @@
         $(".nonEditButton").show();
         $(".editButton").hide();
 
-        let staffid = $('#staffid').val();
-        let date = $('#performance_month').val();
-        let [year, month] = date.split("-");
+        updateKraTable(kraBasedOnDepartment, existingData);
 
-        // Subtract 1 from the month and ensure it's a two-digit number
-        month = String(month - 1).padStart(2, '0');
-
-        if (month === "00") {
-            month = "12"; // Set to December
-            year = year - 1; // Decrease the year by 1
-        }
-
-        date = `${year}-${month}`;
-
-        if (!empty(staffid) && !empty(date)) {
-            $.ajax({
-                url: "<?php echo base_url('admin/staff/get_previous_month_custom_kra_data'); ?>",
-                type: 'POST',
-                data: {
-                    staffid,
-                    date
-                },
-                dataType: 'json',
-                success: function(response) {
-                    existingData['default_kra'] = '';
-                    if (!empty(response) && response.type === "custom") {
-                        existingData['custom_kra'] = JSON.parse(response.kra_data);
-                    } else {
-                        existingData['custom_kra'] = [];
-                    }
-
-                    existingData['isUpdate'] = false;
-                    existingData['isDraft'] = false;
-
-                    // Call updateKraTable after data is successfully fetched
-                    updateKraTable(kraBasedOnDepartment, existingData);
-
-                    editor.setData(''); // Clear editor data
-                    $("#avg_score_display1").html('');
-                    $('#avg_score1').val('');
-                    $("#avg_score_display2").html('');
-                    $('#avg_score2').val('');
-                }
-            });
-        } else {
-            existingData['default_kra'] = '';
-            existingData['custom_kra'] = [];
-            existingData['isUpdate'] = false;
-            existingData['isDraft'] = false;
-
-            // Update KRA table immediately if no data is available
-            updateKraTable(kraBasedOnDepartment, existingData);
-
-            editor.setData(''); // Clear editor data
-            $("#avg_score_display1").html('');
-            $('#avg_score1').val('');
-            $("#avg_score_display2").html('');
-            $('#avg_score2').val('');
-        }
+        editor.setData(''); // Clear editor data
+        $("#avg_score_display1").html('');
+        $('#avg_score1').val('');
+        $("#avg_score_display2").html('');
+        $('#avg_score2').val('');
+        enableSubmitButton();
     }
 
 
     // Handle performance data case
     function handlePerformanceData(response, kraBasedOnDepartment) {
         let existingData = {};
+        $('#previous_kra_save_type').val('');
+        // Always allow switching between Default / Custom / Previous Month
+        $("#defaultOption").prop('disabled', false);
+        $("#customOption").prop('disabled', false);
+        $("#previousMonthOption").prop('disabled', false);
 
         if (response.type === "default") {
-            $("#defaultOption").prop('disabled', false).prop('checked', true);
-            $("#customOption").prop('disabled', true).prop('checked', false);
+            $("#defaultOption").prop('checked', true);
+            $("#customOption").prop('checked', false);
+            $("#previousMonthOption").prop('checked', false);
             toggleKraWrapper();
 
             existingData['default_kra'] = JSON.parse(response.kra_data);
@@ -954,8 +1453,9 @@
 
             $('#avg_score1').val(response.avg_score);
         } else {
-            $("#defaultOption").prop('disabled', true).prop('checked', false);
-            $("#customOption").prop('disabled', false).prop('checked', true);
+            $("#defaultOption").prop('checked', false);
+            $("#customOption").prop('checked', true);
+            $("#previousMonthOption").prop('checked', false);
             toggleKraWrapper();
 
             existingData['default_kra'] = '';
@@ -992,7 +1492,7 @@
             $('#avg_score2').val(response.avg_score);
         }
 
-        if (!empty(response.staff_comment)) {
+        if (hasValue(response.staff_comment)) {
             $("#staffResponseArea").show();
             $("#staffResp").val(response.staff_comment);
         } else {
@@ -1129,34 +1629,42 @@
     // }
 
     function updateKraTable(kraBasedOnDepartment, existingData) {
-        const default_tableBody = $('#default-kra-table-body');
-        default_tableBody.empty(); // Clear previous rows
+        window.lastKraBasedOnDepartment = kraBasedOnDepartment;
+        window.lastDefaultScoreMap = {};
 
-        let default_kra_data = Array.isArray(existingData.default_kra) && existingData.default_kra.length > 0 ?
-            existingData.default_kra :
-            Array.isArray(kraBasedOnDepartment.default_kra) ? kraBasedOnDepartment.default_kra : [];
+        let allDefault = Array.isArray(kraBasedOnDepartment.default_kra) ? kraBasedOnDepartment.default_kra : [];
+        let existingDefault = Array.isArray(existingData.default_kra) ? existingData.default_kra : [];
+        let selectedDefaultIndexes = [];
 
-        if (default_kra_data && default_kra_data.length > 0) {
-            // Add rows to default KRA table
-            default_kra_data.forEach((item, index) => {
-                let rowHTML = `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td class="performance-criteria">
-                        <b>${item.name}</b>
-                        <input type="hidden" name="kraData1[${index}][name]" value="${item.name}">
-                        <br>${item.description}
-                        <input type="hidden" name="kraData1[${index}][description]" value="${item.description}">
-                    </td>
-                    <td>${item.max_score}</td>
-                    <input type="hidden" name="kraData1[${index}][max_score]" value="${item.max_score}">
-                    <td><input type="number" class="form-control rating1" name="kraData1[${index}][get_score]" max="${item.max_score}" min="0" value="${item.get_score ? item.get_score : ''}"></td>
-                    <td><textarea class="form-control comment" name="kraData1[${index}][comment]" placeholder="Provide feedback here...">${item.comment ? item.comment : ''}</textarea></td>
-                </tr>
-            `;
-                default_tableBody.append(rowHTML);
+        if (existingData.isPreviousMonthTemplate && existingDefault.length > 0) {
+            // Previous month default: show only last month's scored KRAs, all pre-selected
+            allDefault = existingDefault.slice();
+            selectedDefaultIndexes = allDefault.map(function(_, idx) {
+                return String(idx);
             });
+        } else {
+            // Map existing scored default KRAs by name for restore
+            existingDefault.forEach(function(item) {
+                if (!item || !item.name) {
+                    return;
+                }
+                window.lastDefaultScoreMap[item.name] = item;
+                allDefault.forEach(function(opt, idx) {
+                    if (opt.name === item.name) {
+                        selectedDefaultIndexes.push(String(idx));
+                        window.lastDefaultScoreMap[idx] = item;
+                    }
+                });
+            });
+
+            // New evaluation: show all Default KRAs locked (none selected) unless editing existing
+            if (existingDefault.length === 0) {
+                selectedDefaultIndexes = [];
+            }
         }
+
+        renderDefaultKraList(allDefault, selectedDefaultIndexes);
+        buildDefaultTableFromSelection(allDefault, selectedDefaultIndexes, window.lastDefaultScoreMap);
 
         const custom_tableBody = $('#custom-kra-table-body');
         custom_tableBody.empty(); // Clear previous rows
@@ -1170,16 +1678,21 @@
 
         if (existingData.isUpdate) {
             document.getElementById("customKraSelectWrapper").style.display = "none";
+            if (defaultKraSelectWrapper) {
+                defaultKraSelectWrapper.style.display = 'none';
+            }
             editCustomKraTable(custom_kra_data);
         } else {
             let checkboxesHtml = '';
             let preSelectedIds = [];
 
             // Get pre-selected options
-            let preSelectedOptions = existingData.custom_kra.map(option => option.name);
+            let preSelectedOptions = Array.isArray(existingData.custom_kra)
+                ? existingData.custom_kra.map(option => option.name)
+                : [];
 
-            // Iterate through the custom_kra array to dynamically add checkboxes
-            $.each(kraBasedOnDepartment.custom_kra, function(index, option) {
+            // Original Custom KRA checkboxes (no lock UI)
+            $.each(kraBasedOnDepartment.custom_kra || [], function(index, option) {
                 let isSelected = preSelectedOptions.includes(option.name.toString());
                 let checkedAttr = isSelected ? 'checked' : '';
 
@@ -1205,21 +1718,17 @@
             }
 
             // Handle checkbox change event to update table and validate total score
-            $('#customKraSelect input[type="checkbox"]').change(function() {
+            $('#customKraSelect input[type="checkbox"]').off('change.customKra').on('change.customKra', function() {
                 let selectedValues = $('#customKraSelect input[type="checkbox"]:checked')
                     .map(function() {
                         return $(this).val();
-                    }).get(); // Get all selected values
+                    }).get();
 
-                // Check if the new selection will exceed the max_score limit before updating the table
                 let score = checkMaxScoreSum(kraBasedOnDepartment.custom_kra, selectedValues);
-                console.log("Total Score:", score);
-
                 if (score <= 100) {
-                    updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues); // Update the table rows only if valid
+                    updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues);
                 } else {
                     alert("The total max score must not exceed 100.");
-                    // Uncheck the last checkbox if it exceeds the score
                     $(this).prop('checked', false);
                 }
             });
@@ -1286,7 +1795,10 @@
                             <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
                         </td>
                         <td>
-                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Provide feedback here..." required>${kpi.comment ? kpi.comment : ''}</textarea>
+                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
+                        </td>
+                        <td>
+                            <textarea class="form-control hr-remarks" name="kraData2[${index}][kpiData][${kpiIndex}][hr_remarks]" placeholder="HR remarks / notes...">${kpi.hr_remarks ? kpi.hr_remarks : ''}</textarea>
                         </td>
                     </tr>`;
                     });
@@ -1300,7 +1812,10 @@
                         <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
                     </td>
                     <td>
-                        <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Provide feedback here..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
+                        <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
+                    </td>
+                    <td>
+                        <textarea class="form-control hr-remarks" name="kraData2[${index}][hr_remarks]" placeholder="HR remarks / notes...">${selectedKRA.hr_remarks ? selectedKRA.hr_remarks : ''}</textarea>
                     </td>
                 </tr>`;
                 }
@@ -1352,7 +1867,10 @@
                             <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
                         </td>
                         <td>
-                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Provide feedback here..." required>${kpi.comment ? kpi.comment : ''}</textarea>
+                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
+                        </td>
+                        <td>
+                            <textarea class="form-control hr-remarks" name="kraData2[${index}][kpiData][${kpiIndex}][hr_remarks]" placeholder="HR remarks / notes...">${kpi.hr_remarks ? kpi.hr_remarks : ''}</textarea>
                         </td>
                     </tr>
                 `;
@@ -1367,7 +1885,10 @@
                     <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
                 </td>
                 <td>
-                    <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Provide feedback here..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
+                    <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
+                </td>
+                <td>
+                    <textarea class="form-control hr-remarks" name="kraData2[${index}][hr_remarks]" placeholder="HR remarks / notes...">${selectedKRA.hr_remarks ? selectedKRA.hr_remarks : ''}</textarea>
                 </td>
             </tr>
             `;
@@ -1426,8 +1947,19 @@
             return false;
         }
 
-        if (defaultOption.is(':checked')) {
-            $('.rating1').each(function() {
+        var usingDefaultTemplate = defaultOption.is(':checked') ||
+            ($('#previousMonthOption').is(':checked') && $('#previous_kra_save_type').val() === 'default');
+        if (usingDefaultTemplate && getSelectedDefaultIndexes().length === 0) {
+            Swal.fire({
+                icon: "warning",
+                title: "Default KRA is locked",
+                text: "Tick a Default KRA in the list to unlock it before saving.",
+            });
+            return false;
+        }
+
+        if (defaultOption.is(':checked') || ($('#previousMonthOption').is(':checked') && $('#previous_kra_save_type').val() === 'default')) {
+            $('#default-kra-table-body .rating1').each(function() {
                 let value = $(this).val();
                 let maxScore = $(this).attr('max');
                 if (value !== "") {

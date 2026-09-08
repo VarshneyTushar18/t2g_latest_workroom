@@ -129,11 +129,18 @@ function attendance_permission($id = '')
     if ($id == '') {
         $id = get_staff_user_id();
     }
-    $leaveArr = $CI->db->query("SELECT manageleave FROM tblstaff_info WHERE staffid = $id")->result_array();
+
+    // Super HR / HR role: full leave/attendance manage rights in HRMS
+    if (is_super_hr($id) || is_HR($id)) {
+        return true;
+    }
 
     if (get_staff_user_id() == 178) {
         return true;
     }
+
+    $leaveArr = $CI->db->query("SELECT manageleave FROM tblstaff_info WHERE staffid = " . (int) $id)->result_array();
+
     if ($leaveArr) {
         return $leaveArr[0]['manageleave'];
     } else {
@@ -480,6 +487,38 @@ function managers_id()
     }
 }
 
+/**
+ * Single lookup for reporting manager id/email/name (avoids 3× staff queries on leave page).
+ */
+function timesheets_get_reporting_manager_info($staff_id = null)
+{
+    $CI = &get_instance();
+    $staff_id = (int) ($staff_id ?: get_staff_user_id());
+    $info = ['id' => '', 'email' => '', 'name' => ''];
+
+    $row = $CI->db->select('team_manage')
+        ->where('staffid', $staff_id)
+        ->get(db_prefix() . 'staff')
+        ->row();
+
+    if (!$row || empty($row->team_manage)) {
+        return $info;
+    }
+
+    $manager = $CI->db->select('staffid, email, firstname, lastname')
+        ->where('staffid', (int) $row->team_manage)
+        ->get(db_prefix() . 'staff')
+        ->row();
+
+    if ($manager) {
+        $info['id'] = $manager->staffid;
+        $info['email'] = $manager->email;
+        $info['name'] = trim($manager->firstname . ' ' . $manager->lastname);
+    }
+
+    return $info;
+}
+
 function check_staff_is_interviewer($staffid = '')
 {
     if ($staffid == '') {
@@ -504,24 +543,25 @@ function check_staff_is_interviewer($staffid = '')
 
 function get_earned_leaves($staffid)
 {
-    $currentDate = Date('Y-m-d');
-    $query = "SELECT doj from tblstaff_info WHERE staffid = $staffid";
     $CI = &get_instance();
-    $result = $CI->db->query($query)->row();
-    $doj = $result->doj;
-
-    if (!$doj) {
-        $doj = $currentDate;
+    $staffid = (int) $staffid;
+    if ($staffid <= 0) {
+        return 0;
     }
-    $tenureInYears = strtotime($currentDate) - strtotime($doj);
-    $tenureInYears = floor($tenureInYears / (365 * 24 * 60 * 60));
 
-    if ($tenureInYears > 2) {
-        $leaveRate = 1.75; // Less than 2 years
-    } else {
-        $leaveRate = 1.25; // 2 years or more
+    if (!isset($CI->staff_model)) {
+        $CI->load->model('staff_model');
     }
-    return $leaveRate;
+
+    $info = $CI->db->select('doj')->where('staffid', $staffid)->get(db_prefix() . 'staff_info')->row();
+    $doj = $info->doj ?? null;
+
+    return (float) $CI->staff_model->calculateEarnedLeaves(
+        $doj,
+        $staffid,
+        (int) date('n'),
+        (int) date('Y')
+    );
 }
 
 
@@ -532,9 +572,11 @@ function get_all_managers()
     $query = "SELECT team_manage from tblstaff where active = 1";
     $data = $CI->db->query($query)->result_array();
     $manager_ids = array_filter(array_unique(array_column($data, 'team_manage')));
+    if (empty($manager_ids)) {
+        return [];
+    }
 
-
-    $managers_id_str = implode(',', $manager_ids);
+    $managers_id_str = implode(',', array_map('intval', $manager_ids));
 
     $managers = $CI->db->query("select *,CONCAT(firstname,' ',lastname) as full_name from tblstaff where staffid in ($managers_id_str) and active = 1")->result_array();
 
@@ -658,6 +700,27 @@ function is_leader() {
     return $role && strtolower(get_role_name($role->role)) === "leader";
 }
 
+function is_associate() {
+    $CI = &get_instance();
+    $CI->load->database();
+
+    $staff_id = get_staff_user_id();
+
+    $CI->db->select('role')
+           ->from('tblstaff')
+           ->where('staffid', $staff_id);
+
+    $role = $CI->db->get()->row();
+
+    if (!$role) {
+        return false;
+    }
+
+    $role_name = strtolower(trim(get_role_name($role->role)));
+
+    return $role_name === 'associate' || $role_name === 'asscociate';
+}
+
 function is_super_admin() {
     $CI = &get_instance(); // Get CodeIgniter instance
     $CI->load->database(); // Load database
@@ -703,19 +766,237 @@ function is_manager() {
     return $role && strtolower(get_role_name($role->role)) === "manager";
 }
 
-function is_HR() {
-    $CI = &get_instance(); // Get CodeIgniter instance
-    $CI->load->database(); // Load database
+function can_manage_task_templates()
+{
+    return is_admin() || is_admin2() || is_super_admin();
+}
 
-    $staff_id = get_staff_user_id();
+/**
+ * Table / CSV data export: Super Admin, Admin, Manager (+ Manager-* roles).
+ */
+function can_export_table_data($staff_id = '')
+{
+    if (is_admin($staff_id)) {
+        return true;
+    }
 
+    $role = get_staff_role_slug($staff_id);
+
+    if (in_array($role, ['super admin', 'admin'], true)) {
+        return true;
+    }
+
+    return pedma_role_is_manager_family($role);
+}
+
+/**
+ * PEDMA access matrix (latest company sheet)
+ * - PEDMA / Old PEDMA: all roles except Sales
+ * - Manage PEDMA Evaluation: Super Admin, Admin, Manager only
+ * - Manage KRA: Super Admin, Admin, Manager only
+ * - Manager-* roles (Manager - Data, Manager - HR, etc.) count as Manager
+ */
+function get_staff_role_slug($staff_id = '')
+{
+    if ($staff_id === '') {
+        $staff_id = get_staff_user_id();
+    }
+
+    $CI = &get_instance();
     $CI->db->select('role')
-           ->from('tblstaff')
-           ->where('staffid', $staff_id);
+        ->from('tblstaff')
+        ->where('staffid', $staff_id);
 
-    $role = $CI->db->get()->row();
+    $row = $CI->db->get()->row();
 
-    return $role && strtolower(get_role_name($role->role)) === "hr";
+    if (!$row) {
+        return '';
+    }
+
+    return strtolower(trim(get_role_name($row->role)));
+}
+
+function pedma_role_is_manager_family($role)
+{
+    $role = strtolower(trim((string) $role));
+    if ($role === '') {
+        return false;
+    }
+
+    return $role === 'manager' || strpos($role, 'manager') === 0 || strpos($role, 'manager -') !== false;
+}
+
+function pedma_has_evaluation_role_access($staff_id = '')
+{
+    if (is_admin($staff_id)) {
+        return true;
+    }
+
+    $role = get_staff_role_slug($staff_id);
+
+    if (in_array($role, ['super admin', 'admin'], true)) {
+        return true;
+    }
+
+    // Assigned manager role family only (not Leader/Associate/HR/IT)
+    return pedma_role_is_manager_family($role);
+}
+
+function pedma_has_kra_role_access($staff_id = '')
+{
+    // Same matrix as Evaluation: Super Admin / Admin / Manager only
+    return pedma_has_evaluation_role_access($staff_id);
+}
+
+function can_view_own_pedma($staff_id = '')
+{
+    // Performance → PEDMA (own scores): all roles except Sales
+    $role = get_staff_role_slug($staff_id);
+
+    return $role !== '' && $role !== 'sales';
+}
+
+function can_manage_pedma($staff_id = '')
+{
+    // Manage PEDMA Dashboard: Super Admin / Admin / Manager / HR
+    return pedma_has_evaluation_role_access($staff_id) || is_HR();
+}
+
+function can_evaluate_pedma($staff_id = '')
+{
+    // Evaluation: Super Admin / Admin / Manager only
+    return pedma_has_evaluation_role_access($staff_id);
+}
+
+function can_manage_pedma_kra($staff_id = '')
+{
+    // Manage KRA: Super Admin / Admin / Manager only
+    return pedma_has_kra_role_access($staff_id);
+}
+
+function can_access_manage_pedma_menu($staff_id = '')
+{
+    // Do NOT show Manage PEDMA to all members
+    return pedma_has_evaluation_role_access($staff_id) || is_HR();
+}
+
+/**
+ * Grade filter table on Manage PEDMA: Admin / Super Admin / HR only.
+ */
+function can_view_pedma_grade_filter($staff_id = '')
+{
+    if (is_admin($staff_id)) {
+        return true;
+    }
+
+    if (is_HR()) {
+        return true;
+    }
+
+    $role = get_staff_role_slug($staff_id);
+
+    return in_array($role, ['super admin', 'admin'], true);
+}
+
+/**
+ * PEDMA manager reminder emails + popup start from this date (next month after Aug 2026 go-live).
+ */
+function pedma_eval_reminders_start_date()
+{
+    return '2026-09-01';
+}
+
+function pedma_eval_reminders_are_active($asOfDate = null)
+{
+    $asOf = $asOfDate ? date('Y-m-d', strtotime($asOfDate)) : date('Y-m-d');
+
+    return $asOf >= pedma_eval_reminders_start_date();
+}
+
+function is_HR($staff_id = '') {
+    $role = get_staff_role_slug($staff_id);
+
+    // Super HR inherits all existing HR role gates (menus, biometric, etc.)
+    return in_array($role, ['hr', 'super hr'], true);
+}
+
+/**
+ * Super HR: admin-level access within HRMS modules only (not system admin).
+ */
+function is_super_hr($staff_id = '')
+{
+    return get_staff_role_slug($staff_id) === 'super hr';
+}
+
+/**
+ * Permission features Super HR can fully use (like admin), excluding finance/setup/etc.
+ */
+function hrms_permission_features()
+{
+    return [
+        // Timesheets / attendance / leave / shifts
+        'attendance_management',
+        'leave_management',
+        'route_management',
+        'additional_timesheets_management',
+        'table_shiftwork_management',
+        'report_management',
+        'table_workplace_management',
+        'timesheets_shift_management',
+        'timesheets_shift_categories_management',
+        'setting_management',
+        // HR Profile
+        'hrm_dashboard',
+        'staffmanage_orgchart',
+        'hrm_reception_staff',
+        'hrm_hr_records',
+        'staffmanage_job_position',
+        'staffmanage_training',
+        'hr_manage_q_a',
+        'hrm_contract',
+        'hrm_dependent_person',
+        'hrm_procedures_for_quitting_work',
+        'hrm_report',
+        'hrm_setting',
+        // Recruitment
+        'recruitment',
+        // Staff list needed to manage employees in HRMS
+        'staff',
+        // HR-adjacent
+        'pedma',
+        'reports',
+    ];
+}
+
+/**
+ * staff_can filter: grant all capabilities on HRMS features for Super HR / HR.
+ */
+function super_hr_staff_can_filter($retVal, $capability, $feature, $staff_id)
+{
+    if ($retVal) {
+        return true;
+    }
+    // Super HR = full HRMS. Regular HR also gets global "view" on HRMS lists
+    // (role often only has view_own which hides other employees).
+    if (is_super_hr($staff_id)) {
+        if ($feature && in_array($feature, hrms_permission_features(), true)) {
+            return true;
+        }
+        return $retVal;
+    }
+    if (is_HR($staff_id) && $feature && in_array($feature, hrms_permission_features(), true)) {
+        // Give HR global view (and view_own) so they can see all HRMS lists
+        if (in_array($capability, ['view', 'view_own'], true)) {
+            return true;
+        }
+    }
+
+    return $retVal;
+}
+
+if (function_exists('hooks') && empty($GLOBALS['super_hr_staff_can_filter_registered'])) {
+    $GLOBALS['super_hr_staff_can_filter_registered'] = true;
+    hooks()->add_filter('staff_can', 'super_hr_staff_can_filter', 10, 4);
 }
 
 function is_IT() {

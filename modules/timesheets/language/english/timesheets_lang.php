@@ -844,6 +844,7 @@ $lang['email_send_rejected']  = '%s has been declined';
 $lang['from_staff']  = 'from %s';
 $lang['by_staff']  = 'by %s';
 $lang['created_a_new_leave_application']  = 'created a new leave application';
+$lang['not_staff_leave_application']  = 'applied for leave (for your information as reporting manager)';
 $lang['notify_send_request_n']  = 'sent request approval on %s';
 $lang['notify_send_approve_n']  = 'approved request on %s';
 $lang['notify_send_rejected_n']  = 'rejected request on %s';

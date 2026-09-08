@@ -25,6 +25,9 @@ $notification_recipient_select = explode(',', $notification_recipient_select);  
     ]; 
 
     foreach ($type_of_leave as $value) {
+      if (in_array($value['slug'], ['comp-off', 'work-from-home'], true)) {
+        continue;
+      }
       $related[] =  ['id' => $value['slug'], 'name' => $value['type_name']];
     }
 

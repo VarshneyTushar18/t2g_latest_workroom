@@ -214,6 +214,17 @@ function app_init_admin_sidebar_menu_items()
         'badge' => [],
     ]);
 
+    // Staff Suggestions under Support — Admin / Admin2 / Super Admin / HR
+    if (is_admin() || is_admin2() || is_super_admin() || is_HR() || in_the_department('HR')) {
+        $CI->app_menu->add_sidebar_children_item('support', [
+            'slug' => 'staff-suggestions',
+            'name' => _l('staff_suggestions'),
+            'href' => admin_url('suggestions'),
+            'position' => 5,
+            'badge' => [],
+        ]);
+    }
+
     // if (is_staff_member()) {
     // if (is_admin()) {
 
@@ -277,6 +288,7 @@ function app_init_admin_sidebar_menu_items()
             'badge' => [],
         ]);
     }
+
     if (is_admin() || is_admin2() || is_super_admin()) {
         $CI->app_menu->add_sidebar_children_item('utilities', [
             'slug' => 'media',
@@ -390,7 +402,7 @@ function app_init_admin_sidebar_menu_items()
     //         'badge' => [],
     //     ]);
     // }
-    if (!is_sales()) {
+    if (can_view_own_pedma()) {
         $CI->app_menu->add_sidebar_children_item('performance', [
             'name' => 'PEDMA',
             'href' => admin_url('staff/pedma'),
@@ -398,24 +410,16 @@ function app_init_admin_sidebar_menu_items()
             'position' => 50,
             'badge' => [],
         ]);
+    }
 
+    if (!is_sales() && (is_HR() || is_admin())) {
         $CI->app_menu->add_sidebar_children_item('performance', [
-            'name' => 'OLD PEDMA',
-            'href' => admin_url('staff/pedma_old'),
-            
-            'position' => 51,
+            'slug' => 'send-report',
+            'name' => 'HR Reports',
+            'href' => admin_url('manual_report'),
+            'position' => 4,
             'badge' => [],
         ]);
-
-        if(is_HR() || is_admin()){
-            $CI->app_menu->add_sidebar_children_item('performance', [
-                'slug' => 'send-report',
-                'name' => 'HR Reports',
-                'href' => admin_url('manual_report'),
-                'position' => 4,
-                'badge' => [],
-            ]);
-        }
     }
 
 
@@ -701,7 +705,7 @@ function app_init_admin_sidebar_menu_items()
         'badge' => [],
     ]);
 
- if (is_admin() || is_manager() || is_super_admin() || is_HR() || is_IT() || is_admin2()) {
+ if (can_access_manage_pedma_menu()) {
         $CI->app_menu->add_sidebar_menu_item('pedma', [
             'collapse' => true,
             'name'     => 'Manage PEDMA',
@@ -710,33 +714,32 @@ function app_init_admin_sidebar_menu_items()
             'badge'    => [],
         ]);
 
-        $CI->app_menu->add_sidebar_children_item('pedma', [
-            'name'     => _l('Dashboard'),
-            'href'     => admin_url('staff/manage_pedma'),
-            'position' => 4,
-            'badge'    => [],
-        ]);
+        if (can_manage_pedma()) {
+            $CI->app_menu->add_sidebar_children_item('pedma', [
+                'name'     => _l('Dashboard'),
+                'href'     => admin_url('staff/manage_pedma'),
+                'position' => 4,
+                'badge'    => [],
+            ]);
+        }
 
-        $CI->app_menu->add_sidebar_children_item('pedma', [
-            'name'     => _l('Evaluation'),
-            'href'     => admin_url('staff/pedma_admin'),
-            'position' => 5,
-            'badge'    => [],
-        ]);
+        if (can_evaluate_pedma()) {
+            $CI->app_menu->add_sidebar_children_item('pedma', [
+                'name'     => _l('Evaluation'),
+                'href'     => admin_url('staff/pedma_admin'),
+                'position' => 5,
+                'badge'    => [],
+            ]);
+        }
 
-        $CI->app_menu->add_sidebar_children_item('pedma', [
-            'name'     => _l('Manage KRA'),
-            'href'     => admin_url('staff/pedma_admin_kra'),
-            'position' => 10,
-            'badge'    => [],
-        ]);
-
-        $CI->app_menu->add_sidebar_children_item('pedma', [
-            'name'     => _l('OLD PEDMA'),
-            'href'     => admin_url('staff/pedma_admin_old'),
-            'position' => 12,
-            'badge'    => [],
-        ]);
+        if (can_manage_pedma_kra()) {
+            $CI->app_menu->add_sidebar_children_item('pedma', [
+                'name'     => _l('Manage KRA'),
+                'href'     => admin_url('staff/pedma_admin_kra'),
+                'position' => 10,
+                'badge'    => [],
+            ]);
+        }
     }
 
     if (is_admin() || is_super_admin() || is_IT() || is_admin2() || is_manager()) {
@@ -827,6 +830,15 @@ function app_init_admin_sidebar_menu_items()
         'position' => 35,
         'badge' => [],
     ]);
+
+    if (can_manage_task_templates()) {
+        $CI->app_menu->add_sidebar_children_item('Work', [
+            'name' => _l('task_templates'),
+            'href' => admin_url('task_templates'),
+            'position' => 36,
+            'badge' => [],
+        ]);
+    }
 	
     if(is_admin() || is_manager() || is_super_admin() || is_admin2()){
         $CI->app_menu->add_sidebar_children_item('Work', [

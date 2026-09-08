@@ -29,7 +29,7 @@ $join = ['LEFT JOIN ' . db_prefix() . 'staff b ON b.staffid = ' . db_prefix() . 
 ];
 $where = [];
 
-if (!is_admin() && !has_permission('leave_management', '', 'view')) {
+if (!is_admin() && !is_HR() && !is_super_hr() && !has_permission('leave_management', '', 'view')) {
 	array_push($where, ' AND (
 	('
 	. get_staff_user_id() . ' in 
@@ -190,7 +190,7 @@ $row[] = '<p>' . $aRow['type_of_leave_text'] . '</p>';
 		$data_check_approve_status = $this->ci->timesheets_model->check_approval_details(($aRow[db_prefix() . 'timesheets_requisition_leave.id']), $rel_type);
 		if (isset($data_check_approve_status['staffid'])) {
 			if ($data_check_approve_status['staffid']) {
-				if (in_array($user_id, $data_check_approve_status['staffid'])) {
+				if (in_array($user_id, $data_check_approve_status['staffid']) && timesheets_can_approve_leave($user_id, (int) $aRow[db_prefix() . 'timesheets_requisition_leave.staff_id'])) {
 					$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('approve') . '" onclick="approve_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-success btn-icon mright5"><i class="fa fa-check"></i></span>';
 					$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-primary btn-icon"><i class="fa fa-ban"></i></span>';
 				}

@@ -70,10 +70,20 @@ class App_Security extends CI_Security
 
         if ($isAjax) {
             header($_SERVER['SERVER_PROTOCOL'] . ' 419 Page Expired');
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => 'Page expired. Please refresh and try again.',
+            ]);
             die;
         }
 
-        // parent::csrf_show_error();
+        // Soft recovery: send staff back to login instead of a hard error page.
+        if (function_exists('admin_url')) {
+            header('Location: ' . admin_url('authentication?expired=1'));
+            exit;
+        }
+
         $heading = ' 419 Page Expired!';
         $message = 'Sorry, the page has expired, return to previous page and refresh to continue.';
         show_error($message, 403, $heading);

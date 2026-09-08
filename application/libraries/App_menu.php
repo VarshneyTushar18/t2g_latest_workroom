@@ -149,12 +149,31 @@ class App_menu
         $items = isset($this->items[$group]) ? $this->items[$group] : [];
 
         foreach ($items as $parent => $item) {
-            $items[$parent]['children'] = $this->get_child($parent, $group);
+            $items[$parent]['children'] = $this->build_menu_children($parent, $group);
         }
 
         $items = hooks()->apply_filters("{$group}_menu_items", $items);
 
         return app_sort_by_position($items);
+    }
+
+    /**
+     * Recursively attach nested menu children (e.g. HRMS > Attendance > Attendance Info).
+     */
+    protected function build_menu_children($parent_slug, $group)
+    {
+        $children = $this->get_child($parent_slug, $group);
+
+        foreach ($children as $index => $child) {
+            $slug = $child['slug'] ?? '';
+            if ($slug !== '') {
+                $children[$index]['children'] = $this->build_menu_children($slug, $group);
+            } else {
+                $children[$index]['children'] = [];
+            }
+        }
+
+        return $children;
     }
 
     public function get_child($parent_slug, $group)

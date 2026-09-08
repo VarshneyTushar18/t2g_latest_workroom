@@ -259,21 +259,26 @@
 
                 <div class="mt-2">
                     <ul>
-                        <li><strong><u>Leave Application</u></strong> - All leave must be planned and requested at least
-                            two months in advance whenever feasible. Any leaves
-                            decided upon and requested on an immediate basis will be considered as unplanned leave and
-                            subject to
-                            approval based on exigencies and organizational requirements.</li>
+                        <li><strong><u>Leave Application</u></strong> - All leaves should be pre-planned and intimated in advance wherever possible.
+                            Employees should not wait for their leave balance to be credited before applying for planned leave.
+                            Ensure proper communication with the reporting manager and HR. Any leaves requested on an immediate basis
+                            will be considered unplanned leave and subject to approval based on exigencies and organizational requirements.</li>
 
-                        <li><strong><u>Earned Leaves</u></strong> - In one FINANCIAL year an employee will get 15 days’
-                            leaves. These are earned leaves.
-                            Every month 1.25 days’ leaves are credited to the employees leave balance. <strong>(1.25x
-                                12=15)</strong>
+                        <li><strong><u>Earned Leaves – Monthly Accrual</u></strong>
+                            <ul>
+                                <li><strong>Interns:</strong> 1 leave per month</li>
+                                <li><strong>Full-Time Employees (FTE):</strong> 1.25 leaves per month</li>
+                                <li><strong>Employees who have completed 2 years:</strong> 1.75 leaves per month</li>
+                                <li><strong>WFH Employees:</strong> 1 leave per month only</li>
+                            </ul>
                         </li>
 
-                        <li><strong>Note - After 2 years of continuous services with Tech2globe, paid leaves credited
-                                each month will
-                                increase to 1.75 days from 1.25 days which is 21 in total.</strong></li>
+                        <li><strong><u>Leave Earning During Initial Months</u></strong>
+                            <ul>
+                                <li><strong>First Month:</strong> No leave will be earned during the first month of employment.</li>
+                                <li><strong>Second Month:</strong> The leave entitlement of the first month will be added along with the applicable leave for the second month.</li>
+                            </ul>
+                        </li>
 
 
                     </ul>
@@ -300,34 +305,26 @@
                             applicable) as well as a salary deduction for the corresponding period of absence, as per
                             company
                             policy.</li>
-                        <li><strong><u>Sandwich Leaves </u></strong> - In the context of employment law, the term
-                            <strong>"Sandwich Leave"</strong> refers to a
-                            period of time consisting of one or two days off between two leaves that an employee has
-                            voluntarily taken. For example, if an employee takes leave for Friday till the following
-                            Monday,
-                            then it will be considered as 4 daysleave, it will be considered as Sandwich leaves and
-                            hence there
-                            will be deducted from the employee's leave balance for both Saturday and Sunday (Holiday)
-                            since
-                            it counts as leave.
+                        <li><strong><u>Sandwich Leaves </u></strong> - The Sandwich Leave Policy will be applicable as per company guidelines.
+                            Leave falling between holidays/week-offs may be considered as leave (counted against leave balance)
+                            when full-day leave is taken on both bordering working days. For example, leave on Friday and Monday
+                            may also count Saturday and Sunday.
                         </li>
-                        <li><strong><u>Carry Forward Leaves </u></strong> - 10 Leaves from one financial year can be
-                            carried forward to next
-                            financial year any extra saved leave will be lapsed and cannot be carried forward.
-                            <strong>Note</strong> - At
-                            the
-                            end of the March month leaves saved more than 10 days will be lapsed.
+                        <li><strong><u>Carry Forward Leaves </u></strong> - Maximum leave that can be carried forward to the next financial year:
+                            <ul>
+                                <li><strong>Full-Time Employees:</strong> Maximum 10 leaves</li>
+                                <li><strong>WFH Employees:</strong> Maximum 5 leaves</li>
+                            </ul>
+                            Any extra saved leave will lapse at the end of March and cannot be carried forward.
                         </li>
                         <li><strong><u>Medical Leaves</u></strong> - These are unplanned leaves. To avail medical leaves
                             an employee must provide
                             a Medical Certificate from MD MBBS certified doctor stating that the employee is not well
                             and
                             would need certain leaves to recover from the illness and rejoin the organizations.</li>
-                        <li><strong><u>Leave During Notice Period </u></strong> - Except any medical leave, an employee
-                            is not allowed to take any
-                            other leave during Notice period. If any Employee takes any leave during notice period, it
-                            will
-                            result in extension of Notice period.</li>
+                        <li><strong><u>Leave During Notice Period / After Resignation</u></strong> - Once an employee submits their resignation,
+                            their leave balance will automatically become zero, and no further leaves will be earned during the notice period.
+                            Except medical leave, other leave during notice period may result in extension of notice period.</li>
                         <li><strong><u>Maternity Leaves</u></strong> - Female employees must be working for Tech2globe
                             Web Solutions LLP for a
                             minimum of 2 years at the time of delivery. Female employee can avail 12 weeks of paid leave

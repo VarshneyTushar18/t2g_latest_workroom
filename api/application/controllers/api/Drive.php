@@ -15,18 +15,69 @@ class Drive extends REST_Controller
     $this->load->helper("security");
   }
 
+  /**
+   * Accept both form-urlencoded and JSON bodies from Snapshot clients.
+   */
+  private function request_payload()
+  {
+    $data = [
+      'staff_id' => $this->post('staff_id'),
+      'file_id' => $this->post('file_id'),
+      'directory_id' => $this->post('directory_id'),
+      'parent_directory_id' => $this->post('parent_directory_id'),
+      'status' => $this->post('status'),
+    ];
+
+    // Fallback to CI input (form posts)
+    foreach ($data as $k => $v) {
+      if ($v === null || $v === '') {
+        $data[$k] = $this->input->post($k);
+      }
+    }
+
+    // Fallback to JSON body (Snapshot agents often send application/json)
+    $raw = $this->input->raw_input_stream;
+    if (!empty($raw)) {
+      $json = json_decode($raw, true);
+      if (is_array($json)) {
+        foreach ($data as $k => $v) {
+          if (($v === null || $v === '') && array_key_exists($k, $json)) {
+            $data[$k] = $json[$k];
+          }
+        }
+      }
+    }
+
+    return $data;
+  }
+
   public function index_post()
   {
-    $data = array(
-      'staff_id' => $this->input->post('staff_id'),
-      'file_id' => $this->input->post('file_id'),
-      'directory_id' => $this->input->post('directory_id'),
-      'parent_directory_id' => $this->input->post('parent_directory_id'),
-      'status' => $this->input->post('status')
-    );
+    $data = $this->request_payload();
+
+    if ($data['staff_id'] === null || $data['staff_id'] === ''
+      || $data['file_id'] === null || $data['file_id'] === ''
+      || $data['directory_id'] === null || $data['directory_id'] === '') {
+      return $this->response([
+        'status' => 'error',
+        'message' => 'Missing required fields: staff_id, file_id, directory_id',
+      ], REST_Controller::HTTP_BAD_REQUEST);
+    }
+
     $ins = $this->drive_model->insert($data);
-    $this->response($ins);
+    if ($ins === true || $ins === 'Data is inserted successfully') {
+      return $this->response([
+        'status' => 'success',
+        'message' => 'Data is inserted successfully',
+      ], REST_Controller::HTTP_OK);
+    }
+
+    return $this->response([
+      'status' => 'error',
+      'message' => is_string($ins) ? $ins : 'Insert failed',
+    ], REST_Controller::HTTP_INTERNAL_SERVER_ERROR);
   }
+
   public function cleanup_old_folders_get()
   {
     require_once '/var/www/html/t2gworkroom/google-client/vendor/autoload.php';

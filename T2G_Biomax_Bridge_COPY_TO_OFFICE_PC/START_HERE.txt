@@ -1,0 +1,53 @@
+T2G Biomax Bridge — COPY THIS WHOLE FOLDER TO OFFICE PC
+=======================================================
+
+This sends biometric punches to LIVE Workroom:
+https://t2gworkroom.com
+
+You do NOT need to install Workroom on the office PC.
+
+
+STEP 1 — Install Python
+-----------------------
+Install Python 3.11 or newer.
+TICK the box: "Add Python to PATH"
+
+
+STEP 2 — Test Biomax API on this PC
+-----------------------------------
+Biomax UI works at: http://localhost:82/Main.aspx
+
+Also open this API link in browser:
+
+http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs?APIKey=490813092603&FromDate=2026-09-01&ToDate=2026-09-07
+
+If this fails, stop — fix Biomax/API first.
+
+
+STEP 3 — Test once
+------------------
+Double-click:  test_once.bat
+
+Then open:  logs\bridge.log
+Look for:   Workroom sync ok
+
+
+STEP 4 — Check live Workroom
+----------------------------
+https://t2gworkroom.com/admin/biometric
+
+
+STEP 5 — Keep running
+---------------------
+Double-click:  start_bridge.bat
+(keep window open)
+
+OR for auto-start at login:
+Right-click install_windows_task.bat → Run as administrator
+
+
+Already configured
+------------------
+Biomax:         http://127.0.0.1:82  (same PC as Main.aspx)
+Biomax API key: 490813092603
+Workroom:       https://t2gworkroom.com

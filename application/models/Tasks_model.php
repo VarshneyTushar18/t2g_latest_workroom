@@ -2091,7 +2091,7 @@ class Tasks_model extends App_Model
      * @param  boolean $adminStop is admin want to stop timer from another staff member
      * @return boolean
      */
-    public function timer_tracking($task_id = '', $timer_id = '', $note = '', $adminStop = false, $deptid)
+    public function timer_tracking($task_id = '', $timer_id = '', $note = '', $adminStop = false, $deptid = null)
     {
         if ($task_id == '' && $timer_id == '') {
             return false;

@@ -7,15 +7,21 @@ $hasPermissionDelete = has_permission('projects', '', 'delete');
 $hasPermissionCreate = has_permission('projects', '', 'create');
 
 $aColumns = [
-    db_prefix() . 'projects.id as id',
-    'name',
-    'estimated_hours',
-    get_sql_select_client_company(),
-    '(SELECT GROUP_CONCAT(name SEPARATOR ",") FROM ' . db_prefix() . 'taggables JOIN ' . db_prefix() . 'tags ON ' . db_prefix() . 'taggables.tag_id = ' . db_prefix() . 'tags.id WHERE rel_id = ' . db_prefix() . 'projects.id and rel_type="project" ORDER by tag_order ASC) as tags',
-    'start_date',
-    'deadline',
-    '(SELECT GROUP_CONCAT(CONCAT(firstname, ' . "' '" . ', lastname) SEPARATOR ",") FROM ' . db_prefix() . 'project_members JOIN ' . db_prefix() . 'staff on ' . db_prefix() . 'staff.staffid = ' . db_prefix() . 'project_members.staff_id WHERE project_id=' . db_prefix() . 'projects.id ORDER BY staff_id) as members',
-    'status'
+    db_prefix() . 'projects.id as id', // Code
+    'name',                            // Project Name
+    'start_date',                      // Start Date
+    'deadline',                        // Deadline
+    'status',                          // Status
+    '(SELECT GROUP_CONCAT(CONCAT(firstname, " ", lastname) SEPARATOR ",") 
+        FROM ' . db_prefix() . 'project_members 
+        JOIN ' . db_prefix() . 'staff 
+        ON ' . db_prefix() . 'staff.staffid = ' . db_prefix() . 'project_members.staff_id 
+        WHERE project_id=' . db_prefix() . 'projects.id 
+        ORDER BY staff_id) as members',
+    'estimated_hours',                          // Estimated Hours
+    db_prefix() . 'projects.id as hours_spent', // Dummy for Hours Spent
+    db_prefix() . 'projects.id as team_hours',  // Dummy for Team / Hours
+    db_prefix() . 'projects.id as hours_diff'   // Dummy for Difference
 ];
 
 $sIndexColumn = 'id';
@@ -78,26 +84,37 @@ foreach ($this->ci->departments_model->get() as $dept) {
 }
 
 foreach ($rResult as $aRow) {
+
     $row = [];
     $project_id = $aRow['id'];
     $link = admin_url('projects/view/' . $project_id);
 
+    // 1️⃣ Project ID
     $row[] = '<a href="' . $link . '">' . $project_id . '</a>';
 
+    // 2️⃣ Project Name
     $name = '<a href="' . $link . '">' . $aRow['name'] . '</a>';
     $name .= '<div class="row-options">';
     $name .= '<a href="' . $link . '">' . _l('view') . '</a>';
     $name .= '</div>';
     $row[] = $name;
 
+    // 3️⃣ Start Date
     $row[] = _d($aRow['start_date']);
+
+    // 4️⃣ End Date
     $row[] = _d($aRow['deadline']);
 
+    // 5️⃣ Status
     $status = get_project_status_by_id($aRow['status']);
-    $row[] = '<span class="label project-status-' . $aRow['status'] . '" style="color:' . $status['color'] . ';border:1px solid ' . adjust_hex_brightness($status['color'], 0.4) . ';background: ' . adjust_hex_brightness($status['color'], 0.04) . ';">' . $status['name'] . '</span>';
+    $row[] = '<span class="label project-status-' . $aRow['status'] . '" 
+        style="color:' . $status['color'] . ';
+        border:1px solid ' . adjust_hex_brightness($status['color'], 0.4) . ';
+        background:' . adjust_hex_brightness($status['color'], 0.04) . ';">
+        ' . $status['name'] . '</span>';
 
-    // Project members
-$membersOutput = '';
+    // 6️⃣ Members
+    $membersOutput = '';
 $members = explode(',', $aRow['members']);
 $members_ids = explode(',', $aRow['members_ids']);
 $exportMembers = '';
@@ -115,130 +132,98 @@ foreach ($members as $key => $member) {
 $membersOutput .= '<span class="hide">' . trim($exportMembers, ', ') . '</span>';
 $row[] = $membersOutput;
 
-// ✅ Allotted Hours
-$row[] = $aRow['project_cost'];
+    // 7️⃣ Allocated Hours
+    $row[] = !empty($aRow['estimated_hours']) ? $aRow['estimated_hours'] : '0:00';
 
-// ✅ Hours Spent
-$project_id = $aRow['id'];
-$spentQuery = $this->ci->db->query("
-    SELECT SUM(end_time - start_time) AS total_seconds
-    FROM " . db_prefix() . "taskstimers tt
-    JOIN " . db_prefix() . "tasks t ON t.id = tt.task_id
-    WHERE t.rel_id = ? AND tt.end_time > 0 AND tt.start_time > 0
-", [$project_id])->row();
+    // 8️⃣ Spent Hours
+    $spentQuery = $this->ci->db->query("
+        SELECT SUM(end_time - start_time) AS total_seconds
+        FROM " . db_prefix() . "taskstimers tt
+        JOIN " . db_prefix() . "tasks t ON t.id = tt.task_id
+        WHERE t.rel_id = ? AND tt.end_time > 0 AND tt.start_time > 0
+    ", [$project_id])->row();
 
-$totalSpentFormatted = seconds_to_time_format($spentQuery->total_seconds ?? 0);
-$row[] = $totalSpentFormatted;
+    $totalSpentFormatted = seconds_to_time_format($spentQuery->total_seconds ?? 0);
+    $row[] = $totalSpentFormatted;
 
-// ✅ Team / Hours Modal Trigger
-$teamQuery = $this->ci->db->query("
-    SELECT tt.staff_id, SUM(tt.end_time - tt.start_time) as total_seconds
-    FROM " . db_prefix() . "taskstimers tt
-    JOIN " . db_prefix() . "tasks t ON t.id = tt.task_id
-    WHERE t.rel_id = ? AND tt.end_time > 0 AND tt.start_time > 0
-    GROUP BY tt.staff_id
-", [$project_id])->result();
+    // 9️⃣ Team / Hours Modal
+    $modalId = 'team-hours-' . $project_id;
 
-$modalId = 'team-hours-' . $project_id; // ✅ Initialize modal ID
-$modalBody = "<div class='table-responsive' style='display:contents'><table class='table table-bordered'><thead><tr><th style='background:#141e46;color:#ffffff'>Staff</th><th style='background:#141e46;color:#ffffff'>Time</th></tr></thead><tbody>";
-$totalSeconds = 0;
+    $staffSpentQuery = $this->ci->db->query("
+        SELECT CONCAT(s.firstname, ' ', s.lastname) as staff_name, SUM(tt.end_time - tt.start_time) AS total_seconds
+        FROM " . db_prefix() . "taskstimers tt
+        JOIN " . db_prefix() . "tasks t ON t.id = tt.task_id
+        JOIN " . db_prefix() . "staff s ON s.staffid = tt.staff_id
+        WHERE t.rel_id = ? AND tt.end_time > 0 AND tt.start_time > 0
+        GROUP BY tt.staff_id
+    ", [$project_id])->result_array();
 
-// Team time log
-foreach ($teamQuery as $entry) {
-    $staffName = get_staff_full_name($entry->staff_id);
-    $timeFormatted = seconds_to_time_format((int) $entry->total_seconds);
-    $totalSeconds += (int) $entry->total_seconds;
+    $staffHoursHtml = '<div class="table-responsive"><table class="table table-bordered table-striped"><thead><tr><th>Team Member</th><th>Hours Spent</th></tr></thead><tbody>';
+    if (count($staffSpentQuery) > 0) {
+        foreach ($staffSpentQuery as $staffTime) {
+            $staffHoursHtml .= '<tr>';
+            $staffHoursHtml .= '<td>' . $staffTime['staff_name'] . '</td>';
+            $staffHoursHtml .= '<td>' . seconds_to_time_format($staffTime['total_seconds']) . '</td>';
+            $staffHoursHtml .= '</tr>';
+        }
+    } else {
+        $staffHoursHtml .= '<tr><td colspan="2" class="text-center">No hours logged by any members</td></tr>';
+    }
+    $staffHoursHtml .= '</tbody></table></div>';
 
-    $staff = $this->ci->staff_model->get($entry->staff_id);
-    $isInactive = ($staff && $staff->active == 0);
-    $rowClass = $isInactive ? 'table-danger' : '';
+    $row[] = '
+    <a href="javascript:void(0);" onclick="$(\'#' . $modalId . '\').modal(\'show\')">
+        <span class="label label-info">View</span>
+    </a>
 
-    $modalBody .= "<tr class='$rowClass'>
-        <td>$staffName</td>
-        <td>$timeFormatted</td>
-    </tr>";
-}
-
-$modalBody .= "</tbody></table></div>";
-$modalBody .= "<div class='row'><div class='mb-2 col-md-6'>
-  <span style='display:inline-block; width:15px; height:15px; background:#f8d7da; margin-right:5px;'></span> Inactive Employee</div>";
-$modalBody .= "<div class='col-md-6 text-end text-right fw-bold'>Total: " . seconds_to_time_format($totalSeconds) . "</div></div>";
-// Get staff assigned to this project
-$assignedStaff = $this->ci->db->select('staff.*')
-    ->from(db_prefix() . 'project_members')
-    ->join(db_prefix() . 'staff', db_prefix() . 'staff.staffid = ' . db_prefix() . 'project_members.staff_id')
-    ->where('project_id', $project_id)
-    ->get()->result_array();
-	
-
-// date range filter 
-$dateRangeFilter = '
-<div class="row mb-2">
-  <div class="col-md-4">
-    <label>From</label>
-    <input type="date" class="form-control form-control-sm date-from" data-project-id="' . $project_id . '" />
-  </div>
-  <div class="col-md-4">
-    <label>To</label>
-    <input type="date" class="form-control form-control-sm date-to" data-project-id="' . $project_id . '" />
-  </div>
-';
-$staffFilterDropdown = '
-  <div class="col-md-4">
-    <label>Staff</label>
-    <select class="form-control form-control-sm staff-filter" data-project-id="' . $project_id . '">
-      <option value="">All Staff</option>';
-foreach ($assignedStaff as $staff) {
-    $staffFilterDropdown .= '<option value="' . $staff['staffid'] . '">' . get_staff_full_name($staff['staffid']) . '</option>';
-}
-$staffFilterDropdown .= '</select>
-  </div>
-</div>';
-$loaderHtml = '<div class="text-center mb-2" id="loader-' . $project_id . '" style="display:none;">
-  <i class="fa fa-spinner fa-spin fa-2x text-primary"></i>
-</div>';
-
-
-$row[] = '
-<a href="javascript:void(0);" onclick="$(\'#' . $modalId . '\').modal(\'show\')">
-    <i class="fa fa-eye text-primary"></i>
-</a>
-
-<div class="modal fade" id="' . $modalId . '" tabindex="-1" role="dialog" aria-labelledby="' . $modalId . '-label" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h3 class="modal-title" id="' . $modalId . '-label">Team Hours</h3>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
+    <div class="modal fade" id="' . $modalId . '" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h4 class="modal-title">Team Hours Distribution</h4>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="tw-mb-4">Total Time Spent: <strong>' . $totalSpentFormatted . '</strong></p>
+            ' . $staffHoursHtml . '
+          </div>
+        </div>
       </div>
-      <div class="modal-body">
-		  ' . $monthDropdown . '
-		  ' . $dateRangeFilter . '
-		  ' . $staffFilterDropdown . '
-		  
-		  ' . $loaderHtml . '
-		  <div class="team-hours-table" id="team-hours-table-' . $project_id . '">
-			' . $modalBody . '
-		  </div>
-		</div>
+    </div>';
 
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>';
- 
+    // 🔟 Difference (Estimated - Spent)
+    $estimated_hours_str = !empty($aRow['estimated_hours']) ? $aRow['estimated_hours'] : '0';
+    $estimated_seconds = 0;
+    
+    // Convert HH:MM format (if present) to seconds, or assume it is numeric hours
+    if (strpos($estimated_hours_str, ':') !== false) {
+        $parts = explode(':', $estimated_hours_str);
+        $estimated_seconds = (isset($parts[0]) ? (int)$parts[0] * 3600 : 0) + (isset($parts[1]) ? (int)$parts[1] * 60 : 0);
+    } else {
+        $estimated_seconds = (float)$estimated_hours_str * 3600;
+    }
 
+    $spent_seconds = (int)($spentQuery->total_seconds ?? 0);
+    $difference_seconds = $estimated_seconds - $spent_seconds;
+    
+    $is_negative = $difference_seconds < 0;
+    $abs_difference = abs($difference_seconds);
+    
+    $percentage = 0;
+    if ($estimated_seconds > 0) {
+        $percentage = round(($spent_seconds / $estimated_seconds) * 100);
+    }
+    
+    $diff_formatted = seconds_to_time_format($abs_difference);
+    
+    if ($is_negative) {
+        $diff_formatted = '-' . $diff_formatted . ' / ' . $percentage . '%';
+        $row[] = '<span class="text-danger">' . $diff_formatted . '</span>';
+    } else {
+        $diff_formatted = $diff_formatted . ' / ' . $percentage . '%';
+        $row[] = '<span class="text-success">' . $diff_formatted . '</span>';
+    }
 
-// Add custom fields if any
-foreach ($customFieldsColumns as $customFieldColumn) {
-    $row[] = (strpos($customFieldColumn, 'date_picker_') !== false ? _d($aRow[$customFieldColumn]) : $aRow[$customFieldColumn]);
-}
-
-$row['DT_RowClass'] = 'has-row-options';
-$row = hooks()->apply_filters('projects_table_row_data', $row, $aRow);
-$output['aaData'][] = $row;
+    $row['DT_RowClass'] = 'has-row-options';
+    $output['aaData'][] = $row;
 }

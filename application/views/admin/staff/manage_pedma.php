@@ -169,6 +169,135 @@
         margin-bottom: 20px;
     }
 
+    .pedma-doughnut-legend {
+        margin-top: 12px;
+        font-size: 12px;
+        color: #334155;
+    }
+
+    .pedma-doughnut-legend .legend-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+
+    .pedma-doughnut-legend .legend-row:last-child {
+        border-bottom: 0;
+    }
+
+    .pedma-doughnut-legend .legend-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .pedma-doughnut-legend .swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        flex: 0 0 12px;
+    }
+
+    .pedma-doughnut-legend .legend-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .pedma-doughnut-legend .legend-score {
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .pedma-export-wrap {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .pedma-export-meta {
+        font-size: 12px;
+        color: #64748b;
+        margin-bottom: 8px;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    .pedma-export-wrap .btn-block {
+        width: 100%;
+    }
+
+    .pedma-filters-row {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .pedma-filter-item {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .pedma-filter-item label {
+        display: block;
+        font-size: 11px;
+        margin-bottom: 3px;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .pedma-filter-item .form-control,
+    .pedma-filter-item .bootstrap-select {
+        width: 100% !important;
+    }
+
+    .pedma-filter-dept,
+    .pedma-filter-emp {
+        flex: 1.3 1 0;
+    }
+
+    .pedma-filter-period {
+        flex: 1.1 1 0;
+    }
+
+    .pedma-filter-from,
+    .pedma-filter-to {
+        flex: 0.9 1 0;
+    }
+
+    .pedma-filter-grade {
+        flex: 1.15 1 0;
+    }
+    .pedma-filter-staff-status {
+        flex: 0.95 1 0;
+    }
+
+    #pedmaGradeTable td {
+        vertical-align: middle;
+    }
+
+    #pedmaGradeTable .hr-notes-cell {
+        max-width: 320px;
+        white-space: normal;
+        font-size: 12px;
+        color: #475569;
+    }
+
+    @media (max-width: 991px) {
+        .pedma-filters-row {
+            flex-wrap: wrap;
+        }
+        .pedma-filter-item {
+            flex: 1 1 calc(50% - 8px);
+        }
+    }
+
     .loader {
 
         position: fixed;
@@ -232,31 +361,123 @@
                                     <path d="M22.2885 33.0554H18.5403C18.1094 33.0554 17.7598 33.405 17.7598 33.8359C17.7598 34.2668 18.1094 34.6164 18.5403 34.6164H22.2885C22.7194 34.6164 23.069 34.2668 23.069 33.8359C23.069 33.405 22.7194 33.0554 22.2885 33.0554Z" fill="#1E293B" />
                                 </svg> Performance Evaluation and Discussion Management (PEDMA)</h4>
                             <hr>
-                            <form id="multiSelectForm">
-                                <select id="departmentFilter" name="department[]" class="form-control selectpicker" multiple aria-label="Select Department" data-live-search="true">
-                                    <option value="">Filter by department</option>
-                                    <?php foreach ($result as $res) { ?>
-                                        <option value="<?php echo $res['departmentid']; ?>"><?php echo $res['name']; ?></option>
-                                    <?php  } ?>
-
-                                </select>
-                            </form>
-                            <br />
-                            <div class="col-md-6">
-                                <!-- Designation Dropdown -->
-                                <select id="designationFilter" name="empoyee[]" class="form-control" aria-label="Select Staff">
-
-                                </select>
-                            </div>
-                            <input type="month" id="performance_month" name="performance_month" class="form-control" style="width: 40%;" />
                         </div>
                         <div class="col-md-3 p-0" style="margin-left: auto;">
-                            <div class="bg-primary text-white px-4 py-2 text-end rounded" style="padding:10px ;">
-                                <span>OVERALL PERFORMANCE SCORE</span>
-                                <h4 id="avg_score"></h4>
+                            <div class="text-end" style="margin-bottom: 8px;">
+                                <span id="pedmaExportMeta" class="pedma-export-meta-top" style="display:inline-block; margin-right:8px; font-size:12px; color:#64748b; vertical-align:middle;"></span>
+                                <button type="button" id="pedmaExportBtn" class="btn btn-primary btn-sm">
+                                    <i class="fa fa-download"></i> Export CSV
+                                </button>
+                            </div>
+                            <div class="bg-primary text-white px-4 py-2 rounded pedma-score-card" style="padding:10px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                                <div class="pedma-days-wrap" style="text-align:left;">
+                                    <div style="font-size:11px; opacity:0.9; text-transform:uppercase; letter-spacing:0.3px;">Days of data</div>
+                                    <h4 id="pedma_days_of_data" style="margin:4px 0 0; font-size:20px;">-</h4>
+                                </div>
+                                <div style="text-align:right;">
+                                    <span>OVERALL PERFORMANCE SCORE</span>
+                                    <h4 id="avg_score" style="margin:4px 0 0;"></h4>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    <div class="row" style="margin-bottom: 16px;">
+                        <div class="col-md-12 p-0">
+                            <div class="pedma-filters-row">
+                                <div class="pedma-filter-item pedma-filter-dept">
+                                    <label for="departmentFilter">Department</label>
+                                    <form id="multiSelectForm" style="margin:0;">
+                                        <select id="departmentFilter" name="department" class="form-control selectpicker" aria-label="Select Department" data-live-search="true" data-none-selected-text="Filter by department" data-width="100%">
+                                            <option value="">Filter by department</option>
+                                            <?php foreach ($result as $res) { ?>
+                                                <option value="<?php echo $res['departmentid']; ?>"><?php echo $res['name']; ?></option>
+                                            <?php  } ?>
+                                        </select>
+                                    </form>
+                                </div>
+                                <div class="pedma-filter-item pedma-filter-emp">
+                                    <label for="designationFilter">Employee</label>
+                                    <select id="designationFilter" name="employee" class="form-control selectpicker" aria-label="Select Staff" data-live-search="true" data-none-selected-text="Filter By Employee" data-width="100%">
+                                    </select>
+                                </div>
+                                <div class="pedma-filter-item pedma-filter-staff-status">
+                                    <label for="pedma_staff_active_filter">Staff Status</label>
+                                    <select id="pedma_staff_active_filter" class="form-control">
+                                        <option value="1" selected>Active</option>
+                                        <option value="0">Inactive</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                </div>
+                                <div class="pedma-filter-item pedma-filter-period">
+                                    <label for="pedma_range_preset">Period</label>
+                                    <select id="pedma_range_preset" class="form-control">
+                                        <option value="current_month">Current month</option>
+                                        <option value="last_3">Last 3 months</option>
+                                        <option value="last_6" selected>Last 6 months</option>
+                                        <option value="last_12">Last 12 months</option>
+                                        <option value="custom">Custom range</option>
+                                    </select>
+                                </div>
+                                <div class="pedma-filter-item pedma-filter-from">
+                                    <label for="performance_from">From</label>
+                                    <input type="month" id="performance_from" name="performance_from" class="form-control" />
+                                </div>
+                                <div class="pedma-filter-item pedma-filter-to">
+                                    <label for="performance_to">To</label>
+                                    <input type="month" id="performance_to" name="performance_to" class="form-control" />
+                                </div>
+                                <?php if (function_exists('can_view_pedma_grade_filter') && can_view_pedma_grade_filter()) { ?>
+                                <div class="pedma-filter-item pedma-filter-grade">
+                                    <label for="pedma_grade_filter">Filter by Grade</label>
+                                    <select id="pedma_grade_filter" class="form-control">
+                                        <option value="">Filter by Grade</option>
+                                        <option value="A+">A+ (98-100)</option>
+                                        <option value="A">A (90-97)</option>
+                                        <option value="B">B (80-89)</option>
+                                        <option value="C">C (70-79)</option>
+                                        <option value="D">D (&lt;70)</option>
+                                    </select>
+                                </div>
+                                <?php } ?>
+                                <input type="hidden" id="performance_month" name="performance_month" value="" />
+                            </div>
+                        </div>
+                    </div>
+                    <?php if (can_manage_pedma()) { ?>
+                    <div class="row" id="pedmaGradeResultsWrap" style="display:none; margin-bottom: 20px;" data-can-schedule="<?php echo (function_exists('can_view_pedma_grade_filter') && can_view_pedma_grade_filter()) ? '1' : '0'; ?>">
+                        <div class="col-md-12 p-0">
+                            <div class="card">
+                                <div class="card-title" style="display:flex;justify-content:space-between;align-items:center; gap:10px;">
+                                    <span id="pedmaListResultsHeading">Department data — <span id="pedmaGradeResultsTitle">-</span></span>
+                                    <span style="display:flex; align-items:center; gap:12px;">
+                                        <span id="pedmaGradeResultsCount" style="font-weight:500; opacity:0.9;"></span>
+                                        <button type="button" class="btn btn-default btn-xs" id="pedmaGradeCloseBtn" title="Close">Close</button>
+                                    </span>
+                                </div>
+                                <div class="card-body" style="padding:0; overflow-x:auto;">
+                                    <table class="table table-bordered table-striped" id="pedmaGradeTable" style="margin:0;">
+                                        <thead>
+                                            <tr>
+                                                <th>Emp ID</th>
+                                                <th>Emp Name</th>
+                                                <th>Department</th>
+                                                <th>Month</th>
+                                                <th>Score</th>
+                                                <th>Grade</th>
+                                                <th>HR Notes</th>
+                                                <?php if (function_exists('can_view_pedma_grade_filter') && can_view_pedma_grade_filter()) { ?>
+                                                <th style="min-width:150px;">Schedule Meeting</th>
+                                                <?php } ?>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pedmaGradeTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php } ?>
                     <div class="row" id="twoChart">
                         <!-- KRA Performance Chart Card -->
                         <div class="col-md-8 mb-4 p-i-4">
@@ -272,6 +493,7 @@
                             <div class="card">
                                 <div class="card-body">
                                     <canvas id="kraDoughnutChart"></canvas>
+                                    <div id="kraDoughnutLegend" class="pedma-doughnut-legend"></div>
                                 </div>
                             </div>
                         </div>
@@ -288,6 +510,7 @@
                                     Overall Feedback
                                 </div>
                                 <div class="card-body pb-3 pt-1 comment" id="overall_feedback"></div>
+                                <div id="feedback_ack_manager_status" class="px-3 pb-3" style="display:none;"></div>
                             </div>
                         </div>
                     </div>
@@ -298,20 +521,9 @@
                             </h4>
                             <select id="performance_year" name="performance_year" class="form-control">
                                 <option value="">Select Year</option>
-                                <!-- JavaScript will populate years here -->
                             </select>
                         </div>
                         <div class="col-md-12 p-0" style="margin-top: 10px;">
-                            <!-- Line Chart for One Year Avg PEDMA Score -->
-
-                            <div class="card">
-                                <div class="card-body">
-                                    <canvas id="pedmaChart" width="400" height="200"></canvas>
-                                </div>
-                            </div>
-
-                        </div>
-                        <div class="col-md-12 p-0">
                             <table class="table table-bordered">
                                 <thead class="table-light">
                                     <tr>
@@ -420,14 +632,22 @@
     <script>
 
         $(document).ready(function() {
-            $('#departmentFilter').change(function() {
+            function loadPedmaEmployeesByDepartment() {
                 $('.loader').removeClass('hidden');
                 var value = $("#departmentFilter").val();
+                var staffActive = ($('#pedma_staff_active_filter').val() || '1').toString();
+                if (!value) {
+                    $('#designationFilter').html('<option value="">Filter By Employee</option>');
+                    $('#designationFilter').selectpicker('refresh');
+                    $('.loader').addClass('hidden');
+                    return;
+                }
 
                 $.ajax({
                     url: "<?php echo base_url('admin/UtilizationReport/getDeptemp'); ?>",
                     data: {
-                        department: value
+                        department: value,
+                        staff_active: staffActive
                     },
                     type: "post",
                     success: function(response) {
@@ -436,20 +656,460 @@
                         let dept = JSON.parse(response);
                         let options = '';
                         for (var i = 0; i < dept.length; i++) {
-                            options += '<option class="empid' + dept[i]['staffid'] + '" value="' + dept[i]['staffid'] + '">' + dept[i]['firstname'] + " " + dept[i]['lastname'] + '</option>';
+                            var first = (dept[i]['firstname'] || '').trim();
+                            var last = (dept[i]['lastname'] || '').trim();
+                            var fullName = (first + ' ' + last).trim();
+                            var initials = ((first.charAt(0) || '') + (last.charAt(0) || '')).toLowerCase();
+                            var empCode = (dept[i]['staff_identifi'] || '').toString().trim();
+                            var statusTag = String(dept[i]['active']) === '1' ? '' : ' (Inactive)';
+                            var tokens = [
+                                fullName.toLowerCase(),
+                                initials,
+                                empCode.toLowerCase(),
+                                String(dept[i]['staffid'])
+                            ].join(' ');
+                            options += '<option class="empid' + dept[i]['staffid'] + '" value="' + dept[i]['staffid'] + '" data-tokens="' + tokens.replace(/"/g, '&quot;') + '">' + fullName + (empCode ? ' [' + empCode + ']' : '') + statusTag + '</option>';
                         }
     
-                        $('#designationFilter').html('<option>Filter By Employee</option>' + options);
-                        $('#designationFilter').selectpicker('destroy');
-                        $('#designationFilter').selectpicker();
+                        $('#designationFilter').html('<option value="">Filter By Employee</option>' + options);
+                        $('#designationFilter').selectpicker('refresh');
+                        $('#staffData').val('');
+                        // Department only → show all PEDMA data for this department
+                        if (typeof loadPedmaListResults === 'function') {
+                            loadPedmaListResults();
+                        }
                     }
 
                 });
+            }
+
+            $('#departmentFilter').change(function() {
+                loadPedmaEmployeesByDepartment();
             });
+
+            // Ensure employee list is available even when a department is pre-selected.
+            setTimeout(function () {
+                if ($('#departmentFilter').val()) {
+                    loadPedmaEmployeesByDepartment();
+                }
+            }, 100);
         });
     </script>
 
     <script>
+        function monthKeyFromDate(d) {
+            var y = d.getFullYear();
+            var m = String(d.getMonth() + 1).padStart(2, '0');
+            return y + '-' + m;
+        }
+
+        function addMonthsToKey(monthKey, delta) {
+            var parts = monthKey.split('-').map(Number);
+            var d = new Date(parts[0], parts[1] - 1 + delta, 1);
+            return monthKeyFromDate(d);
+        }
+
+        function compareMonthKeys(a, b) {
+            if (a === b) return 0;
+            return a < b ? -1 : 1;
+        }
+
+        function getPedmaSelectedRange() {
+            var from = $('#performance_from').val() || '';
+            var to = $('#performance_to').val() || '';
+            if (from && to && compareMonthKeys(from, to) > 0) {
+                var tmp = from;
+                from = to;
+                to = tmp;
+                $('#performance_from').val(from);
+                $('#performance_to').val(to);
+            }
+            $('#performance_month').val(to || from || '');
+            return { from: from, to: to };
+        }
+
+        function applyPedmaRangePreset(preset, triggerLoad) {
+            var now = new Date();
+            var to = monthKeyFromDate(now);
+            var from = to;
+            if (preset === 'last_3') {
+                from = addMonthsToKey(to, -2);
+            } else if (preset === 'last_6') {
+                from = addMonthsToKey(to, -5);
+            } else if (preset === 'last_12') {
+                from = addMonthsToKey(to, -11);
+            } else if (preset === 'current_month') {
+                from = to;
+            }
+            // custom: leave inputs as-is
+            if (preset !== 'custom') {
+                $('#performance_from').val(from);
+                $('#performance_to').val(to);
+                $('#performance_month').val(to);
+            }
+            $('#performance_from, #performance_to').attr('max', to);
+            if (triggerLoad) {
+                reloadPedmaForCurrentFilters();
+            }
+        }
+
+        function filterStaffDataByRange(staffData, from, to) {
+            if (!Array.isArray(staffData) || !from || !to) {
+                return [];
+            }
+            return staffData.filter(function (item) {
+                if (!item.date_created) return false;
+                var key = monthKeyFromDate(new Date(item.date_created));
+                return compareMonthKeys(key, from) >= 0 && compareMonthKeys(key, to) <= 0;
+            }).sort(function (a, b) {
+                return new Date(a.date_created) - new Date(b.date_created);
+            });
+        }
+
+        function computeFinalScoreNumber(row) {
+            var ascore = parseFloat(row.avg_score || 0) || 0;
+            var fscore = row.fatal_error_score ? (parseFloat(row.fatal_error_score) / 100) * ascore : 0;
+            var addscore = row.add_on_score ? (parseFloat(row.add_on_score) / 100) * ascore : 0;
+            return ascore - fscore + addscore;
+        }
+
+        function getPedmaDaysOfData(selectedMonth) {
+            if (!selectedMonth || !/^\d{4}-\d{2}$/.test(selectedMonth)) {
+                return { days: 0, total: 0, label: '-' };
+            }
+            var parts = selectedMonth.split('-').map(Number);
+            var year = parts[0];
+            var month = parts[1]; // 1-12
+            var totalDays = new Date(year, month, 0).getDate();
+            var now = new Date();
+            var curY = now.getFullYear();
+            var curM = now.getMonth() + 1;
+            var curD = now.getDate();
+            var days = 0;
+
+            if (year < curY || (year === curY && month < curM)) {
+                days = totalDays; // full past month
+            } else if (year === curY && month === curM) {
+                days = Math.min(curD, totalDays); // month so far
+            } else {
+                days = 0; // future month
+            }
+
+            return {
+                days: days,
+                total: totalDays,
+                label: String(totalDays)
+            };
+        }
+
+        function setPedmaDaysOfDataRange(from, to, hasData) {
+            if (!hasData || !from || !to) {
+                $('#pedma_days_of_data').html('-');
+                return;
+            }
+            var days = 0;
+            var total = 0;
+            var cursor = from;
+            while (compareMonthKeys(cursor, to) <= 0) {
+                var info = getPedmaDaysOfData(cursor);
+                days += info.days;
+                total += info.total;
+                cursor = addMonthsToKey(cursor, 1);
+            }
+            $('#pedma_days_of_data').html(total + ' <small style="font-size:12px;font-weight:500;">days</small>');
+        }
+
+        function parseIsoDate(isoDate) {
+            if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+                return null;
+            }
+            var parts = isoDate.split('-').map(Number);
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+
+        function endOfMonthDate(monthKey) {
+            var parts = monthKey.split('-').map(Number);
+            return new Date(parts[0], parts[1], 0);
+        }
+
+        function setPedmaDaysForEmployeeJoinDate(from, to, joinDateIso, hasData) {
+            if (!hasData || !from || !to) {
+                $('#pedma_days_of_data').html('-');
+                return;
+            }
+
+            var joinDate = parseIsoDate(joinDateIso);
+            if (!joinDate) {
+                setPedmaDaysOfDataRange(from, to, hasData);
+                return;
+            }
+
+            var fromParts = from.split('-').map(Number);
+            var rangeStart = new Date(fromParts[0], fromParts[1] - 1, 1);
+            var rangeEnd = endOfMonthDate(to);
+
+            var now = new Date();
+            if (rangeEnd > now) {
+                rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            }
+
+            var effectiveStart = (joinDate > rangeStart) ? joinDate : rangeStart;
+            if (effectiveStart > rangeEnd) {
+                $('#pedma_days_of_data').html('0 <small style="font-size:12px;font-weight:500;">days</small>');
+                return;
+            }
+
+            var oneDay = 24 * 60 * 60 * 1000;
+            var days = Math.floor((rangeEnd - effectiveStart) / oneDay) + 1;
+            if (days < 0) days = 0;
+            $('#pedma_days_of_data').html(days + ' <small style="font-size:12px;font-weight:500;">days</small>');
+        }
+
+        function reloadPedmaForCurrentFilters() {
+            var range = getPedmaSelectedRange();
+            var staffData = $('#staffData').val();
+            var empVal = ($('#designationFilter').val() || '').toString();
+            var empSelected = empVal && empVal !== 'Filter By Employee';
+
+            if (empSelected && staffData) {
+                try {
+                    staffData = JSON.parse(staffData);
+                    loadKraData(range.from, range.to, staffData);
+                } catch (e) {
+                    // ignore invalid cache
+                }
+            }
+            loadPedmaListResults();
+        }
+
+        function isEmployeeSelected() {
+            var empVal = ($('#designationFilter').val() || '').toString().trim();
+            return empVal !== '' && empVal !== 'Filter By Employee';
+        }
+
+        function loadPedmaListResults() {
+            if (!$('#pedmaGradeResultsWrap').length) {
+                return;
+            }
+
+            var grade = ($('#pedma_grade_filter').val() || '').toString();
+            var department = ($('#departmentFilter').val() || '').toString();
+            var staffActive = ($('#pedma_staff_active_filter').val() || '1').toString();
+            var range = getPedmaSelectedRange();
+
+            // Show list when: grade selected, OR department selected without a single employee
+            var showDeptAll = department && !isEmployeeSelected();
+            if (!grade && !showDeptAll) {
+                $('#pedmaGradeResultsWrap').hide();
+                $('#pedmaGradeTableBody').empty();
+                return;
+            }
+
+            if (!range.from || !range.to) {
+                return;
+            }
+
+            $('.loader').removeClass('hidden');
+            $.ajax({
+                url: "<?php echo base_url('admin/Staff/manage_pedma_by_grade'); ?>",
+                type: 'post',
+                dataType: 'json',
+                data: {
+                    grade: grade,
+                    from: range.from,
+                    to: range.to,
+                    department: department,
+                    staff_active: staffActive
+                },
+                success: function (resp) {
+                    $('.loader').addClass('hidden');
+                    if (!resp || !resp.success) {
+                        alert_float('danger', (resp && resp.message) ? resp.message : 'Unable to load department data.');
+                        return;
+                    }
+                    renderPedmaListTable(resp);
+                },
+                error: function () {
+                    $('.loader').addClass('hidden');
+                    alert_float('danger', 'Unable to load department data.');
+                }
+            });
+        }
+
+        // Back-compat alias
+        function loadPedmaGradeResults() {
+            loadPedmaListResults();
+        }
+
+        function renderPedmaListTable(resp) {
+            var rows = resp.rows || [];
+            var gradeLabel = {
+                'A+': 'A+ (98-100)',
+                'A': 'A (90-97)',
+                'B': 'B (80-89)',
+                'C': 'C (70-79)',
+                'D': 'D (<70)'
+            };
+            var canSchedule = $('#pedmaGradeResultsWrap').attr('data-can-schedule') === '1';
+            var colCount = canSchedule ? 8 : 7;
+            var deptName = ($('#departmentFilter option:selected').text() || 'Department').trim();
+
+            if (resp.mode === 'grade' && resp.grade) {
+                $('#pedmaListResultsHeading').html('Grade filter — <span id="pedmaGradeResultsTitle"></span>');
+                $('#pedmaGradeResultsTitle').text(gradeLabel[resp.grade] || resp.grade);
+            } else {
+                $('#pedmaListResultsHeading').html('Department data — <span id="pedmaGradeResultsTitle"></span>');
+                $('#pedmaGradeResultsTitle').text(deptName);
+            }
+
+            $('#pedmaGradeResultsCount').text(rows.length + ' record(s)');
+            var body = $('#pedmaGradeTableBody');
+            body.empty();
+
+            if (!rows.length) {
+                body.html('<tr><td colspan="' + colCount + '" class="text-center">No PEDMA data found for the selected filters.</td></tr>');
+                $('#pedmaGradeResultsWrap').show();
+                $('#avg_score').html('-');
+                setPedmaDaysOfDataRange(getPedmaSelectedRange().from, getPedmaSelectedRange().to, false);
+                return;
+            }
+
+            rows.forEach(function (row) {
+                var tr = $('<tr></tr>');
+                tr.append($('<td></td>').text(row.emp_id || ''));
+                tr.append($('<td></td>').text(row.emp_name || ''));
+                tr.append($('<td></td>').text(row.department || '-'));
+                tr.append($('<td></td>').text(row.month_label || row.month || ''));
+                tr.append($('<td></td>').html('<b>' + (row.score || '-') + '%</b>'));
+                tr.append($('<td></td>').text(row.grade || '-'));
+                tr.append($('<td class="hr-notes-cell"></td>').text(row.hr_notes || '-'));
+                if (canSchedule) {
+                    var btn = $('<button type="button" class="btn btn-info btn-sm pedma-schedule-meeting-btn"></button>')
+                        .html('<i class="fa fa-calendar"></i> Schedule Meeting')
+                        .attr('data-staffid', row.staffid)
+                        .attr('data-month-label', row.month_label || '')
+                        .attr('data-score', row.score || '')
+                        .attr('data-grade', row.grade || '');
+                    tr.append($('<td></td>').append(btn));
+                }
+                body.append(tr);
+            });
+
+            $('#pedmaGradeResultsWrap').show();
+
+            // Department overview score when no single employee is selected
+            if (!isEmployeeSelected() && resp.avg_score !== undefined) {
+                $('#avg_score').html(resp.avg_score + '%');
+                var range = getPedmaSelectedRange();
+                setPedmaDaysOfDataRange(range.from, range.to, true);
+                renderDepartmentOverviewCharts(rows);
+            }
+        }
+
+        function renderDepartmentOverviewCharts(rows) {
+            // Latest score per employee for chart
+            var byEmp = {};
+            rows.forEach(function (row) {
+                var key = String(row.staffid);
+                if (!byEmp[key] || String(row.date_created) > String(byEmp[key].date_created)) {
+                    byEmp[key] = row;
+                }
+            });
+            var list = Object.keys(byEmp).map(function (k) { return byEmp[k]; });
+            list.sort(function (a, b) { return parseFloat(b.score) - parseFloat(a.score); });
+
+            var labels = list.map(function (r) { return r.emp_name; });
+            var scores = list.map(function (r) { return parseFloat(r.score) || 0; });
+
+            $('#twoChart').show();
+            if (kraChart) kraChart.destroy();
+            if (kraDoughnutChart) kraDoughnutChart.destroy();
+
+            var kraCtx = document.getElementById('kraChart').getContext('2d');
+            kraChart = new Chart(kraCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Score %',
+                        data: scores,
+                        backgroundColor: '#4CAF50',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: true, max: 100, grid: { display: true }, title: { display: true, text: 'Score %' } }
+                    },
+                    plugins: { title: { display: true, text: 'Department PEDMA Scores' } }
+                }
+            });
+
+            var doughnutColors = ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50', '#FF9F40', '#9966FF'];
+            var gradeCounts = { 'A+': 0, 'A': 0, 'B': 0, 'C': 0, 'D': 0 };
+            list.forEach(function (r) {
+                var g = r.grade || 'D';
+                if (gradeCounts[g] === undefined) gradeCounts[g] = 0;
+                gradeCounts[g] += 1;
+            });
+            var gLabels = Object.keys(gradeCounts).filter(function (k) { return gradeCounts[k] > 0; });
+            var gData = gLabels.map(function (k) { return gradeCounts[k]; });
+
+            var kraDoughnutCtx = document.getElementById('kraDoughnutChart').getContext('2d');
+            kraDoughnutChart = new Chart(kraDoughnutCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: gLabels,
+                    datasets: [{
+                        data: gData,
+                        backgroundColor: doughnutColors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'Grade Distribution' },
+                        legend: { display: false }
+                    },
+                    legend: { display: false }
+                }
+            });
+
+            var legendHtml = '';
+            gLabels.forEach(function (name, idx) {
+                legendHtml +=
+                    '<div class="legend-row">' +
+                        '<div class="legend-left">' +
+                            '<span class="swatch" style="background:' + doughnutColors[idx % doughnutColors.length] + ';"></span>' +
+                            '<span class="legend-name">Grade ' + name + '</span>' +
+                        '</div>' +
+                        '<span class="legend-score">' + gradeCounts[name] + ' emp</span>' +
+                    '</div>';
+            });
+            $('#kraDoughnutLegend').html(legendHtml);
+            $('#pedmaExportMeta').html('<strong>Department overview</strong> · ' + list.length + ' employees');
+            $('#overall_feedback').html(rows.length + ' PEDMA record(s) in selected department / period.');
+            $('#feedback_ack_manager_status').hide().empty();
+            $('#kra-card-data').html('<div class="col-md-12"><p class="text-muted">Select an employee for detailed KRA cards.</p></div>');
+        }
+
+        function safeParseKraData(rawValue) {
+            if (Array.isArray(rawValue)) {
+                return rawValue;
+            }
+            if (!rawValue) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(rawValue);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
         $(document).on('click', '.commentbutton', function(e) {
             e.preventDefault();
             var month = $(this).data('month');
@@ -474,12 +1134,7 @@
 
 
         $(window).on('load', function() {
-            // Set the default value of the performance_month input to the current month
-            var currentMonth = new Date().toISOString().slice(0, 7);
-            $('#performance_month').val(currentMonth);
-            // Set the max attribute of the performance_month input to the current month
-            $('#performance_month').attr('max', currentMonth);
-            // Trigger the change event for the performance_month input
+            applyPedmaRangePreset($('#pedma_range_preset').val() || 'last_6', false);
             $('#performance_month').trigger('change');
         });
 
@@ -496,21 +1151,95 @@
         let kraDoughnutChart = null;
 
         $(document).ready(function () {
-            $('#performance_month').on('change', function () {
-                var selectedMonth = $(this).val();
-                let staffData = $('#staffData').val();
-
-                if (staffData) {
-                    staffData = JSON.parse(staffData); // Ensure data is in JSON format
-                    loadKraData(selectedMonth, staffData);
+            $('#pedma_range_preset').on('change', function () {
+                var preset = $(this).val();
+                if (preset === 'custom') {
+                    return;
                 }
+                applyPedmaRangePreset(preset, true);
+            });
+
+            $('#performance_from, #performance_to').on('change', function () {
+                $('#pedma_range_preset').val('custom');
+                reloadPedmaForCurrentFilters();
+            });
+
+            $('#performance_month').on('change', function () {
+                reloadPedmaForCurrentFilters();
+            });
+
+            $('#pedma_grade_filter').on('change', function () {
+                loadPedmaListResults();
+            });
+
+            $('#pedmaGradeCloseBtn').on('click', function () {
+                $('#pedma_grade_filter').val('');
+                loadPedmaListResults();
+            });
+
+            $('#departmentFilter').on('changed.bs.select', function () {
+                // Employee list reload is handled in the other ready(); also refresh dept table
+                setTimeout(function () {
+                    if (typeof loadPedmaListResults === 'function') {
+                        loadPedmaListResults();
+                    }
+                }, 50);
+            });
+
+            $('#pedma_staff_active_filter').on('change', function () {
+                // refresh employee list for selected department and reset selected employee
+                $('#designationFilter').val('');
+                $('#designationFilter').selectpicker('refresh');
+                if ($('#departmentFilter').val()) {
+                    $('#departmentFilter').trigger('change');
+                } else {
+                    loadPedmaListResults();
+                }
+            });
+
+            $(document).on('click', '.pedma-schedule-meeting-btn', function () {
+                var btn = $(this);
+                if (!confirm('Send a PEDMA meeting request email to this employee?')) {
+                    return;
+                }
+                btn.prop('disabled', true);
+                $.ajax({
+                    url: "<?php echo base_url('admin/Staff/pedma_schedule_meeting'); ?>",
+                    type: 'post',
+                    dataType: 'json',
+                    data: {
+                        staffid: btn.data('staffid'),
+                        month_label: btn.data('month-label'),
+                        score: btn.data('score'),
+                        grade: btn.data('grade')
+                    },
+                    success: function (resp) {
+                        btn.prop('disabled', false);
+                        if (resp && resp.success) {
+                            alert_float('success', resp.message || 'Meeting request sent.');
+                        } else {
+                            alert_float('danger', (resp && resp.message) ? resp.message : 'Failed to send meeting request.');
+                        }
+                    },
+                    error: function () {
+                        btn.prop('disabled', false);
+                        alert_float('danger', 'Failed to send meeting request.');
+                    }
+                });
             });
 
             $('#designationFilter').change(function () {
                 $('.loader').removeClass('hidden');
                 var value = $("#designationFilter").val();
-                var month = $("#performance_month").val();
                 let currentYear = new Date().getFullYear();
+                var range = getPedmaSelectedRange();
+
+                if (!isEmployeeSelected()) {
+                    $('.loader').addClass('hidden');
+                    $('#staffData').val('');
+                    loadPedmaListResults();
+                    return;
+                }
 
                 $.ajax({
                     url: "<?php echo base_url('admin/Staff/manage_pedma_staff'); ?>",
@@ -521,45 +1250,176 @@
                         $("#staffData").val(response);
                         if (response) {
                             response = JSON.parse(response); // Convert to JSON
-                            loadKraData(month, response);
+                            loadKraData(range.from, range.to, response);
                             loadPerformanceData(currentYear);
+                        }
+                        if (!($('#pedma_grade_filter').val() || '')) {
+                            $('#pedmaGradeResultsWrap').hide();
+                        } else {
+                            loadPedmaListResults();
                         }
                     }
                 });
             });
         });
 
-        function loadKraData(selectedMonth, staffData) {
+        function loadKraData(fromMonth, toMonth, staffData) {
             const kraCardData = $("#kra-card-data");
             kraCardData.empty();
 
-            if (!selectedMonth || !staffData.length) {
-                kraCardData.html("No Data available for this month");
+            // Back-compat: old calls passed a single month as first arg only
+            if (arguments.length === 2) {
+                staffData = toMonth;
+                toMonth = fromMonth;
+            }
+
+            var from = fromMonth || '';
+            var to = toMonth || from;
+
+            if (!from || !to || !staffData || !staffData.length) {
+                kraCardData.html("No Data available for this period");
                 $('#avg_score').html('-');
+                setPedmaDaysOfDataRange(from, to, false);
                 $('#overall_feedback').html('-');
+                $('#feedback_ack_manager_status').hide().empty();
                 $('#twoChart').hide();
+                $('#kraDoughnutLegend').empty();
+                $('#pedmaExportMeta').empty();
                 return;
             }
 
-            const [year, month] = selectedMonth.split('-').map(Number);
-            const filteredData = staffData.filter(item => {
-                const dateCreated = new Date(item.date_created);
-                return dateCreated.getFullYear() === year && dateCreated.getMonth() === (month - 1); // Adjust month index
-            });
+            const filteredData = filterStaffDataByRange(staffData, from, to);
+            const isRange = from !== to;
 
             let cardHTML = '';
 
             if (filteredData.length === 0) {
-                kraCardData.html("No Data available for this month");
+                kraCardData.html("No Data available for this period");
                 $('#avg_score').html('-');
+                setPedmaDaysOfDataRange(from, to, false);
                 $('#overall_feedback').html('-');
+                $('#feedback_ack_manager_status').hide().empty();
                 $('#twoChart').hide();
+                $('#kraDoughnutLegend').empty();
+                $('#pedmaExportMeta').empty();
                 return;
             } else {
                 $('#twoChart').show();
+                var selectedJoinDate = (filteredData[0] && filteredData[0].staff_join_date) ? filteredData[0].staff_join_date : '';
+                setPedmaDaysForEmployeeJoinDate(from, to, selectedJoinDate, true);
+                var empLabel = ($('#designationFilter option:selected').text() || '').trim();
+                var rangeLabel = isRange ? (from + ' → ' + to) : from;
+                var scoreValues = filteredData.map(computeFinalScoreNumber);
+                var avgAcross = (scoreValues.reduce(function (s, n) { return s + n; }, 0) / scoreValues.length).toFixed(2);
+                $('#pedmaExportMeta').html(
+                    '<strong>Export</strong> ' +
+                    (empLabel ? empLabel : 'Employee') +
+                    ' · ' + rangeLabel +
+                    ' · Avg ' + avgAcross + '%'
+                );
 
+                if (isRange) {
+                    // Month summary cards for the selected range
+                    filteredData.forEach(function (data) {
+                        var monthLabel = new Date(data.date_created).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                        var score = computeFinalScoreNumber(data).toFixed(2);
+                        cardHTML += `
+                            <div class="col-sm-6 col-md-4 p-i-4 performance_card">
+                                <div class="card h-100">
+                                    <h5 class="card-title">${monthLabel}</h5>
+                                    <div class="card-body">
+                                        <div class="score high">${score}%</div>
+                                        <div class="hr"></div>
+                                        <div class="comment"><span style="font-weight:bold;">Feedback : </span>${data.overall_feedback || '-'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    kraCardData.html(cardHTML);
+
+                    $('#avg_score').html(avgAcross + '%');
+                    $('#overall_feedback').html(
+                        filteredData.length + ' month(s) in range. Showing latest feedback below.<br><br>' +
+                        (filteredData[filteredData.length - 1].overall_feedback || '-')
+                    );
+                    $('#feedback_ack_manager_status').hide().empty();
+
+                    if (kraChart) kraChart.destroy();
+                    if (kraDoughnutChart) kraDoughnutChart.destroy();
+
+                    var monthLabels = filteredData.map(function (row) {
+                        return new Date(row.date_created).toLocaleString('en-US', { month: 'short', year: '2-digit' });
+                    });
+                    var monthScores = scoreValues;
+
+                    const kraCtx = document.getElementById('kraChart').getContext('2d');
+                    kraChart = new Chart(kraCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: monthLabels,
+                            datasets: [{
+                                label: 'Overall Score %',
+                                data: monthScores,
+                                backgroundColor: '#4CAF50',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                x: { grid: { display: false } },
+                                y: { beginAtZero: true, max: 100, grid: { display: true }, title: { display: true, text: 'Score %' } }
+                            },
+                            plugins: { title: { display: true, text: 'PEDMA Score by Month (' + from + ' to ' + to + ')' } }
+                        }
+                    });
+
+                    const doughnutColors = ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50', '#FF9F40', '#9966FF'];
+                    const kraDoughnutCtx = document.getElementById('kraDoughnutChart').getContext('2d');
+                    const totalScore = monthScores.reduce(function (s, n) { return s + (Number(n) || 0); }, 0) || 1;
+                    kraDoughnutChart = new Chart(kraDoughnutCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: monthLabels,
+                            datasets: [{
+                                data: monthScores,
+                                backgroundColor: doughnutColors,
+                                hoverBackgroundColor: doughnutColors,
+                                borderWidth: 2,
+                                borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: { display: true, text: 'Score Share by Month' },
+                                legend: { display: false }
+                            },
+                            legend: { display: false }
+                        }
+                    });
+
+                    var legendHtml = '';
+                    monthLabels.forEach(function (name, idx) {
+                        var score = Number(monthScores[idx] || 0);
+                        var pct = ((score / totalScore) * 100).toFixed(1);
+                        var color = doughnutColors[idx % doughnutColors.length];
+                        legendHtml +=
+                            '<div class="legend-row">' +
+                                '<div class="legend-left">' +
+                                    '<span class="swatch" style="background:' + color + ';"></span>' +
+                                    '<span class="legend-name">' + name + '</span>' +
+                                '</div>' +
+                                '<span class="legend-score">' + score.toFixed(2) + '% · ' + pct + '%</span>' +
+                            '</div>';
+                    });
+                    $('#kraDoughnutLegend').html(legendHtml);
+                    return;
+                }
+
+                // Single-month detail view (existing behaviour)
                 filteredData.forEach((data) => {
-                    let kra_data = JSON.parse(data.kra_data);
+                    let kra_data = safeParseKraData(data.kra_data);
 
                     kra_data.forEach((item) => {
                         let totalKpiMaxScore = 0;
@@ -593,13 +1453,17 @@
                             item.kpiData.forEach((kpi) => {
                                 cardHTML += `
                                     <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${kpi.max_score}</b></p>
-                                    <p class="">Feedback: ${kpi.comment}</p>
+                                    <p class="">Manager Comment: ${kpi.comment || '-'}</p>
+                                    <p class="">HR Remarks: ${kpi.hr_remarks || '-'}</p>
                                 `;
                             });
                         } else {
                             cardHTML += `
                                 <div class="comment">
-                                    <span style="font-weight: bold;">Feedback : </span>${item.comment}
+                                    <span style="font-weight: bold;">Manager Comment : </span>${item.comment || '-'}
+                                </div>
+                                <div class="comment">
+                                    <span style="font-weight: bold;">HR Remarks : </span>${item.hr_remarks || '-'}
                                 </div>
                             `;
                         }
@@ -625,7 +1489,26 @@
                     var nscore = (ascore - fscore + addscore).toFixed(2);
 
                     $('#avg_score').html(`${nscore}%`);
+                    var joinDate = filteredData[0].staff_join_date || '';
+                    setPedmaDaysForEmployeeJoinDate(from, to, joinDate, true);
                     $('#overall_feedback').html(filteredData[0].overall_feedback || '-');
+                    if (parseInt(filteredData[0].feedback_accepted, 10) === 1) {
+                        var when = filteredData[0].feedback_accepted_at || '';
+                        $('#feedback_ack_manager_status').html(
+                            '<div class="alert alert-success tw-mb-0"><i class="fa fa-check-circle"></i> Employee accepted this feedback' +
+                            (when ? ' on <b>' + when + '</b>' : '') + '.</div>'
+                        ).show();
+                    } else if (parseInt(filteredData[0].feedback_accepted, 10) === 2) {
+                        var whenMeet = filteredData[0].feedback_accepted_at || '';
+                        $('#feedback_ack_manager_status').html(
+                            '<div class="alert alert-danger tw-mb-0"><i class="fa fa-users"></i> Employee requested <b>Need Meeting</b>' +
+                            (whenMeet ? ' on <b>' + whenMeet + '</b>' : '') + '.</div>'
+                        ).show();
+                    } else {
+                        $('#feedback_ack_manager_status').html(
+                            '<div class="alert alert-warning tw-mb-0"><i class="fa fa-clock-o"></i> Waiting for employee acknowledgment.</div>'
+                        ).show();
+                    }
                 }
 
                 // Chart Data
@@ -640,7 +1523,7 @@
                 if (kraChart) kraChart.destroy();
                 if (kraDoughnutChart) kraDoughnutChart.destroy();
 
-                // Bar Chart
+                // Bar Chart — single series (achieved only)
                 const kraCtx = document.getElementById('kraChart').getContext('2d');
                 kraChart = new Chart(kraCtx, {
                     type: 'bar',
@@ -651,38 +1534,82 @@
                             data: kraScores,
                             backgroundColor: '#4CAF50',
                             borderWidth: 1
-                        }, {
-                            label: 'Total Score',
-                            data: kraMaxScores,
-                            backgroundColor: '#FFCE56',
-                            borderWidth: 1
                         }]
                     },
                     options: {
                         scales: {
-                            x: { stacked: true, grid: { display: false } },
-                            y: { stacked: true, beginAtZero: true, grid: { display: true }, title: { display: true, text: 'Score' } }
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, grid: { display: true }, title: { display: true, text: 'Score' } }
                         },
-                        plugins: { title: { display: true, text: 'KRA Performance: Achieved vs Max Score' } }
+                        plugins: { title: { display: true, text: 'KRA Performance: Achieved Score' } }
                     }
                 });
 
                 // Doughnut Chart
+                const doughnutColors = ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50', '#FF9F40', '#9966FF'];
                 const kraDoughnutCtx = document.getElementById('kraDoughnutChart').getContext('2d');
+                const totalAchieved = kraScores.reduce((sum, n) => sum + (Number(n) || 0), 0) || 1;
+
                 kraDoughnutChart = new Chart(kraDoughnutCtx, {
                     type: 'doughnut',
                     data: {
                         labels: kraLabels,
                         datasets: [{
                             data: kraScores,
-                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50'],
-                            hoverBackgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50']
+                            backgroundColor: doughnutColors,
+                            hoverBackgroundColor: doughnutColors,
+                            borderWidth: 2,
+                            borderColor: '#fff'
                         }]
                     },
-                    options: { plugins: { title: { display: true, text: 'KRA Distribution' } }, legend: {
-                        display: false
-                    } }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            title: { display: true, text: 'KRA Distribution' },
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        var label = context.label || '';
+                                        var value = Number(context.raw || 0);
+                                        var pct = ((value / totalAchieved) * 100).toFixed(1);
+                                        return label + ': ' + value + ' (' + pct + '%)';
+                                    }
+                                }
+                            }
+                        },
+                        legend: { display: false },
+                        tooltips: {
+                            callbacks: {
+                                label: function (tooltipItem, data) {
+                                    var label = data.labels[tooltipItem.index] || '';
+                                    var value = Number(data.datasets[0].data[tooltipItem.index] || 0);
+                                    var pct = ((value / totalAchieved) * 100).toFixed(1);
+                                    return label + ': ' + value + ' (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
                 });
+
+                // Explicit legend under pie so KRA names/scores always show clearly
+                var legendHtml = '';
+                kraLabels.forEach(function (name, idx) {
+                    var score = Number(kraScores[idx] || 0);
+                    var max = Number(kraMaxScores[idx] || 0);
+                    var pct = ((score / totalAchieved) * 100).toFixed(1);
+                    var color = doughnutColors[idx % doughnutColors.length];
+                    legendHtml +=
+                        '<div class="legend-row">' +
+                            '<div class="legend-left">' +
+                                '<span class="swatch" style="background:' + color + ';"></span>' +
+                                '<span class="legend-name" title="' + String(name).replace(/"/g, '&quot;') + '">' + name + '</span>' +
+                            '</div>' +
+                            '<span class="legend-score">' + score + (max ? '/' + max : '') + ' · ' + pct + '%</span>' +
+                        '</div>';
+                });
+                $('#kraDoughnutLegend').html(legendHtml);
             }
         }
 
@@ -717,6 +1644,9 @@
         function loadPerformanceData(year) {
             // PHP JSON-encoded data of KRA (Performance Data)
             let kraData = $("#staffData").val();
+            if (!kraData) {
+                return;
+            }
             kraData = JSON.parse(kraData);
             
             // Check if kraData is an array
@@ -760,7 +1690,7 @@
                     var fscore = kra.fatal_error_score ? (kra.fatal_error_score / 100) * ascore : 0;
                     var addscore = kra.add_on_score ? (kra.add_on_score / 100) * ascore : 0;
                     var nscore = (ascore - fscore + addscore).toFixed(2);
-                    totalScore += nscore;
+                    totalScore += parseFloat(nscore);
                     maxTotalScore += 100; // Assuming 100 as max score per KRA
                 });
                 return (totalScore / maxTotalScore * 100).toFixed(2); // Calculate percentage
@@ -789,71 +1719,7 @@
             }
 
             function lineChartByYear(kraDataForMonths) {
-                // Extract months and their average PEDMA scores from the dynamic data
-                const labels = [];
-                const data = [];
-
-                for (const [month, kraData] of Object.entries(kraDataForMonths)) {
-                    labels.push(month); // Add the month to labels
-                    const avgScore = calculateAvgScore(kraData); // Calculate average PEDMA score for the month
-                    data.push(avgScore); // Add the average score to data
-                }
-
-                // Sort labels and data by month order (optional, depending on how you want to display)
-                const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                const sortedData = monthOrder.map((month) => {
-                    const index = labels.indexOf(month);
-                    return index !== -1 ? data[index] : null; // Match data with the month, or set null if no data
-                });
-
-                // Load the Chart.js script and render the chart
-                // const chartScript = document.createElement('script');
-                // chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-                // chartScript.onload = () => {
-                const pedmaData = {
-                    labels: monthOrder, // Using predefined month order
-                    datasets: [{
-                        label: 'Average PEDMA Score',
-                        data: sortedData, // Use the dynamically sorted data
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderWidth: 2,
-                        fill: true
-                    }]
-                };
-
-                // PEDMA Line Chart
-                const pedmaCtx = document.getElementById('pedmaChart').getContext('2d');
-                const pedmaChart = new Chart(pedmaCtx, {
-                    type: 'line',
-                    data: pedmaData,
-                    options: {
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Month'
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Score'
-                                }
-                            }
-                        },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: 'One Year Average PEDMA Score'
-                            }
-                        }
-                    }
-                });
-                // };
-
-                //document.head.appendChild(chartScript);
+                // Line chart removed
             }
 
 
@@ -898,7 +1764,7 @@
 
                     // Loop through each KRA and its associated KPIs
                     kraData.forEach(kra => {
-                        const kraDataParsed = JSON.parse(kra.kra_data); // Parse `kra_data` field
+                        const kraDataParsed = safeParseKraData(kra.kra_data); // Parse `kra_data` field safely
 
                         kraDataParsed.forEach(kraItem => {
                             let totalKpiMaxScore = 0;
@@ -971,6 +1837,127 @@
             }
             return val;
         }
+
+        function csvEscape(value) {
+            var s = (value === null || value === undefined) ? '' : String(value);
+            if (/[",\n\r]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }
+
+        function computePedmaFinalScore(row) {
+            var ascore = parseFloat(row.avg_score || 0) || 0;
+            var fscore = row.fatal_error_score ? (parseFloat(row.fatal_error_score) / 100) * ascore : 0;
+            var addscore = row.add_on_score ? (parseFloat(row.add_on_score) / 100) * ascore : 0;
+            return (ascore - fscore + addscore).toFixed(2);
+        }
+
+        function feedbackAckLabel(row) {
+            var v = parseInt(row.feedback_accepted, 10);
+            if (v === 1) return 'Accepted';
+            if (v === 2) return 'Need Meeting';
+            return 'Pending';
+        }
+
+        $(document).on('click', '#pedmaExportBtn', function () {
+            var staffId = $('#designationFilter').val();
+            var staffName = $('#designationFilter option:selected').text().trim();
+            var deptName = $('#departmentFilter option:selected').text().trim();
+            var range = getPedmaSelectedRange();
+            var raw = $('#staffData').val();
+
+            if (!staffId || !raw) {
+                alert_float('warning', 'Select an employee with PEDMA data before exporting.');
+                return;
+            }
+
+            var staffData;
+            try {
+                staffData = JSON.parse(raw);
+            } catch (e) {
+                alert_float('danger', 'Unable to read PEDMA data for export.');
+                return;
+            }
+
+            if (!Array.isArray(staffData) || !staffData.length) {
+                alert_float('warning', 'No PEDMA data available to export.');
+                return;
+            }
+
+            var rows = filterStaffDataByRange(staffData, range.from, range.to);
+            if (!rows.length) {
+                alert_float('warning', 'No PEDMA data in the selected date range.');
+                return;
+            }
+
+            var rangeLabel = (range.from === range.to) ? range.from : (range.from + '_to_' + range.to);
+            var header = [
+                'Employee', 'Department', 'Month', 'KRA', 'Max Score', 'Achieved Score',
+                'Manager Comment', 'HR Remarks', 'Overall Score %', 'Overall Feedback', 'Employee Comment',
+                'Acknowledgment', 'Acknowledged At'
+            ];
+            var lines = [header.map(csvEscape).join(',')];
+
+            rows.forEach(function (row) {
+                var monthLabel = '';
+                if (row.date_created) {
+                    var d = new Date(row.date_created);
+                    monthLabel = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                }
+                var finalScore = computePedmaFinalScore(row);
+                var kraList = safeParseKraData(row.kra_data);
+
+                if (!kraList.length) {
+                    lines.push([
+                        staffName, deptName, monthLabel, '', '', '', '', '',
+                        finalScore, row.overall_feedback || '', row.staff_comment || '',
+                        feedbackAckLabel(row), row.feedback_accepted_at || ''
+                    ].map(csvEscape).join(','));
+                    return;
+                }
+
+                kraList.forEach(function (item) {
+                    var achieved = item.get_score;
+                    var maxScore = item.max_score;
+                    var feedback = item.comment || '';
+                    var hrRemarks = item.hr_remarks || '';
+
+                    if (row.type === 'custom' && item.kpiData && item.kpiData.length) {
+                        achieved = item.kpiData.reduce(function (sum, kpi) {
+                            return sum + (parseFloat(kpi.get_score) || 0);
+                        }, 0);
+                        maxScore = item.kpiData.reduce(function (sum, kpi) {
+                            return sum + (parseFloat(kpi.max_score) || 0);
+                        }, 0);
+                        feedback = item.kpiData.map(function (kpi) {
+                            return (kpi.name || '') + ': ' + (kpi.get_score || 0) + '/' + (kpi.max_score || 0) +
+                                (kpi.comment ? ' (' + kpi.comment + ')' : '');
+                        }).join(' | ');
+                        hrRemarks = item.kpiData.map(function (kpi) {
+                            return (kpi.name || '') + ': ' + (kpi.hr_remarks || '-');
+                        }).join(' | ');
+                    }
+
+                    lines.push([
+                        staffName, deptName, monthLabel, item.name || '', maxScore, achieved,
+                        feedback, hrRemarks, finalScore, row.overall_feedback || '', row.staff_comment || '',
+                        feedbackAckLabel(row), row.feedback_accepted_at || ''
+                    ].map(csvEscape).join(','));
+                });
+            });
+
+            var blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            var safeName = (staffName || 'pedma').replace(/[^\w\-]+/g, '_');
+            a.href = url;
+            a.download = 'PEDMA_' + safeName + '_' + (rangeLabel || 'all') + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
     </script>
 
     </body>

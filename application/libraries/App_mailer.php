@@ -98,7 +98,7 @@ class App_mailer extends CI_Email
     // The Destructor ----------------------------------------------------------
     public function __destruct()
     {
-        if (is_callable('parent::__destruct')) {
+        if (method_exists(get_parent_class($this), '__destruct')) {
             parent::__destruct();
         }
     }

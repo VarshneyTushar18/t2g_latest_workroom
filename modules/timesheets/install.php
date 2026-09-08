@@ -244,6 +244,11 @@ if (!$CI->db->field_exists('reason', db_prefix() . 'timesheets_additional_timesh
         ADD COLUMN `reason` TEXT NULL;");
 }
 
+if (!$CI->db->field_exists('rejection_comment', db_prefix() . 'timesheets_additional_timesheet')) {
+	$CI->db->query('ALTER TABLE `' . db_prefix() . "timesheets_additional_timesheet`
+        ADD COLUMN `rejection_comment` TEXT NULL;");
+}
+
 if (!$CI->db->field_exists('departments', db_prefix() . 'timesheets_approval_setting')) {
 	$CI->db->query('ALTER TABLE `' . db_prefix() . "timesheets_approval_setting`
         ADD COLUMN `departments` TEXT NULL AFTER `number_day_approval`,

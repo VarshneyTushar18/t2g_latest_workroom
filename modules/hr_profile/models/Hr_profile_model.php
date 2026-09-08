@@ -742,7 +742,15 @@ class Hr_profile_model extends App_Model
 	 */
 	public function hr_profile_get_department_name($departmentid)
 	{
-		return $this->db->query('select ' . db_prefix() . 'departments.name from tbldepartments where departmentid = ' . $departmentid)->row();
+		if ($departmentid === null || $departmentid === '' || !is_numeric($departmentid)) {
+			return null;
+		}
+
+		return $this->db->select('name')
+			->from(db_prefix() . 'departments')
+			->where('departmentid', (int) $departmentid)
+			->get()
+			->row();
 	}
 	/**
 	 * get all staff not in record
@@ -5676,6 +5684,13 @@ class Hr_profile_model extends App_Model
 					}
 				}
 			}
+
+			// Leave policy: resignation clears leave balance; no further earning in notice period.
+			$CI = &get_instance();
+			if (!isset($CI->staff_model)) {
+				$CI->load->model('staff_model');
+			}
+			$CI->staff_model->zero_leave_balance_on_resignation((int) $staffid);
 
 			return $insert_id;
 		}

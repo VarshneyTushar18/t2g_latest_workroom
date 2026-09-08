@@ -669,9 +669,20 @@ function to_sql_date($date, $datetime = false)
             return $date;
         }
 
+        $dt = DateTime::createFromFormat($from_format, $date);
+        if (!$dt instanceof DateTime) {
+            // Fallback for unexpected formats so pages don't fatal.
+            $ts = strtotime($date);
+            if ($ts === false) {
+                return null;
+            }
+
+            return hooks()->apply_filters('to_sql_date_formatted', date($to_date, $ts));
+        }
+
         return hooks()->apply_filters(
             'to_sql_date_formatted',
-            DateTime::createFromFormat($from_format, $date)->format($to_date)
+            $dt->format($to_date)
         );
     }
 
@@ -865,7 +876,10 @@ function csrf_jquery_ajax_setup() {
 
     $(document).ajaxError(function(event, request, settings) {
         if (request.status === 419) {
-            alert_float('warning', 'Page expired, refresh the page make an action.')
+            alert_float('warning', 'Page expired — refreshing…');
+            setTimeout(function() {
+                window.location.reload();
+            }, 800);
         }
     });
 }

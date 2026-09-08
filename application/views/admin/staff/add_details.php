@@ -156,6 +156,15 @@ error_reporting(E_ALL);
 
                                 <?php echo render_date_input('doj', 'Date of Joining', ''); ?>
 
+                                <div class="form-group">
+                                    <label for="employment_category" class="control-label">Employment Category (Leave Rate)</label>
+                                    <select name="employment_category" id="employment_category" class="selectpicker" data-width="100%">
+                                        <option value="fte">Full-Time Employee (FTE) — 1.25 / 1.75 after 2 years</option>
+                                        <option value="intern">Intern — 1 leave / month</option>
+                                        <option value="wfh">WFH Employee — 1 leave / month (max carry 5)</option>
+                                    </select>
+                                </div>
+
                                 <?php echo render_input('shiftstart', 'Shift Start Timing', '', 'time'); ?>
 
                                 <?php //echo render_select('manageleave', array(array('input_value'=>'1' , 'input_label'=>'Yes'),array('input_value'=>'0', 'input_label'=>'No')), ['input_value','input_label'], 'Leave Management'); 
@@ -774,6 +783,7 @@ error_reporting(E_ALL);
                                     $('#departmentid').selectpicker('val', '');
                                     $('#manageleave').selectpicker('val', '');
                                     $('#attendance_view_edit').selectpicker('val', '');
+                                    $('#employment_category').selectpicker('val', 'fte');
 
 
                                 } else {
@@ -784,6 +794,7 @@ error_reporting(E_ALL);
                                     $('#departmentid').selectpicker('val', data[0].departmentid);
                                     $('#manageleave').selectpicker('val', data[0].manageleave);
                                     $('#attendance_view_edit').selectpicker('val', data[0].attendance_view_edit);
+                                    $('#employment_category').selectpicker('val', data[0].employment_category || 'fte');
 
                                 }
 

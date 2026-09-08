@@ -49,9 +49,11 @@
          <option value="4" <?php echo ($type_of_leave_selected == 4 ? 'selected' : '') ?>><?php echo _l('private_work_without_pay') ?></option>
          <option value="1" <?php echo ($type_of_leave_selected == 1 ? 'selected' : '') ?>><?php echo _l('sick_leave') ?></option>    
          <?php 
-         foreach ($type_of_leave as $value) { ?>
-          <option value="<?php echo html_entity_decode($value['slug']); ?>" <?php echo ($type_of_leave_selected == $value['slug'] ? 'selected' : '') ?>><?php echo html_entity_decode($value['type_name']); ?></option>    
-        <?php } ?>              
+         foreach ($type_of_leave as $value) {
+          if (in_array($value['slug'], ['comp-off', 'work-from-home'], true)) { continue; }
+          ?>
+          <option value="<?php echo html_entity_decode($value['slug']); ?>" <?php echo ($type_of_leave_selected == $value['slug'] ? 'selected' : '') ?>><?php echo html_entity_decode($value['type_name']); ?></option>
+        <?php } ?>
       </select>
  </div>
 </div>

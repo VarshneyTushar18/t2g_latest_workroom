@@ -70,8 +70,8 @@
                     <div class="form-group col-md-6 !tw-p-0">
                         <label for="kraType">Select KRA Type</label>
                         <select id="kraType" name="kraType" class="form-control" required>
-                            <option value="0" <?php echo ($kra[0]->type == 1) ? 'selected' : ''; ?>>Default</option>
-                            <option value="1" <?php echo ($kra[0]->type == 1) ? 'selected' : ''; ?>>Custom</option>
+                            <option value="0" <?php echo (!empty($kra[0]) && (string) $kra[0]->type === '0') ? 'selected' : ''; ?>>Default</option>
+                            <option value="1" <?php echo (!empty($kra[0]) && (string) $kra[0]->type === '1') ? 'selected' : ''; ?>>Custom</option>
                         </select>
                     </div>
                 </div>
