@@ -153,15 +153,69 @@ New-Item -ItemType Directory -Force -Path uploads,temp,application\cache,applica
 
 ---
 
-## 6. Composer (optional)
+## 6. Composer (required on fresh clone)
 
-Vendor is usually already in the repo. Only run if packages are missing:
+`vendor/` folders are **not** committed to Git (see `.gitignore`).  
+If you cloned from GitHub, you **must** install PHP packages with Composer.
+
+### Install Composer (Windows)
+
+1. Download: https://getcomposer.org/download/  
+2. Or with PHP already installed:
 
 ```bash
-composer install
-# or
-composer update
+php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+php composer-setup.php
+php -r "unlink('composer-setup.php');"
 ```
+
+Confirm:
+
+```bash
+composer -V
+```
+
+### Install project dependencies
+
+There are **two** Composer projects in this codebase:
+
+#### A) Main Perfex packages (required)
+
+```bash
+cd application
+composer install
+```
+
+This creates / refreshes `application/vendor/` (PHPMailer, Guzzle, Stripe, elFinder, TCPDF, etc.).  
+CodeIgniter loads it via `$config['composer_autoload'] = true` → `application/vendor/autoload.php`.
+
+#### B) Root PhpSpreadsheet (optional but recommended)
+
+```bash
+cd ..
+composer install
+```
+
+This creates / refreshes root `vendor/` for `phpoffice/phpspreadsheet` (Excel import/export used by timesheets / biometric).
+
+### Quick check
+
+```bash
+# From project root
+dir application\vendor\autoload.php
+dir vendor\autoload.php
+```
+
+Both files should exist.
+
+### Notes
+
+| Situation | What to do |
+|-----------|------------|
+| Fresh `git clone` | Run both `composer install` commands above |
+| You already have a full backup folder with `vendor` | Skip Composer unless something is broken |
+| Missing class / autoload errors | Re-run `composer install` in `application/` then root |
+| Do **not** use `composer update` casually | Prefer `composer install` (uses lock files; safer) |
 
 ---
 
@@ -272,15 +326,21 @@ define('SESS_SAVE_PATH', NULL);
 git clone https://github.com/VarshneyTushar18/t2g_latest_workroom.git
 cd t2g_latest_workroom
 
-# 2) Import MySQL dump into database: production_crm
+# 2) Composer (required — vendor is not in Git)
+cd application
+composer install
+cd ..
+composer install
 
-# 3) Edit application/config/app-config.php
+# 3) Import MySQL dump into database: production_crm
+
+# 4) Edit application/config/app-config.php
 #    APP_BASE_URL, APP_DB_*, APP_ENC_KEY
 
-# 4) Start server
+# 5) Start server
 php -S 127.0.0.1:8000 router.php
 
-# 5) Open
+# 6) Open
 # http://127.0.0.1:8000/admin
 ```
 
