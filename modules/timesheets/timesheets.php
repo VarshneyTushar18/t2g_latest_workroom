@@ -17,7 +17,7 @@ define('TIMESHEETS_CONTRACT_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEE
 define('TIMESHEETS_JOB_POSIITON_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/job_position/'));
 define('TIMESHEETS_PATH', 'modules/timesheets/uploads/');
 define('TIMESHEETS_PAYSLIPS', 'modules/timesheets/uploads/payslips/');
-define('TIMESHEETS_REVISION', 119);
+define('TIMESHEETS_REVISION', 127);
 
 define('PAY_SLIP', FCPATH);
 
@@ -174,7 +174,16 @@ function timesheets_module_init_menu_items() {
 			// 'name' => _l('timesheets_and_leave'),
 			'name' => 'HRMS',
 			'icon' => 'fa fa-user-circle',
+			'href' => admin_url('timesheets/hrms_home'),
 			'position' => 5,
+		]);
+
+		$CI->app_menu->add_sidebar_children_item('timesheets', [
+			'slug' => 'timesheets_hrms_home',
+			'name' => 'Home',
+			'href' => admin_url('timesheets/hrms_home'),
+			'icon' => 'fa fa-home',
+			'position' => 0,
 		]);
 
 		// ── Group: Attendance ──────────────────────────────────────────
@@ -182,6 +191,7 @@ function timesheets_module_init_menu_items() {
 			'slug' => 'timesheets_attendance',
 			'name' => 'Attendance',
 			'href' => '#',
+			'icon' => 'fa fa-clock',
 			'position' => 1,
 		]);
 
@@ -189,6 +199,7 @@ function timesheets_module_init_menu_items() {
 			'slug' => 'timesheets_attendance_info',
 			'name' => 'Attendance Info',
 			'href' => admin_url('timesheets/my_attendance'),
+			'icon' => 'fa fa-calendar-check',
 			'position' => 1,
 		]);
 
@@ -196,6 +207,7 @@ function timesheets_module_init_menu_items() {
 			'slug' => 'timesheets_attendance_regularization',
 			'name' => 'Regularization & Permission',
 			'href' => admin_url('timesheets/attendance_regularization'),
+			'icon' => 'fa fa-edit',
 			'position' => 2,
 		]);
 
@@ -205,6 +217,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_biometric_attendance',
 				'name' => 'Biometric Attendance',
 				'href' => admin_url('biometric'),
+				'icon' => 'fa fa-id-badge',
 				'position' => 3,
 			]);
 		}
@@ -215,12 +228,14 @@ function timesheets_module_init_menu_items() {
 					'slug' => 'timesheets_check_employee_attendance',
 					'name' => 'Check Employee Attendance',
 					'href' => admin_url('timesheets/check_employee_attendance'),
+					'icon' => 'fa fa-users',
 					'position' => 4,
 				]);
 				$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
 					'slug' => 'timesheets_regularisation_approvals',
 					'name' => 'Regularization Approvals',
 					'href' => admin_url('timesheets/requisition_manage?tab=additional_timesheets'),
+					'icon' => 'fa fa-check-square-o',
 					'position' => 5,
 				]);
 			}
@@ -232,13 +247,15 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_leave',
 				'name' => 'Leave',
 				'href' => '#',
+				'icon' => 'fa fa-suitcase',
 				'position' => 2,
 			]);
 
 			$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
 				'slug' => 'timesheets_apply_leave',
-				'name' => 'Apply for Leave',
+				'name' => 'Leave apply',
 				'href' => admin_url('timesheets/requisition_manage'),
+				'icon' => 'fa fa-file-text',
 				'position' => 1,
 			]);
 
@@ -246,6 +263,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_leave_balance',
 				'name' => 'Leave Balance',
 				'href' => admin_url('staff/leave_balance'),
+				'icon' => 'fa fa-pie-chart',
 				'position' => 2,
 			]);
 
@@ -253,6 +271,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_holiday_calendar',
 				'name' => 'Holiday Calendar',
 				'href' => admin_url('holiday/calendar'),
+				'icon' => 'fa fa-sun',
 				'position' => 3,
 			]);
 
@@ -261,6 +280,7 @@ function timesheets_module_init_menu_items() {
 					'slug' => 'timesheets_manage_saturday',
 					'name' => 'Manage Saturday',
 					'href' => admin_url('holiday/manageHoliday'),
+					'icon' => 'fa fa-calendar',
 					'position' => 4,
 				]);
 			}
@@ -270,6 +290,7 @@ function timesheets_module_init_menu_items() {
 					'slug' => 'timesheets_manage_earned_leave',
 					'name' => 'Manage Earned Leave',
 					'href' => admin_url('staff/manage_earned_leave'),
+					'icon' => 'fa fa-sliders',
 					'position' => 5,
 				]);
 			}
@@ -279,6 +300,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_holiday_calendar',
 				'name' => 'Holiday Calendar',
 				'href' => admin_url('holiday/calendar'),
+				'icon' => 'fa fa-sun',
 				'position' => 2,
 			]);
 		}
@@ -292,6 +314,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_shift',
 				'name' => 'Shift',
 				'href' => '#',
+				'icon' => 'fa fa-exchange',
 				'position' => 3,
 			]);
 
@@ -299,6 +322,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_table_shiftwork',
 				'name' => _l('shiftwork'),
 				'href' => admin_url('timesheets/table_shiftwork'),
+				'icon' => 'fa fa-table',
 				'position' => 1,
 			]);
 
@@ -306,6 +330,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_shift_management',
 				'name' => _l('shift_management'),
 				'href' => admin_url('timesheets/shift_management'),
+				'icon' => 'fa fa-tasks',
 				'position' => 2,
 			]);
 
@@ -313,6 +338,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_shift_type',
 				'name' => _l('shift_type'),
 				'href' => admin_url('timesheets/manage_shift_type'),
+				'icon' => 'fa fa-tags',
 				'position' => 3,
 			]);
 		}
@@ -328,6 +354,7 @@ function timesheets_module_init_menu_items() {
 					'slug' => 'timesheets_route_management',
 					'name' => _l('route_management'),
 					'href' => admin_url('timesheets/route_management?tab=route'),
+					'icon' => 'fa fa-map-marker',
 					'position' => 4,
 				]);
 			}
@@ -341,6 +368,7 @@ function timesheets_module_init_menu_items() {
 						'slug' => 'timesheets_workplace_mgt',
 						'name' => _l('workplace_mgt'),
 						'href' => admin_url('timesheets/workplace_mgt?group=workplace_assign'),
+						'icon' => 'fa fa-building',
 						'position' => 5,
 					]);
 				}
@@ -352,6 +380,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets-report',
 				'name' => _l('reports'),
 				'href' => admin_url('timesheets/reports'),
+				'icon' => 'fa fa-bar-chart',
 				'position' => 8,
 			]);
 		}
@@ -360,6 +389,7 @@ function timesheets_module_init_menu_items() {
 				'slug' => 'timesheets_setting',
 				'name' => _l('settings'),
 				'href' => admin_url('timesheets/setting?group=manage_leave'),
+				'icon' => 'fa fa-cog',
 				'position' => 9,
 			]);
 		}
@@ -461,6 +491,27 @@ function timesheets_load_js() {
 function timesheets_add_head_components() {
 	$CI = &get_instance();
 	$viewuri = $_SERVER['REQUEST_URI'];
+
+	// Shared HRMS design system (local UX) — timesheets + leave + biometric + holiday.
+	$hrms_paths = [
+		'/admin/timesheets',
+		'/admin/biometric',
+		'/admin/staff/leave_balance',
+		'/admin/staff/manage_earned_leave',
+		'/admin/holiday',
+	];
+	$load_hrms_ui = false;
+	foreach ($hrms_paths as $p) {
+		if (strpos($viewuri, $p) !== false) {
+			$load_hrms_ui = true;
+			break;
+		}
+	}
+	if ($load_hrms_ui) {
+		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '"></script>';
+	}
+
 	if (!(strpos($viewuri, '/admin/timesheets/timekeeping') === false)) {
 		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/plugins/handsontable/chosen.css') . '"  rel="stylesheet" type="text/css" />';
 		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/plugins/handsontable/handsontable.full.min.css') . '"  rel="stylesheet" type="text/css" />';
@@ -762,5 +813,4 @@ function timesheets_uninstall($module_name){
         $timesheets_api = new TimesheetLic();
         $timesheets_api->deactivate_license();
     }
-}
 }

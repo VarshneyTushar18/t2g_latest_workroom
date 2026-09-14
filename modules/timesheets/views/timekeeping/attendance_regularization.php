@@ -3,7 +3,7 @@
 
 <style>
   .t2g-reg .panel-body { padding: 18px 20px; }
-  .t2g-reg-tabs { display: flex; justify-content: center; gap: 0; margin-bottom: 20px; }
+  .t2g-reg-tabs { display: flex; justify-content: center; gap: 0; margin-bottom: 20px; flex-wrap: wrap; }
   .t2g-reg-tabs button {
     border: 1px solid #e2e8f0; background: #fff; padding: 10px 28px; font-size: 13px; font-weight: 600;
     color: #64748b; cursor: pointer;
@@ -15,6 +15,11 @@
   .t2g-reg-cal {
     width: 280px; flex: 0 0 280px; background: #f8fafc; border: 1px solid #e2e8f0;
     border-radius: 10px; padding: 14px;
+  }
+  @media (max-width: 1199px) {
+    .t2g-reg .col-md-4.text-right { text-align: left !important; margin-top: 8px; }
+    .t2g-reg-tabs button { padding: 10px 16px; font-size: 12px; }
+    .t2g-reg-cal { width: 100%; flex: 1 1 260px; max-width: 320px; }
   }
   .t2g-reg-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .t2g-reg-cal-nav button {
@@ -217,8 +222,32 @@
   var dayMap = {};
   var selectedDate = '';
   var gapIndex = 0;
+  var calendarLoading = false;
+  var staffIdForCal = '<?php echo (int) $staff_id; ?>';
 
   calendarData.forEach(function(d) { dayMap[d.date] = d; });
+
+  function showRegCalendarLoading() {
+    $('#reg_cal_grid').html('<div style="grid-column:1/-1;padding:24px;text-align:center;color:#64748b;font-size:13px;"><i class="fa fa-spinner fa-spin"></i> Loading…</div>');
+    $('#reg_gap_count').text('… Gap day(s)');
+  }
+
+  function reloadRegCalendar() {
+    if (calendarLoading) return;
+    calendarLoading = true;
+    showRegCalendarLoading();
+    $.getJSON(admin_url + 'timesheets/my_attendance_calendar', { month: monthYear, staff_id: staffIdForCal })
+      .done(function(res) {
+        calendarData = res.days || [];
+        dayMap = {};
+        calendarData.forEach(function(d) { dayMap[d.date] = d; });
+        selectedDate = '';
+        gapIndex = 0;
+        renderRegCalendar();
+        showApplyForm(null);
+      })
+      .always(function() { calendarLoading = false; });
+  }
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function parseMonthYear(my) {
@@ -313,7 +342,28 @@
     window.location.href = admin_url + 'timesheets/attendance_regularization?month=' + encodeURIComponent(monthYear) + '&staff_id=' + staffId;
   }
 
-  renderRegCalendar();
+  // Deferred calendar load — page shell paints first.
+  reloadRegCalendar();
+
+  (function loadRegStaffPicker() {
+    var $sel = $('#att_reg_staff_pick');
+    if (!$sel.length) return;
+    var cur = String($sel.val() || '');
+    $.getJSON(admin_url + 'timesheets/get_viewable_staff_json').done(function(res) {
+      var staff = res.staff || [];
+      if (!staff.length) return;
+      var meId = '<?php echo (int) get_staff_user_id(); ?>';
+      $sel.empty();
+      for (var i = 0; i < staff.length; i++) {
+        var s = staff[i];
+        var id = String(s.staffid);
+        var name = $.trim((s.firstname || '') + ' ' + (s.lastname || ''));
+        if (id === meId) name += ' (Me)';
+        $sel.append($('<option></option>').attr('value', id).text(name));
+      }
+      if (cur && $sel.find('option[value="' + cur + '"]').length) $sel.val(cur);
+    });
+  })();
 
   $('.t2g-reg-tabs button').on('click', function() {
     var tab = $(this).data('tab');

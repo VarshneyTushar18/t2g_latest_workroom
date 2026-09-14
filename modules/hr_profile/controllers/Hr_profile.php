@@ -3972,6 +3972,9 @@ class Hr_profile extends AdminController
 				blank_page('Staff Member Not Found', 'danger');
 			}
 			$data['member'] = $member;
+			$data['employment_category'] = $this->staff_model->get_employment_category($id);
+			$data['member']->employment_category = $data['employment_category'];
+			$data['earned_leave_rate'] = $this->hr_profile_model->get_staff_earned_leave_display_rate($id);
 			$title = $member->firstname . ' ' . $member->lastname;
 
 			if ($data['group'] == 'profile') {
@@ -6284,6 +6287,11 @@ class Hr_profile extends AdminController
 
 			if (isset($staff_id)) {
 				$data['member'] = $this->staff_model->get($staff_id);
+				$data['employment_category'] = $this->staff_model->get_employment_category($staff_id);
+				$data['earned_leave_rate'] = $this->hr_profile_model->get_staff_earned_leave_display_rate($staff_id);
+				if (!empty($data['member'])) {
+					$data['member']->employment_category = $data['employment_category'];
+				}
 			}
 
 			$data['roles_value'] = $this->roles_model->get();

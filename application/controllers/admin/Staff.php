@@ -509,34 +509,68 @@ class Staff extends AdminController
 
     public function leave_balance()
     {
-        //        ini_set('display_errors', 1);
-        //        ini_set('display_startup_errors', 1);
-        //        error_reporting(E_ALL);
-	//print_r($data);die;
-        $selectedMonth = Date('m');
-        $currentYear = Date('Y');
-        $selectedYear = '';
-        if ($this->input->post()) {
-            $data = $this->input->post();
-            $selectedMonth = $data['range'];
-            $selectedYear = $data['year'];
-        }
-
-        if ($selectedYear == '') {
-            $selectedYear = $currentYear;
-        }
-
         $this->load->helper('timesheets/timesheets');
 
+        $selectedMonth = (int) date('n');
+        $currentYear = (int) date('Y');
+        $selectedYear = $currentYear;
+
+        // Accept Apply form (POST) and staff-picker reload (GET).
+        $rangeIn = $this->input->post('range');
+        if ($rangeIn === null || $rangeIn === false || $rangeIn === '') {
+            $rangeIn = $this->input->get('range');
+        }
+        $yearIn = $this->input->post('year');
+        if ($yearIn === null || $yearIn === false || $yearIn === '') {
+            $yearIn = $this->input->get('year');
+        }
+        if ($rangeIn !== null && $rangeIn !== false && $rangeIn !== '') {
+            $selectedMonth = (int) $rangeIn;
+        }
+        if ($yearIn !== null && $yearIn !== false && $yearIn !== '') {
+            $selectedYear = (int) $yearIn;
+        }
+        if ($selectedYear < 2000) {
+            $selectedYear = $currentYear;
+        }
+        if ($selectedMonth < 0 || $selectedMonth > 12) {
+            $selectedMonth = (int) date('n');
+        }
+
         $view_staff_id = (int) get_staff_user_id();
-        $picked_staff = $this->input->post('staff_id') ?: $this->input->get('staff_id');
-        if ($picked_staff && timesheets_can_view_staff((int) $picked_staff)) {
+        $picked_staff = $this->input->post('staff_id');
+        if ($picked_staff === null || $picked_staff === false || $picked_staff === '') {
+            $picked_staff = $this->input->get('staff_id');
+        }
+        $filter_one_staff = false;
+        if ($picked_staff !== null && $picked_staff !== false && $picked_staff !== '' && timesheets_can_view_staff((int) $picked_staff)) {
             $view_staff_id = (int) $picked_staff;
+            $filter_one_staff = true;
         }
 
         $team_ids = timesheets_get_team_staff_ids();
+        $is_hr = timesheets_hr_can_view_all_staff();
 
-        if (timesheets_hr_can_view_all_staff()) {
+        // Full company report is expensive (carry-forward per employee). Only when HR asks (?all=1).
+        $want_all = false;
+        $allIn = $this->input->post('all');
+        if ($allIn === null || $allIn === false || $allIn === '') {
+            $allIn = $this->input->get('all');
+        }
+        if ($is_hr && !$filter_one_staff && ((string) $allIn === '1')) {
+            $want_all = true;
+        }
+
+        // Default open: always one person (self) — not the full company table.
+        if (!$filter_one_staff && !$want_all) {
+            $view_staff_id = (int) get_staff_user_id();
+            $filter_one_staff = true;
+        }
+
+        if ($filter_one_staff) {
+            // Staff picker selected — show that employee's report rows.
+            $addQuery = ' WHERE tblstaff.staffid = ' . (int) $view_staff_id . ' ';
+        } elseif ($want_all) {
             $addQuery = ' WHERE tblstaff.active = 1 ';
         } elseif (is_array($team_ids) && count($team_ids) > 1) {
             $addQuery = ' WHERE tblstaff.staffid IN (' . implode(',', array_map('intval', $team_ids)) . ') AND tblstaff.active = 1 ';
@@ -544,56 +578,51 @@ class Staff extends AdminController
             $addQuery = ' WHERE tblstaff.staffid=' . (int) get_staff_user_id();
         }
 
+        $data = [];
         $data['table_data'] = [];
-		
-        $sqlAdmin = "SELECT
-        tblstaff.staffid,
-        tblstaff_info.empid,
-        tblstaff_info.doj,
-        SUM(
-            CASE
-                WHEN
-                    (
-                        MONTH(tbltimesheets_requisition_leave.start_time) = ?
-                        AND YEAR(tbltimesheets_requisition_leave.start_time) = ?
-                    )
-                THEN tbltimesheets_requisition_leave.number_of_leaving_day
-                ELSE 0
-            END
-        ) AS Leaves_taken
-        FROM
-            tblstaff_info
-        LEFT JOIN tbltimesheets_requisition_leave ON tblstaff_info.staffid = tbltimesheets_requisition_leave.staff_id
-        RIGHT JOIN tblstaff ON tblstaff_info.staffid = tblstaff.staffid LEFT JOIN tblstaff_departments ON tblstaff_departments.staffid = tblstaff.staffid " . $addQuery . " GROUP BY
-            tblstaff.staffid, tblstaff_info.empid, tblstaff_info.doj";
 
+        // Slim staff list only — leave totals are computed in enrich_leave_balance_month.
+        $sqlStaff = "SELECT
+            tblstaff.staffid,
+            tblstaff_info.empid,
+            tblstaff_info.doj
+        FROM tblstaff
+        LEFT JOIN tblstaff_info ON tblstaff_info.staffid = tblstaff.staffid
+        " . $addQuery;
+
+        $staff_rows = $this->db->query($sqlStaff)->result_array();
+        if (!is_array($staff_rows)) {
+            $staff_rows = [];
+        }
 
         if ($selectedMonth == 0) {
             for ($month_in_number = 1; $month_in_number <= 12; $month_in_number++) {
-                //                $data['table_data'][$month_in_number] = array();
-
-                $data['table_data'][$month_in_number] = $this->db->query($sqlAdmin, [$month_in_number, $selectedYear])->result_array();
+                $month_rows = [];
+                foreach ($staff_rows as $row) {
+                    $month_rows[] = $row;
+                }
                 $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
-                    $data['table_data'][$month_in_number],
+                    $month_rows,
                     $month_in_number,
                     $selectedYear
                 );
             }
         } else {
-
-            $month_in_number = $selectedMonth;
-            $data['table_data'][$month_in_number] = $this->db->query($sqlAdmin, [$month_in_number, $selectedYear])->result_array();
+            $month_in_number = (int) $selectedMonth;
             $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
-                $data['table_data'][$month_in_number],
+                $staff_rows,
                 $month_in_number,
                 $selectedYear
             );
         }
 
-
         $data['currentMonth'] = $selectedMonth;
         $data['currentYear'] = $currentYear;
         $data['selectedYear'] = $selectedYear;
+        $data['report_row_count'] = 0;
+        foreach ($data['table_data'] as $monthRows) {
+            $data['report_row_count'] += is_array($monthRows) ? count($monthRows) : 0;
+        }
 
         $data['summary'] = null;
         if ($selectedMonth != 0 && isset($data['table_data'][$selectedMonth])) {
@@ -606,7 +635,6 @@ class Staff extends AdminController
                     'leave_taken' => $row['leave_taken'],
                     'earned_leave' => $row['earned_leave'],
                     'leave_balance' => $row['leave_balance'],
-                    'absent' => $row['status'],
                     'month' => (int) $selectedMonth,
                     'month_name' => date('F', mktime(0, 0, 0, (int) $selectedMonth, 1)),
                 ];
@@ -618,14 +646,22 @@ class Staff extends AdminController
         $data['leave_balance_year'] = (int) $selectedYear;
         $data['userid'] = $view_staff_id;
         $data['can_pick_staff'] = timesheets_user_can_pick_staff();
-        $data['staff_list'] = $data['can_pick_staff'] ? timesheets_get_viewable_staff_list() : [];
+        // Slim picker seed; full list loads via AJAX after paint.
+        $data['staff_list'] = [];
+        if ($data['can_pick_staff']) {
+            $me = $this->db->select('staffid, firstname, lastname')->where('staffid', $view_staff_id)->get(db_prefix() . 'staff')->row_array();
+            $data['staff_list'] = $me ? [$me] : [];
+        }
         $data['is_team_manager'] = timesheets_is_team_manager();
-        $data['is_hr_viewer'] = timesheets_hr_can_view_all_staff();
+        $data['is_hr_viewer'] = $is_hr;
+        $data['want_all_report'] = $want_all;
         $data['can_edit_earned_leave'] = $data['is_hr_viewer'];
+        $data['filter_one_staff'] = $filter_one_staff;
         if (is_dir(module_dir_path('timesheets'))) {
             $this->load->model('timesheets/timesheets_model');
             $card_month = ((int) $selectedMonth > 0) ? (int) $selectedMonth : null;
             $data['leave_balance_month'] = $card_month ? (int) $card_month : 0;
+            // Cards for the one viewed employee only (already scoped).
             $data['leave_balance_cards'] = $this->timesheets_model->get_staff_leave_balance_cards(
                 $view_staff_id,
                 (int) $selectedYear,

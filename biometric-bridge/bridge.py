@@ -207,14 +207,34 @@ def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for (code, day_key), punches in buckets.items():
         punches.sort(key=lambda x: x[0])
         punch_bits = []
+        labeled: list[tuple[datetime, str]] = []
         for i, (dt, direction, _row) in enumerate(punches):
             label = punch_direction_label(direction, i)
+            labeled.append((dt, label))
             punch_bits.append(f"{format_hhmm(dt)} ({label})")
             if latest_punch is None or dt > latest_punch:
                 latest_punch = dt
 
         first = punches[0][0]
         last = punches[-1][0]
+        # Out time = last real OUT only (never treat a final IN as Out).
+        last_out = None
+        for dt, label in reversed(labeled):
+            if label == "out":
+                last_out = dt
+                break
+        # Work duration = sum of completed In→Out sessions (open IN ignored).
+        worked = timedelta(0)
+        open_in: datetime | None = None
+        for dt, label in labeled:
+            if label == "in":
+                open_in = dt
+            elif label == "out" and open_in is not None:
+                worked += dt - open_in
+                open_in = None
+        work_secs = max(0, int(worked.total_seconds()))
+        work_hh = f"{work_secs // 3600:02d}:{(work_secs % 3600) // 60:02d}"
+
         name = str(
             punches[0][2].get("EmployeeName")
             or punches[0][2].get("employee_name")
@@ -227,54 +247,43 @@ def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "employee_name": name,
                 "attendance_date": day_key,
                 "a_in_time": format_hhmm(first),
-                "a_out_time": format_hhmm(last) if len(punches) > 1 else "",
-                "work_duration": duration_hhmm(first, last) if len(punches) > 1 else "",
+                "a_out_time": format_hhmm(last_out) if last_out else "",
+                "work_duration": work_hh if work_secs > 0 else "",
                 "punch_records": ", ".join(punch_bits),
                 "status": "Present" if punches else "",
                 "location": str(punches[0][2].get("Location") or ""),
                 "remark": "biomax-bridge",
-                "last_punch_time": latest_punch.isoformat(sep=" ") if latest_punch else "",
+                "last_punch_time": last.isoformat(sep=" "),
             }
         )
 
+    # Keep global latest punch for checkpoint (do not overwrite per-row last punch).
     records.sort(key=lambda r: (r["attendance_date"], r["employee_code"]))
     if latest_punch:
+        # Stash on every row only as transport metadata for checkpoint update.
         for row in records:
-            row["last_punch_time"] = latest_punch.isoformat(sep=" ")
+            row["_checkpoint_last_punch"] = latest_punch.isoformat(sep=" ")
     return records
 
 
-def fetch_biomax_records(cfg: dict, checkpoint: dict) -> list[dict[str, Any]]:
+def fetch_biomax_logs_range(cfg: dict, from_date, to_date) -> list[dict[str, Any]]:
+    """One Biomax GetDeviceLogs call for an inclusive date range."""
     api_url = (cfg.get("biomax_api_url") or "").strip().rstrip("?")
     api_key = (cfg.get("biomax_api_key") or "").strip()
     if not api_url or not api_key:
         logging.info("Biomax API URL/key not configured — skipping fetch")
         return []
 
-    lookback_days = max(1, int(cfg.get("lookback_days") or 2))
-    today = datetime.now().date()
-    from_date = today - timedelta(days=lookback_days)
-    to_date = today
-
-    # Resume from checkpoint day when available
-    last_punch = checkpoint.get("last_punch_time")
-    if last_punch:
-        try:
-            last_dt = parse_log_datetime(last_punch) or datetime.fromisoformat(str(last_punch))
-            from_date = min(from_date, last_dt.date())
-        except Exception:
-            pass
-
     params = {
         "APIKey": api_key,
-        "FromDate": from_date.isoformat(),
-        "ToDate": to_date.isoformat(),
+        "FromDate": from_date.isoformat() if hasattr(from_date, "isoformat") else str(from_date),
+        "ToDate": to_date.isoformat() if hasattr(to_date, "isoformat") else str(to_date),
     }
     if cfg.get("biomax_serial_number"):
         params["SerialNumber"] = cfg["biomax_serial_number"]
 
     logging.info("Fetching Biomax logs %s → %s", params["FromDate"], params["ToDate"])
-    resp = requests.get(api_url, params=params, timeout=90)
+    resp = requests.get(api_url, params=params, timeout=120)
     resp.raise_for_status()
 
     try:
@@ -303,36 +312,210 @@ def fetch_biomax_records(cfg: dict, checkpoint: dict) -> list[dict[str, Any]]:
         return []
 
     logging.info("Biomax returned %s punch log(s)", len(logs))
-    return aggregate_device_logs(logs)
+    return logs
+
+
+def fetch_biomax_records(cfg: dict, checkpoint: dict, *, force_from=None, force_to=None) -> list[dict[str, Any]]:
+    lookback_days = max(1, int(cfg.get("lookback_days") or 2))
+    chunk_days = max(1, int(cfg.get("chunk_days") or 7))
+    # Office is IST — do not use UTC midnight for "today".
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    except Exception:
+        today = datetime.now().date()
+
+    if force_from is not None:
+        from_date = force_from if hasattr(force_from, "year") else datetime.strptime(str(force_from)[:10], "%Y-%m-%d").date()
+    elif cfg.get("backfill_from_date"):
+        from_date = datetime.strptime(str(cfg["backfill_from_date"])[:10], "%Y-%m-%d").date()
+    else:
+        from_date = today - timedelta(days=lookback_days)
+
+    if force_to is not None:
+        to_date = force_to if hasattr(force_to, "year") else datetime.strptime(str(force_to)[:10], "%Y-%m-%d").date()
+    else:
+        # Biomax GetDeviceLogs often treats ToDate as end-exclusive / incomplete for
+        # the current day. Fetch through today+2 so today's punches always return.
+        to_date = today + timedelta(days=2)
+
+    # Normal live mode: also include checkpoint day so we don't miss late punches
+    if force_from is None and not cfg.get("backfill_from_date"):
+        last_punch = checkpoint.get("last_punch_time")
+        if last_punch:
+            try:
+                last_dt = parse_log_datetime(last_punch) or datetime.fromisoformat(str(last_punch))
+                from_date = min(from_date, last_dt.date())
+            except Exception:
+                pass
+
+    if from_date > to_date:
+        from_date, to_date = to_date, from_date
+
+    # Chunk long ranges — Biomax often truncates large windows
+    all_logs: list[dict[str, Any]] = []
+    cursor = from_date
+    while cursor <= to_date:
+        chunk_end = min(cursor + timedelta(days=chunk_days - 1), to_date)
+        chunk_logs = fetch_biomax_logs_range(cfg, cursor, chunk_end)
+        all_logs.extend(chunk_logs)
+        cursor = chunk_end + timedelta(days=1)
+        if cursor <= to_date:
+            time.sleep(0.5)
+
+    logging.info("Total raw punch logs across chunks: %s (today=%s, fetch to %s)", len(all_logs), today.isoformat(), to_date.isoformat())
+    records = aggregate_device_logs(all_logs)
+
+    # Push newest days first so latest-day data lands even if a later batch fails.
+    def _day_sort_key(row: dict) -> tuple:
+        try:
+            return datetime.strptime(row.get("attendance_date") or "", "%d-%b-%Y")
+        except Exception:
+            return datetime.min
+
+    records.sort(key=lambda r: (_day_sort_key(r), r.get("employee_code") or ""), reverse=True)
+    return records
 
 
 def push_to_workroom(cfg: dict, records: list[dict[str, Any]]) -> dict:
     url = cfg["workroom_url"]
     token = cfg["workroom_token"]
-    # Strip helper field before push
-    clean = []
-    for row in records:
-        item = dict(row)
-        item.pop("last_punch_time", None)
-        clean.append(item)
+    batch_size = max(50, int(cfg.get("push_batch_size") or 300))
 
-    resp = requests.post(
-        url,
-        headers={
-            "Content-Type": "application/json",
-            "X-Workroom-Token": token,
-        },
-        json={"records": clean, "checkpoint": datetime.now(timezone.utc).isoformat()},
-        timeout=120,
+    totals = {"received": 0, "inserted": 0, "updated": 0, "skipped": 0}
+    for i in range(0, len(records), batch_size):
+        batch = records[i : i + batch_size]
+        clean = []
+        for row in batch:
+            item = dict(row)
+            item.pop("last_punch_time", None)
+            item.pop("_checkpoint_last_punch", None)
+            clean.append(item)
+
+        resp = requests.post(
+            url,
+            headers={
+                "Content-Type": "application/json",
+                "X-Workroom-Token": token,
+            },
+            json={"records": clean, "checkpoint": datetime.now(timezone.utc).isoformat()},
+            timeout=180,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        for k in totals:
+            totals[k] += int(result.get(k) or 0)
+        logging.info(
+            "Pushed batch %s–%s / %s → inserted=%s updated=%s",
+            i + 1,
+            min(i + batch_size, len(records)),
+            len(records),
+            result.get("inserted"),
+            result.get("updated"),
+        )
+    return totals
+
+
+def run_fix_today(cfg: dict) -> None:
+    """Diagnose + force-push last few days including today (IST)."""
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    except Exception:
+        today = datetime.now().date()
+
+    from_date = today - timedelta(days=3)
+    to_date = today + timedelta(days=2)
+
+    logging.info("=== FIX TODAY ===")
+    logging.info("PC thinks today (IST) = %s", today.isoformat())
+    logging.info("Will fetch Biomax %s → %s", from_date.isoformat(), to_date.isoformat())
+
+    # 1) Workroom reachable?
+    health_url = (cfg.get("workroom_health_url") or "").strip()
+    if health_url:
+        try:
+            health = requests.get(health_url, timeout=20)
+            logging.info("Workroom health: HTTP %s", health.status_code)
+            if not health.ok:
+                logging.error("Workroom not OK — fix DNS/internet first (open https://t2gworkroom.com)")
+                return
+        except Exception as exc:
+            logging.error("Cannot reach Workroom (%s). Fix DNS/internet, then retry.", exc)
+            return
+    else:
+        logging.warning("No workroom_health_url in config")
+
+    # 2) Biomax raw for today window
+    try:
+        raw = fetch_biomax_logs_range(cfg, from_date, to_date)
+        logging.info("Biomax raw punches in window: %s", len(raw))
+        if raw:
+            sample = raw[0] if isinstance(raw[0], dict) else {}
+            logging.info(
+                "Sample punch keys=%s LogDate=%s Emp=%s",
+                sorted(sample.keys())[:12] if isinstance(sample, dict) else type(sample),
+                sample.get("LogDate") or sample.get("log_date") or sample.get("LogDateTime"),
+                sample.get("EmployeeCode") or sample.get("EmpCode"),
+            )
+        else:
+            logging.error(
+                "Biomax returned ZERO punches for %s→%s. "
+                "Open SmartOffice and sync device logs for TODAY, then run fix_today.bat again.",
+                from_date,
+                to_date,
+            )
+            return
+    except Exception as exc:
+        logging.exception("Biomax fetch failed: %s", exc)
+        logging.error("Is SmartOffice running at http://127.0.0.1:82 ?")
+        return
+
+    # 3) Aggregate + show dates
+    records = aggregate_device_logs(raw)
+    by_day: dict[str, int] = defaultdict(int)
+    for row in records:
+        by_day[row.get("attendance_date") or "?"] += 1
+    logging.info(
+        "Employee-day rows: %s | dates: %s",
+        len(records),
+        ", ".join(f"{d}={by_day[d]}" for d in sorted(by_day.keys())),
     )
-    resp.raise_for_status()
-    return resp.json()
+    today_key = format_workroom_date(datetime(today.year, today.month, today.day))
+    if today_key not in by_day:
+        logging.error(
+            "NO ROWS FOR TODAY (%s). Biomax has punches but none dated today. "
+            "Check office PC date/time and SmartOffice device download.",
+            today_key,
+        )
+    else:
+        logging.info("TODAY (%s) has %s employee row(s) — pushing to Workroom…", today_key, by_day[today_key])
+
+    if not records:
+        return
+
+    result = push_to_workroom(cfg, records)
+    logging.info(
+        "FIX TODAY done — received=%s inserted=%s updated=%s skipped=%s",
+        result.get("received"),
+        result.get("inserted"),
+        result.get("updated"),
+        result.get("skipped"),
+    )
+    print("")
+    print("Done. Check https://t2gworkroom.com/admin/biometric for", today_key)
+    if today_key not in by_day:
+        print("WARNING: Biomax had no punches dated", today_key)
+        print("Fix SmartOffice device sync first, then run fix_today.bat again.")
 
 
 def run_once(cfg: dict) -> None:
     cp_name = cfg.get("checkpoint_file") or "checkpoint.json"
     checkpoint = load_json(ROOT / cp_name, {})
-    records = fetch_biomax_records(cfg, checkpoint)
+    # Live mode ignores one-shot backfill_from_date unless explicitly left set
+    live_cfg = dict(cfg)
+    live_cfg.pop("backfill_from_date", None)
+    records = fetch_biomax_records(live_cfg, checkpoint)
     if not records:
         logging.info("No Biomax attendance rows to sync")
         return
@@ -347,7 +530,61 @@ def run_once(cfg: dict) -> None:
     )
 
     checkpoint["last_run"] = datetime.now(timezone.utc).isoformat()
-    last_punch = records[-1].get("last_punch_time") if records else None
+    last_punch = None
+    for row in records:
+        last_punch = row.get("_checkpoint_last_punch") or row.get("last_punch_time") or last_punch
+    if last_punch:
+        checkpoint["last_punch_time"] = last_punch
+    save_json(ROOT / cp_name, checkpoint)
+
+
+def run_backfill(cfg: dict, from_date_str: str | None = None) -> None:
+    """One-shot: pull FromDate → today in weekly chunks and push everything."""
+    from_str = from_date_str or cfg.get("backfill_from_date") or "2025-07-01"
+    from_date = datetime.strptime(str(from_str)[:10], "%Y-%m-%d").date()
+    to_date = datetime.now().date()
+    logging.info("BACKFILL starting %s → %s (chunked)", from_date, to_date)
+
+    records = fetch_biomax_records(cfg, {}, force_from=from_date, force_to=to_date)
+    if not records:
+        logging.warning(
+            "Backfill got 0 rows. Open Biomax API in browser for this range — "
+            "if empty, devices are not downloading into SmartOffice."
+        )
+        return
+
+    # Show which dates we actually got
+    by_day: dict[str, int] = defaultdict(int)
+    for row in records:
+        by_day[row["attendance_date"]] += 1
+    logging.info(
+        "Backfill ready to push %s employee-days. Date span: %s … %s (%s distinct days)",
+        len(records),
+        min(by_day.keys()) if by_day else "-",
+        max(by_day.keys()) if by_day else "-",
+        len(by_day),
+    )
+
+    result = push_to_workroom(cfg, records)
+    logging.info(
+        "BACKFILL done — received=%s inserted=%s updated=%s skipped=%s",
+        result.get("received"),
+        result.get("inserted"),
+        result.get("updated"),
+        result.get("skipped"),
+    )
+
+    cp_name = cfg.get("checkpoint_file") or "checkpoint.json"
+    checkpoint = load_json(ROOT / cp_name, {})
+    checkpoint["last_run"] = datetime.now(timezone.utc).isoformat()
+    checkpoint["last_backfill"] = {
+        "from": from_date.isoformat(),
+        "to": to_date.isoformat(),
+        "rows": len(records),
+    }
+    last_punch = None
+    for row in records:
+        last_punch = row.get("_checkpoint_last_punch") or row.get("last_punch_time") or last_punch
     if last_punch:
         checkpoint["last_punch_time"] = last_punch
     save_json(ROOT / cp_name, checkpoint)
@@ -360,6 +597,18 @@ def main() -> None:
 
     cfg = load_json(CONFIG_PATH)
     setup_logging(cfg.get("log_file") or "logs/bridge.log")
+
+    # python bridge.py --fix-today   (diagnose + force push last few days)
+    if len(sys.argv) >= 2 and sys.argv[1] in ("--fix-today", "fix-today", "--today", "today"):
+        run_fix_today(cfg)
+        return
+
+    # python bridge.py --backfill [YYYY-MM-DD]
+    if len(sys.argv) >= 2 and sys.argv[1] in ("--backfill", "backfill"):
+        from_arg = sys.argv[2] if len(sys.argv) >= 3 else None
+        run_backfill(cfg, from_arg)
+        return
+
     interval = max(60, int(cfg.get("poll_interval_seconds") or 120))
 
     logging.info("T2G biometric bridge started — interval %ss", interval)

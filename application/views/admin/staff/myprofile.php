@@ -97,6 +97,11 @@
                                     <i class="fa fa-pencil-square"></i>
                                 </a>
                                 <?php } ?>
+                                <?php if ($staff_p->staffid == get_staff_user_id() || is_admin()) { ?>
+                                <button type="button" class="btn btn-info btn-icon open-staff-suggestion" data-toggle="tooltip" title="<?php echo _l('suggestion_box'); ?> Box" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;">
+                                    <i class="fa fa-lightbulb-o"></i>
+                                </button>
+                                <?php } ?>
                             </div>
                         </div>
 

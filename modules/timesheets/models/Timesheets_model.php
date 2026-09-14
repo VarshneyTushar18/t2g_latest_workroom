@@ -3485,7 +3485,7 @@ class timesheets_model extends app_model
 		if ($days !== '') {
 			$message .= '<p><b>Days:</b> ' . html_escape($days) . '</p>';
 		}
-		$message .= '<p><b>Note:</b> Leave approval is handled by HR / Admin / Sarabjeet Sir. You do not need to approve this request.</p>';
+		$message .= '<p><b>Note:</b> This is for your information. Final leave approval is done by HR / Super HR / Sarabjeet Singh (or Super Admin Harpreet for HR &amp; Accounts). Managers do not approve leave.</p>';
 		$message .= '<p><a href="' . html_escape($link) . '">View leave application</a></p>';
 		$message .= '<p><em>Kind Regards,<br>Tech2globe Workroom</em></p>';
 
@@ -3606,6 +3606,55 @@ class timesheets_model extends app_model
 	}
 
 	/**
+	 * Write leave approve/reject to Utilities → Activity Log (who decided, for whom).
+	 */
+	public function log_leave_decision_activity($leave_id, $approved, $comment = '', $decided_by = 0)
+	{
+		$leave_id = (int) $leave_id;
+		if ($leave_id <= 0) {
+			return;
+		}
+
+		$leave = $this->get_request_leave($leave_id);
+		if (!$leave) {
+			return;
+		}
+
+		$decided_by = (int) ($decided_by ?: get_staff_user_id());
+		$decider_name = $decided_by > 0 ? get_staff_full_name($decided_by) : 'HR / Super Admin';
+		// Never show informal "Sir" label in logs / UI.
+		$decider_name = preg_replace('/\s+sir\b/i', '', (string) $decider_name);
+		$decider_name = trim(preg_replace('/\s+/', ' ', $decider_name));
+		if (strcasecmp($decider_name, 'Sarabjeet') === 0) {
+			$decider_name = 'Sarabjeet Singh';
+		}
+
+		$applicant_name = get_staff_full_name((int) $leave->staff_id);
+		$subject = trim((string) ($leave->subject ?? 'Leave application'));
+		$from = !empty($leave->start_time) ? date('d-M-Y', strtotime($leave->start_time)) : '-';
+		$to = !empty($leave->end_time) ? date('d-M-Y', strtotime($leave->end_time)) : $from;
+		$days = (string) ($leave->number_of_leaving_day ?? $leave->number_of_days ?? '');
+		$action = $approved ? 'APPROVED' : 'REJECTED';
+		$comment = trim((string) $comment);
+
+		$desc = 'Leave ' . $action . ' by ' . $decider_name
+			. ' [Leave Id: ' . $leave_id
+			. ', Staff: ' . $applicant_name
+			. ', Subject: ' . $subject
+			. ', From: ' . $from
+			. ', To: ' . $to;
+		if ($days !== '' && (float) $days > 0) {
+			$desc .= ', Days: ' . $days;
+		}
+		$desc .= ']';
+		if ($comment !== '') {
+			$desc .= ' Comment: ' . $comment;
+		}
+
+		log_activity($desc);
+	}
+
+	/**
 	 * Email + in-app notify the employee when leave is approved or rejected.
 	 *
 	 * @param int $leave_id
@@ -3619,6 +3668,9 @@ class timesheets_model extends app_model
 		if ($leave_id <= 0) {
 			return false;
 		}
+
+		$decided_by = (int) ($decided_by ?: get_staff_user_id());
+		$this->log_leave_decision_activity($leave_id, $approved, $comment, $decided_by);
 
 		$leave = $this->get_request_leave($leave_id);
 		if (!$leave || empty($leave->staff_id)) {
@@ -3635,8 +3687,12 @@ class timesheets_model extends app_model
 			return false;
 		}
 
-		$decided_by = (int) ($decided_by ?: get_staff_user_id());
 		$decider_name = $decided_by > 0 ? get_staff_full_name($decided_by) : 'HR / Admin';
+		$decider_name = preg_replace('/\s+sir\b/i', '', (string) $decider_name);
+		$decider_name = trim(preg_replace('/\s+/', ' ', $decider_name));
+		if (strcasecmp($decider_name, 'Sarabjeet') === 0) {
+			$decider_name = 'Sarabjeet Singh';
+		}
 		$employee_name = trim($employee->firstname . ' ' . $employee->lastname);
 		$subject_leave = trim((string) ($leave->subject ?? 'Leave application'));
 		$from = !empty($leave->start_time) ? _d(date('Y-m-d', strtotime($leave->start_time))) : '-';
@@ -4196,59 +4252,56 @@ class timesheets_model extends app_model
 
 					$additional_timesheet = $this->db->get(db_prefix() . 'timesheets_additional_timesheet')->row();
 
+					// Always sync approved regularization into timesheet (even if month is latched).
+					// Previously latched months were skipped → approved day still showed Absent until manual fix.
+					$data_addts = $this->get_additional_timesheets($rel_id);
 
-
-					$check_latch_timesheet = $this->timesheets_model->check_latch_timesheet(date('m-Y', strtotime($additional_timesheet->additional_day)));
-
-					if (!$check_latch_timesheet) {
-
-						$data_addts = $this->get_additional_timesheets($rel_id);
-
-						if ($data_addts) {
-							$day = date('Y-m-d', strtotime($data_addts->additional_day));
-							$value = (float) ($data_addts->timekeeping_value ?? 0);
-							if ($value <= 0 && !empty($data_addts->time_in) && !empty($data_addts->time_out)) {
-								$in_ts = strtotime('1970-01-01 ' . substr($data_addts->time_in, 0, 8));
-								$out_ts = strtotime('1970-01-01 ' . substr($data_addts->time_out, 0, 8));
-								if ($out_ts > $in_ts) {
-									$value = ($out_ts - $in_ts) / 3600;
-								}
+					if ($data_addts) {
+						$day = date('Y-m-d', strtotime($data_addts->additional_day));
+						$is_latched = $this->check_latch_timesheet(date('m-Y', strtotime($day)));
+						$value = (float) ($data_addts->timekeeping_value ?? 0);
+						if ($value <= 0 && !empty($data_addts->time_in) && !empty($data_addts->time_out)) {
+							$in_ts = strtotime('1970-01-01 ' . substr($data_addts->time_in, 0, 8));
+							$out_ts = strtotime('1970-01-01 ' . substr($data_addts->time_out, 0, 8));
+							if ($out_ts > $in_ts) {
+								$value = ($out_ts - $in_ts) / 3600;
 							}
-							if ($value <= 0) {
-								$value = 9;
-							}
+						}
+						if ($value <= 0) {
+							$value = 9;
+						}
 
-							// Replace absent / incomplete marks with Present for that day.
-							$this->db->where('staff_id', (int) $data_addts->creator);
-							$this->db->where('date_work', $day);
-							$this->db->where_in('type', ['AB', 'A', 'HD', 'W', 'P', 'p']);
-							$existing = $this->db->get(db_prefix() . 'timesheets_timesheet')->result_array();
-							$updated = false;
-							foreach ($existing as $row) {
-								if (!$updated && strtoupper((string) $row['type']) === 'P') {
-									$this->db->where('id', (int) $row['id']);
-									$this->db->update(db_prefix() . 'timesheets_timesheet', [
-										'value' => $value,
-										'relate_id' => $rel_id,
-										'relate_type' => 'additional_timesheet',
-										'type' => 'P',
-									]);
-									$updated = true;
-								} else {
-									$this->db->where('id', (int) $row['id'])->delete(db_prefix() . 'timesheets_timesheet');
-								}
+						$ts_payload = [
+							'value' => $value,
+							'relate_id' => $rel_id,
+							'relate_type' => 'additional_timesheet',
+							'type' => 'P',
+						];
+						if ($is_latched) {
+							$ts_payload['latch'] = 1;
+						}
+
+						// Replace absent / incomplete marks with Present for that day.
+						$this->db->where('staff_id', (int) $data_addts->creator);
+						$this->db->where('date_work', $day);
+						$this->db->where_in('type', ['AB', 'A', 'HD', 'W', 'P', 'p']);
+						$existing = $this->db->get(db_prefix() . 'timesheets_timesheet')->result_array();
+						$updated = false;
+						foreach ($existing as $row) {
+							if (!$updated && strtoupper((string) $row['type']) === 'P') {
+								$this->db->where('id', (int) $row['id']);
+								$this->db->update(db_prefix() . 'timesheets_timesheet', $ts_payload);
+								$updated = true;
+							} else {
+								$this->db->where('id', (int) $row['id'])->delete(db_prefix() . 'timesheets_timesheet');
 							}
-							if (!$updated) {
-								$this->db->insert(db_prefix() . 'timesheets_timesheet', [
-									'staff_id' => $data_addts->creator,
-									'date_work' => $day,
-									'value' => $value,
-									'add_from' => get_staff_user_id() ?: $data_addts->creator,
-									'relate_id' => $rel_id,
-									'relate_type' => 'additional_timesheet',
-									'type' => 'P',
-								]);
-							}
+						}
+						if (!$updated) {
+							$this->db->insert(db_prefix() . 'timesheets_timesheet', array_merge([
+								'staff_id' => $data_addts->creator,
+								'date_work' => $day,
+								'add_from' => get_staff_user_id() ?: $data_addts->creator,
+							], $ts_payload));
 						}
 					}
 				}
@@ -4355,10 +4408,19 @@ public function add_requisition_ajax($data)
 			//unset($data['type_of_leave']);
 
 		}
-		$data['carry_forward'] = $_POST['carry_forward'];
-		$data['leave_balance'] = $_POST['leave_balance'];
-		$data['type_of_leave'] = $_POST['type_of_leave'];
-		$type_of_leave = $data['type_of_leave'];
+		// Keep server-computed values from the controller (remaining after deduct).
+		// Never overwrite from POST — form fields hold pre-deduct balance / original leave type.
+		if (isset($carry_forward)) {
+			$data['carry_forward'] = $carry_forward;
+		}
+		if (isset($leave_balance)) {
+			$data['leave_balance'] = $leave_balance;
+		}
+		if (!isset($type_of_leave) || $type_of_leave === '') {
+			$type_of_leave = $data['type_of_leave'] ?? '';
+		} else {
+			$data['type_of_leave'] = $type_of_leave;
+		}
 		$start_time = $data['end_time']; // or your date as well
 		$start_t = explode(' ', $start_time);
 		$start_tt = $start_t[0];
@@ -4642,26 +4704,16 @@ public function add_requisition_ajax($data)
 			$data['status'] = 0;
 			$this->db->insert(db_prefix() . 'timesheets_requisition_leave', $data);
 			$insert_id = $this->db->insert_id();
-			//$data['number_of_days'] = $number_day_off;
-			//print_r($data);die;
-			$start_datetime = new DateTime($data['start_time']);
-			$end_datetime = new DateTime($data['end_time']);
-
-			// Loop through each date between start_time and end_time
-			for ($date_timesheet = $start_datetime; $date_timesheet <= $end_datetime; $date_timesheet->modify('+1 day')) {
-				// Prepare the data to insert into timesheet table
-				$timesheet_data = array(
-					'staff_id' => $staff_quit_job,
-					'type' => 'PL',
-					'date_work' => $date_timesheet->format('Y-m-d'), // Insert date in 'Y-m-d' format
-					'add_from' => $staff_quit_job
-				);
-
-
-
-				// Insert into timesheet table
-				$this->db->insert('tbltimesheets_timesheet', $timesheet_data);
-			}
+			// Sync attendance sheet for leave days (current + previous month, replaces AB/P).
+			$ts_type = $this->resolve_leave_timesheet_type('', $data['type_of_leave'] ?? 'earned-leave');
+			$this->upsert_leave_days_to_timesheet(
+				(int) $staff_quit_job,
+				date('Y-m-d', strtotime($data['start_time'])),
+				date('Y-m-d', strtotime($data['end_time'])),
+				$ts_type,
+				(int) $insert_id,
+				(float) $data['number_of_leaving_day']
+			);
 		}
 		$check_proccess = $this->get_approve_setting($type, true, $staff_quit_job);
 
@@ -8341,10 +8393,23 @@ public function add_requisition_ajax($data)
 	 */
 	public function ensure_additional_timesheet_rejection_column()
 	{
+		static $checked = false;
+		if ($checked) {
+			return;
+		}
+		$checked = true;
+
+		// Persist across requests — field_exists hits information_schema every page otherwise.
+		$opt_key = 'ts_addl_has_rejection_comment';
+		if ((string) get_option($opt_key) === '1') {
+			return;
+		}
+
 		$tbl = db_prefix() . 'timesheets_additional_timesheet';
 		if (!$this->db->field_exists('rejection_comment', $tbl)) {
 			$this->db->query('ALTER TABLE `' . $tbl . '` ADD COLUMN `rejection_comment` TEXT NULL');
 		}
+		update_option($opt_key, '1');
 	}
 
 	/**
@@ -11824,8 +11889,7 @@ public function add_requisition_ajax($data)
 	public function add_check_in_out_value_to_timesheet($staff_id, $date)
 	{
 
-		//		$data_check_in_out = $this->get_list_check_in_out($date, $staff_id);
-		$data_check_in_out = $this->get_latest_check_in_out();
+		$data_check_in_out = $this->get_list_check_in_out($date, $staff_id);
 
 		$check_in_date = '';
 
@@ -11835,63 +11899,39 @@ public function add_requisition_ajax($data)
 
 		$next_key = '';
 
-		//		foreach ($data_check_in_out as $key => $value) {
-		//
-		//			if ($value['type_check'] == 2) {
-		//
-		//				$check_out_date = $value['date'];
-		//
-		//				if ($next_key == $key) {
-		//
-		//					if ($check_out_date != '' && $check_in_date != '') {
-		//
-		//						$data_hour = $this->calculate_attendance_timesheets($staff_id, $check_in_date, $check_out_date);
-		//
-		//						$total_work_hours += $data_hour->working_hour;
-		//					}
-		//				}
-		//			}
-		//
-		//			if ($value['type_check'] == 1) {
-		//
-		//				$check_in_date = $value['date'];
-		//
-		//				$next_key = $key + 1;
-		//			}
-		//		}
 		foreach ($data_check_in_out as $key => $value) {
 
-			if ($value['type_check'] == 2) {
+			if ((int) $value['type_check'] === 2) {
 
 				$check_out_date = $value['date'];
-				$next_key = $key + 1;
-			}
 
-			if ($value['type_check'] == 1) {
-
-				$check_in_date = $value['date'];
-
-				if ($next_key == $key) {
+				if ($next_key !== '' && (int) $next_key === (int) $key) {
 
 					if ($check_out_date != '' && $check_in_date != '') {
 
-						//                        $data_hour = $this->calculate_attendance_timesheets($staff_id, $check_in_date, $check_out_date);
 						$data_hour = $this->get_hour($check_in_date, $check_out_date);
 
 						$total_work_hours += $data_hour;
 					}
 				}
 			}
+
+			if ((int) $value['type_check'] === 1) {
+
+				$check_in_date = $value['date'];
+
+				$next_key = $key + 1;
+			}
 		}
 
-		// $data_ts = $this->get_ts_staff($staff_id, $date, 'W');
 		$data_ts = $this->get_ts_staff($staff_id, $date, 'P');
 
-		// print_r($data_ts); die;
+		$date_work = date('Y-m-d', strtotime($date));
+		if (!$date_work || $date_work === '1970-01-01') {
+			$date_work = $date;
+		}
 
-		// if ($total_work_hours > 0) {
 		if ($total_work_hours >= 9) {
-
 			if ($data_ts) {
 
 				$this->db->where('id', $data_ts->id);
@@ -11914,8 +11954,8 @@ public function add_requisition_ajax($data)
 
 				$data_insert['staff_id'] = $staff_id;
 
-				// changing from $data to $check_in_date so that it will always add the working date when staff has checked in
-				$data_insert['date_work'] = $check_in_date;
+				// Prefer the attendance date being processed (not a raw punch datetime).
+				$data_insert['date_work'] = $date_work;
 
 				// $data_insert['type'] = 'W';
 				$data_insert['type'] = 'P';
@@ -11957,7 +11997,7 @@ public function add_requisition_ajax($data)
 
 				$data_insert['staff_id'] = $staff_id;
 
-				$data_insert['date_work'] = $check_in_date;
+				$data_insert['date_work'] = $date_work;
 
 				// $data_insert['type'] = 'W';
 				$data_insert['type'] = 'HD';
@@ -11970,15 +12010,7 @@ public function add_requisition_ajax($data)
 				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
 
 				$insert_id = $this->db->insert_id();
-
-				$this->db->insert('tbltimesheets_requisition_leave', [
-					'staff_id' => get_staff_user_id(),
-					'subject' => 'Half day',
-					'start_time' => $check_in_date,
-					'end_time' => $check_out_date,
-					'rel_type' => 1,
-					'number_of_leaving_day' => 0.5
-				]);
+				// Attendance short-day only — do NOT invent leave applications.
 				if ($insert_id) {
 
 					return true;
@@ -12007,7 +12039,7 @@ public function add_requisition_ajax($data)
 
 				$data_insert['staff_id'] = $staff_id;
 
-				$data_insert['date_work'] = $check_in_date;
+				$data_insert['date_work'] = $date_work;
 
 				// $data_insert['type'] = 'W';
 				$data_insert['type'] = 'AB';
@@ -12019,15 +12051,7 @@ public function add_requisition_ajax($data)
 
 				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
 
-				$this->db->insert('tbltimesheets_requisition_leave', [
-					'staff_id' => get_staff_user_id(),
-					'subject' => 'Leave',
-					'start_time' => $check_in_date,
-					'end_time' => $check_out_date,
-					'rel_type' => 1,
-					'number_of_leaving_day' => 1
-				]);
-
+				// Attendance code only — do NOT invent leave applications against EL.
 				$insert_id = $this->db->insert_id();
 
 				if ($insert_id) {
@@ -15601,13 +15625,26 @@ public function add_requisition_ajax($data)
 			$granted = 0;
 			$balance = 0;
 
+			$monthly_earn = 0.0;
 			if ($slug === 'loss-of-pay') {
+				// Same month scope as EL — do not show year LOP as if taken again this month.
+				$lop_keys = $slug_keys['loss-of-pay'];
+				$this->db->select('COALESCE(SUM(number_of_leaving_day), 0) AS consumed', false)
+					->from(db_prefix() . 'timesheets_requisition_leave')
+					->where('staff_id', $staff_id)
+					->where_in('type_of_leave', $lop_keys)
+					->where('status', 1)
+					->where('MONTH(start_time)', $month, false)
+					->where('YEAR(start_time)', $year, false);
+				$row_lop = $this->db->get()->row();
+				$consumed = $row_lop ? (float) $row_lop->consumed : 0;
 				$granted = 0;
 				$balance = round(0 - $consumed, 2);
 			} elseif ($slug === 'earned-leave') {
-				// One formula everywhere: carry + monthly rate (overrides) - this month consumed.
-				$granted = round((float) $earned_rate, 2);
+				// Had (carry + this month earn) − taken = remain. Next month = remain + that month's earn.
+				$monthly_earn = round((float) $earned_rate, 2);
 				$consumed = $month_el_consumed;
+				$granted = round((float) $earned_carry + $monthly_earn, 2); // "had" this month
 				$balance = $this->staff_model->compute_monthly_leave_balance($earned_carry, $earned_rate, $month_el_consumed);
 			} elseif ($day_off && $day_off->total !== null && $day_off->total !== '') {
 				$granted = (float) $day_off->total;
@@ -15635,6 +15672,7 @@ public function add_requisition_ajax($data)
 				'consumed' => $consumed,
 				'progress' => $progress,
 				'carry_forward' => ($slug === 'earned-leave') ? round((float) $earned_carry, 2) : 0,
+				'monthly_earn' => ($slug === 'earned-leave') ? $monthly_earn : 0,
 			];
 		}
 
@@ -15696,6 +15734,7 @@ public function add_requisition_ajax($data)
 			'balance' => (float) ($match['balance'] ?? 0),
 			'carry_forward' => (float) ($match['carry_forward'] ?? 0),
 			'granted' => (float) ($match['granted'] ?? 0),
+			'monthly_earn' => (float) ($match['monthly_earn'] ?? 0),
 			'consumed' => (float) ($match['consumed'] ?? 0),
 		];
 	}
@@ -15712,7 +15751,7 @@ public function add_requisition_ajax($data)
 		$keys = [$slug];
 
 		$legacy_map = [
-			'earned-leave' => ['8', 'Leave', 'annual_leave'],
+			'earned-leave' => ['8', 'Leave', 'annual_leave', 'planned_leaves'],
 			'loss-of-pay' => ['loss-of-pay', 'LOP'],
 			'comp-off' => ['comp-off'],
 			'work-from-home' => ['work-from-home', 'WFH'],
@@ -15800,15 +15839,22 @@ public function add_requisition_ajax($data)
 		$doj = $staff_info->doj ?? null;
 		$current_month = (int) date('m');
 		$current_year = (int) date('Y');
-		$through_month = $display_month > 0
-			? $display_month
-			: (($year === $current_year) ? $current_month : (($year < $current_year) ? 12 : 0));
+		// Never show next/future month leave given — cap at today for the current year.
+		if ($year > $current_year) {
+			$through_month = 0;
+		} elseif ($year === $current_year) {
+			$requested = $display_month > 0 ? $display_month : $current_month;
+			$through_month = min($requested, $current_month);
+		} else {
+			$through_month = $display_month > 0 ? $display_month : 12;
+		}
 		$type_keys = $this->get_leave_type_storage_keys($slug);
 
 		$opening_balance = 0;
 		$granted = $card ? (float) $card['granted'] : 0;
 		$availed = 0;
 		$available = $card ? (float) $card['balance'] : 0;
+		$monthly_earn_rate = $card ? (float) ($card['monthly_earn'] ?? 0) : 0;
 
 		$monthly_consumed = $this->db->query(
 			'SELECT MONTH(start_time) AS m, COALESCE(SUM(number_of_leaving_day), 0) AS consumed
@@ -15823,35 +15869,33 @@ public function add_requisition_ajax($data)
 			$consumed_by_month[(int) $row['m']] = (float) $row['consumed'];
 		}
 
-		// Always year-to-date through $through_month so summary / chart / history stay aligned.
-		foreach ($consumed_by_month as $m => $val) {
-			if ((int) $m <= $through_month) {
-				$availed += (float) $val;
-			}
-		}
-		$availed = round($availed, 2);
-
 		if ($slug === 'earned-leave') {
-			$opening_balance = (float) $this->staff_model->carryForward($staff_id, $doj, 1, $year);
-			$granted = 0;
-			for ($m = 1; $m <= max(0, $through_month); $m++) {
-				if (!$this->staff_employed_in_month($doj, $m, $year)) {
-					continue;
-				}
-				$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $m, $year);
+			// Month-scoped summary: opening (had from prior close) + this month earn − taken = remain.
+			$opening_balance = $through_month > 0
+				? (float) $this->staff_model->carryForward($staff_id, $doj, $through_month, $year)
+				: 0;
+			$month_rate = 0.0;
+			if ($through_month > 0 && $this->staff_employed_in_month($doj, $through_month, $year)) {
+				$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $through_month, $year);
 				$month_rate = isset($overrides[$staff_id])
 					? (float) $overrides[$staff_id]
-					: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $m, $year);
-				$granted += $month_rate;
+					: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $through_month, $year);
 			}
-			$granted = round($granted, 2);
+			$granted = round($month_rate, 2);
+			$monthly_earn_rate = $granted;
+			$availed = round((float) ($consumed_by_month[$through_month] ?? 0), 2);
 			$available = $through_month > 0
 				? (float) $this->staff_model->monthlyLeaveBalance($staff_id, $doj, $through_month, $year)
 				: 0;
-			if ($available == 0) {
-				$available = round($opening_balance + $granted - $availed, 2);
-			}
+			// Force proper maths: remain = opening + granted − taken (same as card "had − taken").
+			$available = round($opening_balance + $granted - $availed, 2);
 		} else {
+			foreach ($consumed_by_month as $m => $val) {
+				if ((int) $m <= $through_month) {
+					$availed += (float) $val;
+				}
+			}
+			$availed = round($availed, 2);
 			$day_off = $this->db->where('staffid', $staff_id)->where('year', $year)->where('type_of_leave', $slug)->get(db_prefix() . 'timesheets_day_off')->row();
 			if ($day_off && $day_off->total !== null && $day_off->total !== '') {
 				$granted = (float) $day_off->total;
@@ -15862,28 +15906,39 @@ public function add_requisition_ajax($data)
 		$lapsed = round(max(0, $opening_balance + $granted - $availed - $available), 2);
 
 		$monthly = [];
-		$running_balance = $opening_balance;
+		$year_opening = $slug === 'earned-leave'
+			? (float) $this->staff_model->carryForward($staff_id, $doj, 1, $year)
+			: 0;
+		$running_balance = $year_opening;
 		$month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 		for ($m = 1; $m <= 12; $m++) {
 			$month_granted = 0;
 			$consumed = 0;
 			$balance_end = null;
+			$opening_m = null;
 			$is_elapsed = ($m <= $through_month);
 
 			if ($is_elapsed) {
 				$consumed = $consumed_by_month[$m] ?? 0;
 				if ($slug === 'earned-leave' && $this->staff_employed_in_month($doj, $m, $year)) {
+					$opening_m = $running_balance;
 					$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $m, $year);
 					$month_granted = isset($overrides[$staff_id])
 						? (float) $overrides[$staff_id]
 						: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $m, $year);
-					$running_balance = round($running_balance + $month_granted - $consumed, 2);
+					// closing = opening + granted − consumed
+					$running_balance = round($opening_m + $month_granted - $consumed, 2);
+					$balance_end = $running_balance;
+				} elseif ($slug === 'earned-leave') {
+					$opening_m = $running_balance;
 					$balance_end = $running_balance;
 				} elseif ($slug !== 'earned-leave' && $m === 1 && $granted > 0) {
+					$opening_m = 0;
 					$month_granted = $granted;
 					$running_balance = round($granted - $consumed, 2);
 					$balance_end = $running_balance;
 				} elseif ($slug !== 'earned-leave') {
+					$opening_m = $running_balance;
 					$running_balance = round($running_balance - $consumed, 2);
 					$balance_end = $running_balance;
 				}
@@ -15893,6 +15948,7 @@ public function add_requisition_ajax($data)
 				'month' => $m,
 				'label' => $month_names[$m - 1] . ' ' . substr((string) $year, -2),
 				'full_label' => date('F Y', mktime(0, 0, 0, $m, 1, $year)),
+				'opening' => $opening_m !== null ? round($opening_m, 2) : null,
 				'granted' => round($month_granted, 2),
 				'consumed' => round($consumed, 2),
 				'balance' => $balance_end,
@@ -15964,6 +16020,8 @@ public function add_requisition_ajax($data)
 				'available_balance' => round($available, 2),
 				'opening_balance' => round($opening_balance, 2),
 				'granted' => round($granted, 2),
+				'monthly_earn' => round($monthly_earn_rate, 2),
+				'had' => round($opening_balance + $granted, 2),
 				'availed' => round($availed, 2),
 				'lapsed' => $lapsed,
 			],
@@ -17024,178 +17082,157 @@ public function add_requisition_ajax($data)
 
 		$requisition_leave = $this->db->get(db_prefix() . 'timesheets_requisition_leave')->row();
 
-		$st = $requisition_leave->start_time;
-
-		$et = $requisition_leave->end_time;
-
-		$staffid = $requisition_leave->staff_id;
-
-		if ($staffid == '') {
-
-			$staff_id = get_staff_user_id();
+		if (!$requisition_leave) {
+			return false;
 		}
 
-		$number_of_day = $requisition_leave->number_of_leaving_day;
+		$staffid = (int) ($requisition_leave->staff_id ?: get_staff_user_id());
+		$number_of_day = (float) $requisition_leave->number_of_leaving_day;
+		$type_code = $this->resolve_leave_timesheet_type($type, $requisition_leave->type_of_leave ?? '');
 
-		if ($requisition_leave->start_time != '' && $requisition_leave->end_time != '') {
+		if ($requisition_leave->start_time == '' || $requisition_leave->end_time == '') {
+			return false;
+		}
 
-			$start_time = date('Y-m-d', strtotime($requisition_leave->start_time));
+		$start_time = date('Y-m-d', strtotime($requisition_leave->start_time));
+		$end_time = date('Y-m-d', strtotime($requisition_leave->end_time));
 
-			$end_time = date('Y-m-d', strtotime($requisition_leave->end_time));
+		return $this->upsert_leave_days_to_timesheet(
+			$staffid,
+			$start_time,
+			$end_time,
+			$type_code,
+			(int) $rel_id,
+			$number_of_day
+		);
+	}
 
-			$list_date = $this->get_list_date($start_time, $end_time);
+	/**
+	 * Map leave slug / approve type to attendance sheet code.
+	 */
+	public function resolve_leave_timesheet_type($type, $type_of_leave = '')
+	{
+		$type = strtolower(trim((string) $type));
+		$slug = strtolower(trim((string) $type_of_leave));
+		$map = [
+			'earned-leave' => 'EL',
+			'loss-of-pay' => 'LOP',
+			'leave' => 'AL',
+			'al' => 'AL',
+			'el' => 'EL',
+			'pl' => 'PL',
+			'lop' => 'LOP',
+			'sick_leave' => 'SL',
+			'maternity_leave' => 'ML',
+		];
+		if (isset($map[$slug])) {
+			return $map[$slug];
+		}
+		if (isset($map[$type])) {
+			return $map[$type];
+		}
+		if ($type !== '' && strlen($type) <= 4) {
+			return strtoupper($type);
+		}
+		$custom = $this->get_custom_leave_by_slug($slug ?: $type);
+		if ($custom && !empty($custom->symbol)) {
+			return strtoupper((string) $custom->symbol);
+		}
+		return 'PL';
+	}
 
-			$list_af_date = [];
+	/**
+	 * Write leave onto attendance sheet for each working day in range.
+	 * Works for current + previous month (and latched months).
+	 * Replaces conflicting marks (AB/A/P/HD/etc.) so the calendar shows leave.
+	 */
+	public function upsert_leave_days_to_timesheet($staff_id, $start_ymd, $end_ymd, $type_code, $rel_id = 0, $number_of_leaving_day = null)
+	{
+		$staff_id = (int) $staff_id;
+		$start_ymd = date('Y-m-d', strtotime($start_ymd));
+		$end_ymd = date('Y-m-d', strtotime($end_ymd));
+		$type_code = strtoupper(trim((string) $type_code));
+		if ($staff_id <= 0 || !$start_ymd || !$end_ymd || $type_code === '') {
+			return false;
+		}
+		if (strtotime($end_ymd) < strtotime($start_ymd)) {
+			$tmp = $start_ymd;
+			$start_ymd = $end_ymd;
+			$end_ymd = $tmp;
+		}
 
-			foreach ($list_date as $key => $next_start_date) {
-
-				$data_work_time = $this->get_hour_shift_staff($staffid, $next_start_date);
-
-				$data_day_off = $this->get_day_off_staff_by_date($staffid, $next_start_date);
-
-				if ($data_work_time > 0 && count($data_day_off) == 0) {
-
-					$list_af_date[] = $next_start_date;
+		$list_date = $this->get_list_date($start_ymd, $end_ymd);
+		$work_days = [];
+		foreach ($list_date as $day) {
+			$work_time = (float) $this->get_hour_shift_staff($staff_id, $day);
+			$day_off = $this->get_day_off_staff_by_date($staff_id, $day);
+			if ($work_time > 0 && count($day_off) == 0) {
+				$work_days[] = ['date' => $day, 'hours' => $work_time > 0 ? $work_time : 9];
+			}
+		}
+		if (empty($work_days)) {
+			// Still mark calendar days if shift data missing (common for backdated months).
+			foreach ($list_date as $day) {
+				$dow = (int) date('N', strtotime($day));
+				if ($dow >= 6) {
+					continue; // skip Sat/Sun when no shift info
 				}
+				$work_days[] = ['date' => $day, 'hours' => 9];
+			}
+		}
+
+		$remaining = $number_of_leaving_day !== null ? (float) $number_of_leaving_day : count($work_days);
+		$conflict_types = ['AB', 'A', 'HD', 'P', 'p', 'W', 'PL', 'EL', 'LOP', 'AL', 'UL', 'SL', 'UHL', 'PHL'];
+
+		foreach ($work_days as $row) {
+			$day = $row['date'];
+			$hours = (float) $row['hours'];
+			if ($remaining <= 0) {
+				break;
+			}
+			$value = ($remaining < 1) ? ($hours * $remaining) : $hours;
+			$is_latched = $this->check_latch_timesheet(date('m-Y', strtotime($day)));
+
+			$this->db->where('staff_id', $staff_id);
+			$this->db->where('date_work', $day);
+			$this->db->where_in('type', $conflict_types);
+			$existing = $this->db->get(db_prefix() . 'timesheets_timesheet')->result_array();
+			foreach ($existing as $ex) {
+				$this->db->where('id', (int) $ex['id'])->delete(db_prefix() . 'timesheets_timesheet');
 			}
 
-			if (count($list_af_date) == 1) {
-
-				$date_work = $start_time;
-
-				$work_time = $this->get_hour_shift_staff($staffid, $date_work);
-
-
-
-				$this->db->where('staff_id', $staffid);
-
-				$this->db->where('date_work', $date_work);
-
-				// $this->db->where('type', 'W');
-				$this->db->where('type', 'P');
-
-
-				$tslv = $this->db->get(db_prefix() . 'timesheets_timesheet')->row();
-
-
-
-				if ($tslv) {
-
-					if ($number_of_day < 1 && $tslv->value > ($work_time * $number_of_day)) {
-
-						$this->db->where('staff_id', $staffid);
-
-						$this->db->where('date_work', $date_work);
-
-						// $this->db->where('type', 'W');
-						$this->db->where('type', 'P');
-
-
-						$this->db->update(db_prefix() . 'timesheets_timesheet', ['value' => ($work_time * $number_of_day)]);
-					} else {
-
-						$this->db->where('staff_id', $staffid);
-
-						$this->db->where('date_work', $date_work);
-
-						// $this->db->where('type', 'W');
-						$this->db->where('type', 'P');
-
-						$this->db->delete(db_prefix() . 'timesheets_timesheet');
-					}
-				}
-
-				if ($number_of_day < 1) {
-
-					$work_time = $work_time * $number_of_day;
-				}
-
-
-
-				$this->db->insert(db_prefix() . 'timesheets_timesheet', [
-
-					'staff_id' => $staffid,
-
-					'date_work' => $date_work,
-
-					'value' => $work_time,
-
-					'add_from' => $staffid,
-
-					'relate_id' => $rel_id,
-
-					'relate_type' => 'leave',
-
-					'type' => $type,
-
-				]);
-			} else {
-
-				$count_array = count($list_af_date);
-
-				$date_end = '';
-
-				$count_day = $number_of_day;
-
-				foreach ($list_af_date as $key => $date_work) {
-
-					$work_time = $this->get_hour_shift_staff($staffid, $date_work);
-
-					$this->db->where('staff_id', $staffid);
-
-					$this->db->where('date_work', $date_work);
-
-					// $this->db->where('type', 'W');
-					$this->db->where('type', 'P');
-
-					$tslv = $this->db->get(db_prefix() . 'timesheets_timesheet')->row();
-
-
-
-					if ($tslv) {
-
-						if ($count_day < 1 && $tslv->value > ($work_time / 2)) {
-
-							$this->db->where('id', $tslv->id);
-
-							$this->db->update(db_prefix() . 'timesheets_timesheet', ['value' => ($work_time / 2)]);
-						} else {
-
-							$this->db->where('id', $tslv->id);
-
-							$this->db->delete(db_prefix() . 'timesheets_timesheet');
-						}
-					}
-
-					if ($count_day < 1) {
-
-						$work_time = $work_time / 2;
-					}
-
-					$this->db->insert(db_prefix() . 'timesheets_timesheet', [
-
-						'staff_id' => $staffid,
-
-						'date_work' => $date_work,
-
-						'value' => $work_time,
-
-						'add_from' => $staffid,
-
-						'relate_id' => $rel_id,
-
-						'relate_type' => 'leave',
-
-						'type' => $type,
-
-					]);
-
-					$count_day -= 1;
-				}
+			$payload = [
+				'staff_id' => $staff_id,
+				'date_work' => $day,
+				'value' => $value,
+				'add_from' => get_staff_user_id() ?: $staff_id,
+				'relate_id' => (int) $rel_id,
+				'relate_type' => 'leave',
+				'type' => $type_code,
+			];
+			if ($is_latched) {
+				$payload['latch'] = 1;
 			}
+			$this->db->insert(db_prefix() . 'timesheets_timesheet', $payload);
+			$remaining -= ($remaining < 1) ? $remaining : 1;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Leave apply window: current month + previous month only.
+	 */
+	public function leave_date_in_allowed_window($ymd)
+	{
+		$ts = strtotime($ymd);
+		if ($ts === false) {
+			return false;
+		}
+		$ym = date('Y-m', $ts);
+		$current_ym = date('Y-m');
+		$prev_ym = date('Y-m', strtotime('first day of last month'));
+		return ($ym === $current_ym || $ym === $prev_ym);
 	}
 
 	/**
@@ -18096,7 +18133,8 @@ public function add_requisition_ajax($data)
 		$days_in_month = (int) date('t', strtotime($from));
 		$today = date('Y-m-d');
 
-		$leave_types = ['AL', 'PL', 'SL', 'HO', 'UHL', 'PHL', 'HD', 'UL', 'ML', 'CO', 'LOP', 'AB'];
+		// Leave codes only (HD = half-day attendance, not leave — must stay regularisable).
+		$leave_types = ['AL', 'PL', 'SL', 'UHL', 'PHL', 'UL', 'ML', 'CO', 'LOP', 'EL', 'L', 'WFH'];
 
 		$regs = $this->db->query(
 			'SELECT id, additional_day, time_in, time_out, timekeeping_value, status, reason, rejection_comment
@@ -18158,18 +18196,34 @@ public function add_requisition_ajax($data)
 				];
 			}
 
-			$staff_code_row = $this->db->select('staff_identifi')
-				->where('staffid', $staff_id)
-				->get(db_prefix() . 'staff')
-				->row();
-			$employee_code = $staff_code_row ? trim((string) $staff_code_row->staff_identifi) : '';
-			if ($employee_code !== '') {
+			$staff_code_row = $this->db->query(
+				'SELECT s.staff_identifi, i.empid
+				 FROM ' . db_prefix() . 'staff s
+				 LEFT JOIN ' . db_prefix() . 'staff_info i ON i.staffid = s.staffid
+				 WHERE s.staffid = ?
+				 LIMIT 1',
+				[$staff_id]
+			)->row();
+			$codes = [];
+			if ($staff_code_row) {
+				foreach (['staff_identifi', 'empid'] as $field) {
+					$code = trim((string) ($staff_code_row->{$field} ?? ''));
+					if ($code !== '') {
+						$codes[$code] = true;
+					}
+				}
+			}
+			$codes = array_keys($codes);
+			if (!empty($codes)) {
 				$month_suffix = date('M-Y', strtotime($from));
+				$placeholders = implode(',', array_fill(0, count($codes), '?'));
+				$params = $codes;
+				$params[] = '%-' . $month_suffix;
 				$bio_daily_rows = $this->db->query(
 					'SELECT attendance_date, a_in_time, a_out_time, punch_records
 					FROM ' . db_prefix() . 'biometric_report
-					WHERE employee_code = ? AND attendance_date LIKE ?',
-					[$employee_code, '%-' . $month_suffix]
+					WHERE TRIM(employee_code) IN (' . $placeholders . ') AND attendance_date LIKE ?',
+					$params
 				)->result_array();
 				foreach ($bio_daily_rows as $row) {
 					$att_dt = DateTime::createFromFormat('d-M-Y', $row['attendance_date']);
@@ -18220,29 +18274,42 @@ public function add_requisition_ajax($data)
 			$reg = $reg_by_date[$date] ?? null;
 
 			$day_bio = $bio_by_date[$date] ?? [];
-			if (empty($day_bio) && isset($bio_daily_by_date[$date])) {
-				$bio_day = $bio_daily_by_date[$date];
-				$in_time = $this->normalize_bio_time($bio_day['a_in_time'] ?? '');
-				$out_time = $this->normalize_bio_time($bio_day['a_out_time'] ?? '');
-				if ($in_time !== '') {
-					$day_bio[] = [
-						'time' => $in_time,
-						'type' => 'IN',
-						'source' => 'Biometric',
-						'door' => 'Biometrics summary',
-					];
-				}
-				if ($out_time !== '') {
-					$day_bio[] = [
-						'time' => $out_time,
-						'type' => 'OUT',
-						'source' => 'Biometric',
-						'door' => 'Biometrics summary',
-					];
+			// Prefer full Biomax punch_records (not only first-in/last-out summary).
+			if (isset($bio_daily_by_date[$date])) {
+				$from_records = $this->parse_biomax_punch_records(
+					(string) ($bio_daily_by_date[$date]['punch_records'] ?? '')
+				);
+				if (!empty($from_records)) {
+					$day_bio = $from_records;
+				} elseif (empty($day_bio)) {
+					$bio_day = $bio_daily_by_date[$date];
+					$in_time = $this->normalize_bio_time($bio_day['a_in_time'] ?? '');
+					$out_time = $this->normalize_bio_time($bio_day['a_out_time'] ?? '');
+					if ($in_time !== '') {
+						$day_bio[] = [
+							'time' => $in_time,
+							'type' => 'IN',
+							'source' => 'Biometric',
+							'door' => 'Biometrics summary',
+						];
+					}
+					if ($out_time !== '') {
+						$day_bio[] = [
+							'time' => $out_time,
+							'type' => 'OUT',
+							'source' => 'Biometric',
+							'door' => 'Biometrics summary',
+						];
+					}
 				}
 			}
 
-			$punch = $this->analyze_day_punches($cio_by_date[$date] ?? [], $day_bio);
+			// When Biomax has real swipes, calculate from Biomax only (ignore Workroom duplicate login).
+			$cio_for_day = $cio_by_date[$date] ?? [];
+			if (count($day_bio) >= 2) {
+				$cio_for_day = [];
+			}
+			$punch = $this->analyze_day_punches($cio_for_day, $day_bio);
 			$day_swipes = $punch['swipes'];
 			$hours = $punch['hours'];
 			if ($hours <= 0 && $ts && is_numeric($ts['value'])) {
@@ -18313,7 +18380,10 @@ public function add_requisition_ajax($data)
 					$can_regularise = !$is_weekend;
 				}
 			} elseif (in_array($ts_type, $present_types, true)) {
-				$hours = max($hours, (float) ($ts['value'] ?? 0));
+				// Prefer Biomax/paired punch hours; timesheet value is fallback only.
+				if ($hours <= 0 && is_numeric($ts['value'] ?? null)) {
+					$hours = (float) $ts['value'];
+				}
 				if ($hours > 0 && $hours < $required_hours) {
 					$status = 'short_hours';
 					$issues[] = 'Less than ' . $required_hours . ' hours (' . round($hours, 2) . 'h)';
@@ -18322,7 +18392,9 @@ public function add_requisition_ajax($data)
 					$status = 'ok';
 				}
 			} elseif ($ts_type === 'HD') {
-				$hours = max($hours, (float) ($ts['value'] ?? 0));
+				if ($hours <= 0 && is_numeric($ts['value'] ?? null)) {
+					$hours = (float) $ts['value'];
+				}
 				$status = 'short_hours';
 				if ($hours > 0 && $hours < $required_hours) {
 					$issues[] = 'Less than ' . $required_hours . ' hours (' . round($hours, 2) . 'h)';
@@ -18365,6 +18437,19 @@ public function add_requisition_ajax($data)
 			}
 
 			$shift_info = $month_shift_info;
+			// Final hour bands (Biomax actual work): 9+ Present, 5–9 Half day, <5 Absent.
+			if (!in_array($status, ['future', 'weekend', 'holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)) {
+				$classified = $this->classify_attendance_by_hours($hours, $required_hours, 5.0);
+				if ($classified !== null) {
+					$status = $classified['status'];
+					if (!empty($classified['issue'])) {
+						$issues = [$classified['issue']];
+					}
+					if (isset($classified['can_regularise'])) {
+						$can_regularise = $classified['can_regularise'] && !$is_weekend;
+					}
+				}
+			}
 			$detail = $this->build_attendance_day_detail($punch, $shift_info, $hours, $required_hours);
 			$code = $this->map_attendance_display_code($status, $ts_type, $hours);
 
@@ -18497,42 +18582,32 @@ public function add_requisition_ajax($data)
 			$check_in = $events[0]['time'];
 		}
 		if (!$check_out && count($events) > 1) {
-			$check_out = $events[count($events) - 1]['time'];
+			// Prefer last OUT; if day ends on IN with no later OUT, use last event only if OUT.
+			$check_out = $outs ? $outs[count($outs) - 1] : '';
+			if ($check_out === '' && $events[count($events) - 1]['type'] === 'OUT') {
+				$check_out = $events[count($events) - 1]['time'];
+			}
 		} elseif (!$check_out && count($events) === 1 && $events[0]['type'] === 'OUT') {
 			$check_out = $events[0]['time'];
 		}
 
-		// Net worked hours from IN→OUT pairs only (never re-add first-in→orphan-out).
-		$hours = 0;
-		$pending_in = null;
-		foreach ($events as $ev) {
-			$type = $ev['type'];
-			if ($type === 'IN') {
-				if ($pending_in === null) {
-					$pending_in = $ev['time'];
-				}
-			} elseif ($type === 'OUT' && $pending_in !== null) {
-				$in_ts = strtotime('1970-01-01 ' . substr($pending_in, 0, 8));
-				$out_ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
-				if ($out_ts > $in_ts) {
-					$hours += ($out_ts - $in_ts) / 3600;
-				}
-				$pending_in = null;
-			}
-		}
-
-		// Fallback: single span first IN → last OUT when pairing found nothing.
-		if ($hours <= 0 && $check_in && $check_out) {
+		// Card / status hours: ONLY first IN → last OUT (ignore intermediate punches).
+		$hours = 0.0;
+		$span_hrs = 0.0;
+		$break_hrs = 0.0;
+		if ($check_in && $check_out) {
 			$in_ts = strtotime('1970-01-01 ' . substr($check_in, 0, 8));
 			$out_ts = strtotime('1970-01-01 ' . substr($check_out, 0, 8));
 			if ($out_ts > $in_ts) {
-				$hours = ($out_ts - $in_ts) / 3600;
+				$span_hrs = ($out_ts - $in_ts) / 3600;
+				$hours = $span_hrs;
 			}
 		}
 
 		// Guard against absurd values from bad punch data.
 		if ($hours > 16) {
 			$hours = 16;
+			$span_hrs = min($span_hrs, 16);
 		}
 
 		$punch_missing = false;
@@ -18560,9 +18635,57 @@ public function add_requisition_ajax($data)
 			'check_in' => $check_in ? substr($check_in, 0, 5) : '',
 			'check_out' => $check_out ? substr($check_out, 0, 5) : '',
 			'hours' => $hours,
+			'break_hrs' => round($break_hrs, 2),
+			'span_hrs' => round($span_hrs, 2),
 			'punch_missing' => $punch_missing,
 			'swipes' => $swipes,
 		];
+	}
+
+	/**
+	 * Parse Biomax punch_records string into swipe rows.
+	 * Example: "10:48 (in), 11:21 (out), 11:26 (in), ..."
+	 *
+	 * @param string $punch_records
+	 * @return array
+	 */
+	protected function parse_biomax_punch_records($punch_records)
+	{
+		$punch_records = trim((string) $punch_records);
+		if ($punch_records === '') {
+			return [];
+		}
+
+		$rows = [];
+		$parts = preg_split('/\s*,\s*/', $punch_records);
+		foreach ($parts as $punch) {
+			$punch = trim($punch);
+			if ($punch === '') {
+				continue;
+			}
+			if (!preg_match('/(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:\()?[\s\-]*(in|out)(?:\))?/i', $punch, $m)
+				&& !preg_match('/\b(in|out)\b\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?)/i', $punch, $m2)) {
+				continue;
+			}
+			if (!empty($m)) {
+				$time = $m[1];
+				$dir = strtoupper($m[2]);
+			} else {
+				$dir = strtoupper($m2[1]);
+				$time = $m2[2];
+			}
+			if (strlen($time) === 5) {
+				$time .= ':00';
+			}
+			$rows[] = [
+				'time' => $time,
+				'type' => $dir,
+				'source' => 'Biometric',
+				'door' => 'Biometrics swipe',
+			];
+		}
+
+		return $rows;
 	}
 
 	protected function normalize_bio_time($time)
@@ -18599,7 +18722,9 @@ public function add_requisition_ajax($data)
 	{
 		$type_map = [
 			'AL' => 'EL',
-			'PL' => 'PL',
+			'EL' => 'EL',
+			'L' => 'EL',
+			'PL' => 'EL',
 			'SL' => 'SL',
 			'HO' => 'HO',
 			'HL' => 'HO',
@@ -18609,7 +18734,7 @@ public function add_requisition_ajax($data)
 			'PHL' => 'PHD',
 			'HD' => 'HD',
 			'UL' => 'UL',
-			'LOP' => 'UL',
+			'LOP' => 'LOP',
 			'AB' => 'AB',
 			'SHL' => 'SHL',
 			'PAL' => 'PAL',
@@ -18624,23 +18749,85 @@ public function add_requisition_ajax($data)
 		if ($status === 'weekend') {
 			return 'O';
 		}
-		if ($status === 'leave' || ($ts_type !== '' && isset($type_map[$ts_type]))) {
-			return $type_map[$ts_type] ?? 'L';
+		// Hour-based status wins over stale timesheet AB / rejected regularization.
+		if ($status === 'half_day') {
+			return 'HD';
+		}
+		if ($status === 'ok' || $status === 'regularised') {
+			return 'P';
+		}
+		if ($status === 'pending') {
+			return 'P';
+		}
+		if ($status === 'short_hours') {
+			return ($hours >= 5) ? 'HD' : 'AB';
 		}
 		if ($status === 'absent') {
 			return 'AB';
 		}
-		if ($status === 'punch_missing' || $status === 'rejected') {
+		if ($status === 'punch_missing') {
+			return ($hours >= 5) ? 'HD' : 'AB';
+		}
+		// Rejected regularization: still show real hours result, not forced Absent.
+		if ($status === 'rejected') {
+			if ($hours + 0.001 >= 9) {
+				return 'P';
+			}
+			if ($hours + 0.001 >= 5) {
+				return 'HD';
+			}
 			return 'AB';
 		}
-		if ($status === 'short_hours') {
-			return ($hours > 0 && $hours < 5) ? 'HD' : 'P';
-		}
-		if (in_array($status, ['ok', 'regularised', 'pending'], true)) {
-			return 'P';
+		// Only map leave-type timesheet codes (never let AB/P override punch hours).
+		$leave_ts = ['AL', 'EL', 'L', 'PL', 'SL', 'UL', 'LOP', 'CO', 'ML', 'UHL', 'PHL', 'SHL', 'PAL', 'HO', 'HL'];
+		if ($status === 'leave' || ($ts_type !== '' && in_array(strtoupper((string) $ts_type), $leave_ts, true))) {
+			$key = strtoupper((string) $ts_type);
+			return $type_map[$key] ?? 'EL';
 		}
 
 		return '';
+	}
+
+	/**
+	 * Company rule: 9h+ = full Present, 5h+ = Half day, below 5h = Absent (if any/no work).
+	 *
+	 * @param float $hours
+	 * @param float $full_day_hours
+	 * @param float $half_day_hours
+	 * @return array|null
+	 */
+	protected function classify_attendance_by_hours($hours, $full_day_hours = 9.0, $half_day_hours = 5.0)
+	{
+		$hours = (float) $hours;
+		$full_day_hours = (float) $full_day_hours;
+		$half_day_hours = (float) $half_day_hours;
+		if ($hours <= 0) {
+			return [
+				'status' => 'absent',
+				'issue' => 'No attendance recorded',
+				'can_regularise' => true,
+			];
+		}
+		if ($hours + 0.001 >= $full_day_hours) {
+			return [
+				'status' => 'ok',
+				'issue' => '',
+				'can_regularise' => false,
+			];
+		}
+		if ($hours + 0.001 >= $half_day_hours) {
+			return [
+				'status' => 'half_day',
+				'issue' => 'Half day (' . round($hours, 2) . 'h — full day needs ' . $full_day_hours . 'h)',
+				'can_regularise' => true,
+			];
+		}
+
+		return [
+			'status' => 'absent',
+			'issue' => 'Less than ' . $half_day_hours . 'h (' . round($hours, 2) . 'h) — counted as Absent',
+			'can_regularise' => true,
+		];
 	}
 
 	protected function map_attendance_status_label($status, $ts_type = '', $code = '')
@@ -18649,8 +18836,10 @@ public function add_requisition_ajax($data)
 			return 'Incomplete punch';
 		}
 		if ($status === 'short_hours' && $code === 'P') {
-			// Incomplete in/out often lands here when an IN exists but hours < 9.
 			return 'Present (check hours)';
+		}
+		if ($status === 'half_day' || $code === 'HD') {
+			return 'Half day';
 		}
 
 		$labels = [
@@ -18668,7 +18857,8 @@ public function add_requisition_ajax($data)
 			'MAL' => 'Maternity leave',
 			'O' => 'Off',
 			'EL' => 'Earned leave',
-			'L' => 'Leave',
+			'LOP' => 'Loss of pay',
+			'L' => 'Earned leave',
 		];
 
 		if ($code && isset($labels[$code])) {
@@ -18691,9 +18881,14 @@ public function add_requisition_ajax($data)
 		$shift_end = $this->normalize_shift_time($shift_info->end_working ?? '', '18:30');
 		$lunch_start = $this->normalize_shift_time($shift_info->start_lunch_break ?? '', '13:00');
 		$lunch_end = $this->normalize_shift_time($shift_info->end_lunch_break ?? '', '13:30');
+
+		// Break = shift lunch only (card counts first in / last out, not intermediate gaps).
 		$break_hrs = (float) ($shift_info->lunch_break_hour ?? 0);
 		if ($break_hrs <= 0) {
 			$break_hrs = max(0, (strtotime('1970-01-01 ' . $lunch_end) - strtotime('1970-01-01 ' . $lunch_start)) / 3600);
+		}
+		if ($break_hrs <= 0) {
+			$break_hrs = 0.5;
 		}
 
 		$first_in = $punch['check_in'] ?: '—';
@@ -18710,7 +18905,12 @@ public function add_requisition_ajax($data)
 			$early_out = $early_mins . ' min';
 		}
 
-		$actual = max(0, $hours - $break_hrs);
+		// Total = first IN → last OUT. Actual = total − lunch break.
+		$span = (float) ($punch['span_hrs'] ?? 0);
+		if ($span <= 0) {
+			$span = max(0, (float) $hours);
+		}
+		$actual = max(0, $span - $break_hrs);
 
 		$sessions = [
 			[
@@ -18733,7 +18933,7 @@ public function add_requisition_ajax($data)
 			'last_out' => $last_out,
 			'late_in' => $late_in,
 			'early_out' => $early_out,
-			'total_work_hrs' => $hours > 0 ? round($hours, 2) . 'h' : '—',
+			'total_work_hrs' => $span > 0 ? round($span, 2) . 'h' : '—',
 			'break_hrs' => $break_hrs > 0 ? round($break_hrs, 2) . 'h' : '—',
 			'actual_work_hrs' => $actual > 0 ? round($actual, 2) . 'h' : '—',
 			'sessions' => $sessions,

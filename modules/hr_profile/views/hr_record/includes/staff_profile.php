@@ -236,6 +236,14 @@
 							<td><?php echo html_entity_decode($member->b_bonus); ?></td>
 						</tr>
 						<tr class="project-overview">
+							<td class="bold"><?php echo 'Employment Type'; ?></td>
+							<td><?php
+								$cat = isset($employment_category) ? $employment_category : (isset($member->employment_category) ? $member->employment_category : '');
+								$cat_labels = ['fte' => 'Full time', 'intern' => 'Intern', 'contractual' => 'Contractual', 'wfh' => 'WFH'];
+								echo html_entity_decode($cat_labels[$cat] ?? $cat);
+							?></td>
+						</tr>
+						<tr class="project-overview">
 							<td class="bold"><?php echo 'Is Flexible Timing?'; ?></td>
 							<td><?php echo html_entity_decode($member->f_time); ?></td>
 						</tr>

@@ -229,62 +229,160 @@ class Cron_model extends App_Model
 
     public function processCheckins()
     {
-
-
         $CI = &get_instance();
         $CI->load->model('timesheets_model');
-        // Calculate the timestamp 15 hours ago
-        $fifteenHoursAgo = time() - (15 * 60 * 60);
-        $fifteenHoursAgoFormatted = date('Y-m-d H:i:s', $fifteenHoursAgo);
+        // Calculate the timestamp 13 hours ago (13 hours cooldown)
+        $thirteenHoursAgo = time() - (13 * 60 * 60);
+        $thirteenHoursAgoFormatted = date('Y-m-d H:i:s', $thirteenHoursAgo);
 
         // Fetch the latest check-ins and check-outs for each staff member
         $sql = "SELECT staff_id, MAX(date) AS latest_checkin
                 FROM tblcheck_in_out
-                WHERE type_check = 1  -- Check-ins
+                WHERE type_check = 1
                 GROUP BY staff_id";
         $query = $this->db->query($sql);
         $latestCheckins = $query->result();
 
-        // Process the check-ins and auto-checkout if needed
+        $fixed = 0;
         foreach ($latestCheckins as $checkin) {
-            $staffId = $checkin->staff_id;
+            $staffId = (int) $checkin->staff_id;
             $latestCheckinTimestamp = $checkin->latest_checkin;
+            if ($staffId <= 0 || empty($latestCheckinTimestamp)) {
+                continue;
+            }
 
-            // Check if the latest check-in is older than 15 hours
-            if ($latestCheckinTimestamp < $fifteenHoursAgoFormatted) {
+            // Check if the latest check-in is older than 13 hours
+            if ($latestCheckinTimestamp < $thirteenHoursAgoFormatted) {
                 // Check if the staff member is not already checked out
                 if (!$this->isUserCheckedOut($staffId, $latestCheckinTimestamp)) {
-                    // Perform the checkout
-                    $checkoutData = array(
-                        'staff_id' => $staffId,
-                        'date' => date('Y-m-d H:i:s'), // Current timestamp
-                        'type_check' => 2 // Check-out
-                    );
+                    $work_date = date('Y-m-d', strtotime($latestCheckinTimestamp));
+                    // Cap auto-out at end of that work day (not "now"), so hours are realistic.
+                    $auto_out = $work_date . ' 19:00:00';
+                    if (strtotime($auto_out) <= strtotime($latestCheckinTimestamp)) {
+                        $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + (9 * 3600));
+                    }
+
+                    $checkoutData = [
+                        'staff_id'   => $staffId,
+                        'date'       => $auto_out,
+                        'type_check' => 2,
+                    ];
                     $this->db->insert(db_prefix() . 'check_in_out', $checkoutData);
 
-                    $data_insert['staff_id'] = $staffId;
+                    $hours = (float) $CI->timesheets_model->get_hour($latestCheckinTimestamp, $auto_out);
+                    // Checked in = not Absent. Use Present / Half-day from hours.
+                    if ($hours >= 9) {
+                        $type = 'P';
+                    } elseif ($hours >= 5) {
+                        $type = 'HD';
+                    } else {
+                        $type = 'HD';
+                    }
 
-                    $data_insert['date_work'] = $latestCheckinTimestamp;
+                    $existing = $this->db->where('staff_id', $staffId)
+                        ->where('date_work', $work_date)
+                        ->get(db_prefix() . 'timesheets_timesheet')
+                        ->row();
+                    $payload = [
+                        'staff_id'  => $staffId,
+                        'date_work' => $work_date,
+                        'type'      => $type,
+                        'value'     => $hours,
+                        'add_from'  => $staffId,
+                    ];
+                    if ($existing) {
+                        // Do not overwrite approved leave / holiday codes.
+                        $keep = ['AL', 'PL', 'SL', 'HO', 'UL', 'LOP', 'CO', 'ML'];
+                        if (!in_array(strtoupper((string) $existing->type), $keep, true)) {
+                            $this->db->where('id', $existing->id)->update(db_prefix() . 'timesheets_timesheet', [
+                                'type'  => $type,
+                                'value' => $hours,
+                            ]);
+                        }
+                    } else {
+                        $this->db->insert(db_prefix() . 'timesheets_timesheet', $payload);
+                    }
 
-                    $data_insert['type'] = 'AB';
-
-                    $data_insert['add_from'] = ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staffId);
-
-                    $data_insert['value'] = $CI->timesheets_model->get_hour($latestCheckinTimestamp, date('Y-m-d H:i:s'));
-
-                    $this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
-
-                    $updateQuery = "INSERT INTO tbltimesheets_requisition_leave( staff_id , subject, start_time, end_time, number_of_leaving_day) VALUES(?,?,?,?,?)";
-                    $this->db->query($updateQuery, [$staffId, "Staff did not checked out.", $latestCheckinTimestamp, date('Y-m-d H:i:s'), 1]);
+                    // Never invent leave applications for missed checkout.
+                    $fixed++;
                 }
             }
         }
 
-        log_message('info', count($latestCheckins) . ' user(s) checked out automatically.');
+        log_message('info', count($latestCheckins) . ' check-in(s) scanned; ' . $fixed . ' auto-checkout(s) without marking Absent.');
+    }
+
+    /**
+     * Process auto-checkout for a specific staff member if their check-in is older than 13 hours.
+     *
+     * @param int $staffId
+     * @return bool
+     */
+    public function processCheckinForStaff($staffId)
+    {
+        $staffId = (int) $staffId;
+        if ($staffId <= 0) {
+            return false;
+        }
+
+        $thirteenHoursAgo = time() - (13 * 60 * 60);
+        $thirteenHoursAgoFormatted = date('Y-m-d H:i:s', $thirteenHoursAgo);
+
+        $latest = $this->db->query(
+            "SELECT MAX(date) AS latest_checkin FROM " . db_prefix() . "check_in_out WHERE type_check = 1 AND staff_id = ?",
+            [$staffId]
+        )->row();
+
+        if ($latest && !empty($latest->latest_checkin) && $latest->latest_checkin < $thirteenHoursAgoFormatted) {
+            if (!$this->isUserCheckedOut($staffId, $latest->latest_checkin)) {
+                $work_date = date('Y-m-d', strtotime($latest->latest_checkin));
+                $auto_out = $work_date . ' 19:00:00';
+                if (strtotime($auto_out) <= strtotime($latest->latest_checkin)) {
+                    $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (9 * 3600));
+                }
+
+                $this->db->insert(db_prefix() . 'check_in_out', [
+                    'staff_id'   => $staffId,
+                    'date'       => $auto_out,
+                    'type_check' => 2,
+                ]);
+
+                $CI = &get_instance();
+                $CI->load->model('timesheets_model');
+                $hours = (float) $CI->timesheets_model->get_hour($latest->latest_checkin, $auto_out);
+                $type = ($hours >= 9) ? 'P' : 'HD';
+
+                $existing = $this->db->where('staff_id', $staffId)
+                    ->where('date_work', $work_date)
+                    ->get(db_prefix() . 'timesheets_timesheet')
+                    ->row();
+                $payload = [
+                    'staff_id'  => $staffId,
+                    'date_work' => $work_date,
+                    'type'      => $type,
+                    'value'     => $hours,
+                    'add_from'  => $staffId,
+                ];
+                if ($existing) {
+                    $keep = ['AL', 'PL', 'SL', 'HO', 'UL', 'LOP', 'CO', 'ML'];
+                    if (!in_array(strtoupper((string) $existing->type), $keep, true)) {
+                        $this->db->where('id', $existing->id)->update(db_prefix() . 'timesheets_timesheet', [
+                            'type'  => $type,
+                            'value' => $hours,
+                        ]);
+                    }
+                } else {
+                    $this->db->insert(db_prefix() . 'timesheets_timesheet', $payload);
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Function to check if a user is already checked out
-    private function isUserCheckedOut($staffId, $latestCheckinTimestamp)
+    public function isUserCheckedOut($staffId, $latestCheckinTimestamp)
     {
         $this->db->where('staff_id', $staffId);
         $this->db->where('type_check', 2); // Check-out type
@@ -8175,6 +8273,14 @@ public function send_daily_timesheet_optimise_report($data)
 
 public function send_biometric_break_alerts($date = null)
 {
+    // TEMP OFF (2026-09-10): break exceeded emails paused until HR asks to re-enable.
+    // Set to false to turn alerts back on.
+    $break_alert_emails_disabled = true;
+    if ($break_alert_emails_disabled) {
+        echo "Biometric break alert emails are temporarily disabled.\n";
+        return;
+    }
+
     $this->load->library('email');
     $this->load->model('staff_model');
     $this->email->set_mailtype("html");
@@ -8296,6 +8402,14 @@ public function send_biometric_break_alerts($date = null)
 
 public function send_break_report_to_staff()
 {
+    // TEMP OFF (2026-09-10): staff break exceeded emails paused until HR asks to re-enable.
+    // Set to false to turn alerts back on.
+    $break_alert_emails_disabled = true;
+    if ($break_alert_emails_disabled) {
+        echo "Staff break report emails are temporarily disabled.\n";
+        return;
+    }
+
     $this->load->model('staff_model');
     $this->load->library('email');
 

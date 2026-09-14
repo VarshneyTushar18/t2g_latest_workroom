@@ -98,6 +98,19 @@ if (!function_exists('format_leave_balance_number')) {
     background: #3b82f6;
     border-radius: 999px;
   }
+  @media (max-width: 767px) {
+    .leave-balance-cards-grid {
+      grid-template-columns: 1fr;
+    }
+    .leave-balance-card-head {
+      flex-wrap: wrap;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 1100px) {
+    .leave-balance-cards-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
 </style>
 
 <div class="leave-balance-cards-wrap" id="leave_balance_cards_wrap" data-staff-id="<?php echo $leave_balance_staff_id; ?>" data-year="<?php echo $leave_balance_year; ?>" data-month="<?php echo $leave_balance_month; ?>">
@@ -105,6 +118,9 @@ if (!function_exists('format_leave_balance_number')) {
   <h5 class="mtop0 mbot12" style="font-weight:700;"><?php echo html_escape($leave_balance_section_title); ?></h5>
   <?php } ?>
   <div class="leave-balance-cards-grid" id="leave_balance_cards_grid">
+    <?php if (empty($leave_balance_cards)) { ?>
+      <div class="text-muted" style="grid-column:1/-1;padding:12px 4px;">Loading leave balances…</div>
+    <?php } ?>
     <?php foreach ($leave_balance_cards as $card) :
       $balance_class = ((float) $card['balance'] < 0) ? ' negative' : '';
       $granted_label = format_leave_balance_number($card['granted']);
@@ -116,7 +132,11 @@ if (!function_exists('format_leave_balance_number')) {
       <div class="leave-balance-card" data-slug="<?php echo html_escape($card['slug']); ?>">
         <div class="leave-balance-card-head">
           <div class="leave-balance-card-title"><?php echo html_escape($card['label']); ?></div>
-          <div class="leave-balance-card-granted">Granted: <?php echo $granted_label; ?></div>
+          <div class="leave-balance-card-granted">Had: <?php echo $granted_label; ?><?php
+            if ($card['slug'] === 'earned-leave' && isset($card['monthly_earn'])) {
+              echo ' <span style="font-weight:400;color:#9ca3af;">(+' . format_leave_balance_number($card['monthly_earn']) . ' earn)</span>';
+            }
+          ?></div>
         </div>
         <div class="leave-balance-card-body">
           <div class="leave-balance-card-value<?php echo $balance_class; ?>"><?php echo $balance_label; ?></div>
@@ -128,7 +148,7 @@ if (!function_exists('format_leave_balance_number')) {
           <?php if ($is_lop && (float) $card['granted'] <= 0 && (float) $card['consumed'] > 0) { ?>
           <div class="leave-balance-card-consumed"><?php echo $consumed_label; ?> day(s) taken (no grant — balance goes negative)</div>
           <?php } else { ?>
-          <div class="leave-balance-card-consumed"><?php echo $consumed_label; ?> of <?php echo $granted_label; ?> Consumed</div>
+          <div class="leave-balance-card-consumed"><?php echo $consumed_label; ?> of <?php echo $granted_label; ?> taken → remain <?php echo $balance_label; ?></div>
           <?php } ?>
           <div class="leave-balance-card-progress"><span style="width: <?php echo (int) $card['progress']; ?>%;"></span></div>
         </div>

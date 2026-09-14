@@ -1,0 +1,378 @@
+/**
+ * HRMS shared design system (local UX).
+ * SCOPED to HRMS page content only — never restyle #header
+ * (Company Policies / Suggestion / Check in / Check out stay unchanged).
+ */
+body.hrms-ui {
+  --hrms-ink: #0f172a;
+  --hrms-muted: #64748b;
+  --hrms-line: #e2e8f0;
+  --hrms-bg: #f1f5f9;
+  --hrms-card: #ffffff;
+  --hrms-accent: #141e46;
+  --hrms-blue: #2563eb;
+  --hrms-radius: 16px;
+}
+
+/* Only the main page canvas — not the global header */
+body.hrms-ui #wrapper > .content {
+  background: var(--hrms-bg) !important;
+  min-height: calc(100vh - 70px);
+}
+
+/* ── Explicit: leave top header actions alone ── */
+body.hrms-ui #header .btn,
+body.hrms-ui #header .btn-info,
+body.hrms-ui #header .btn-primary,
+body.hrms-ui #header .btn-success,
+body.hrms-ui #header .btn-danger,
+body.hrms-ui #header .btn-default,
+body.hrms-ui #header .btn-suggestion-header,
+body.hrms-ui #header .check_in,
+body.hrms-ui #header .check_out,
+body.hrms-ui #header a {
+  /* do not inherit HRMS pill / navy overrides */
+  border-radius: inherit;
+}
+
+/* Soft reset so any leaked rules cannot paint header buttons navy */
+body.hrms-ui #header #headerActionButtons .btn-suggestion-header,
+body.hrms-ui #header .btn-info.btn-suggestion-header {
+  background-color: #0ea5e9 !important;
+  border: 1px solid #38bdf8 !important;
+  color: #fff !important;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
+}
+body.hrms-ui #header #headerActionButtons .btn-success.check_in,
+body.hrms-ui #header button.check_in {
+  background-color: #84c529 !important;
+  border-color: #84c529 !important;
+  color: #fff !important;
+}
+body.hrms-ui #header #headerActionButtons .btn-danger.check_out,
+body.hrms-ui #header button.check_out {
+  background-color: #fc2d42 !important;
+  border-color: #fc2d42 !important;
+  color: #fff !important;
+}
+
+/* Scope helper: everything below applies inside HRMS content only */
+body.hrms-ui #wrapper > .content .panel_s {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  margin-bottom: 18px;
+}
+body.hrms-ui #wrapper > .content .panel_s > .panel-heading {
+  background: transparent;
+  border: 0;
+  padding: 0 4px 10px;
+}
+body.hrms-ui #wrapper > .content .panel_s > .panel-body {
+  background: var(--hrms-card);
+  border: 1px solid var(--hrms-line);
+  border-radius: var(--hrms-radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  padding: 20px 20px 18px;
+}
+
+body.hrms-ui #wrapper > .content .panel_s .panel.panel-default {
+  border-radius: 12px;
+  border-color: var(--hrms-line);
+  overflow: hidden;
+}
+body.hrms-ui #wrapper > .content .panel_s .panel.panel-default > .panel-heading {
+  background: #f8fafc;
+  border-color: var(--hrms-line);
+}
+
+body.hrms-ui #wrapper > .content .panel-body > h4,
+body.hrms-ui #wrapper > .content .panel-body > .row > [class*="col-"] > h4,
+body.hrms-ui #wrapper > .content .t2g-att-head h4,
+body.hrms-ui #wrapper > .content .t2g-reg .no-margin,
+body.hrms-ui #wrapper > .content .leave_balance .panel-body h4 {
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: var(--hrms-ink) !important;
+  letter-spacing: -0.02em;
+  margin-top: 0;
+}
+body.hrms-ui #wrapper > .content .panel-body > h4 > i,
+body.hrms-ui #wrapper > .content .panel-body h4 > i {
+  color: var(--hrms-muted);
+  margin-right: 6px;
+}
+
+body.hrms-ui #wrapper > .content .form-control,
+body.hrms-ui #wrapper > .content .input-group-addon {
+  border-radius: 10px !important;
+  border-color: #cbd5e1;
+  min-height: 38px;
+}
+body.hrms-ui #wrapper > .content .bootstrap-select > .dropdown-toggle {
+  border-radius: 10px !important;
+  border-color: #cbd5e1 !important;
+  min-height: 38px;
+}
+body.hrms-ui #wrapper > .content label.control-label,
+body.hrms-ui #wrapper > .content .leave-apply-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.01em;
+}
+
+/* Buttons only inside HRMS content — NOT #header */
+body.hrms-ui #wrapper > .content .btn {
+  border-radius: 999px !important;
+  font-weight: 650;
+}
+/* Keep select dropdowns clean — one simple chevron, no double caret */
+body.hrms-ui #wrapper > .content .bootstrap-select > .dropdown-toggle,
+body.hrms-ui #wrapper > .content .bootstrap-select > .dropdown-toggle.btn,
+body.hrms-ui #wrapper > .content .bootstrap-select .btn {
+  border-radius: 10px !important;
+  padding-right: 36px !important;
+  text-align: left;
+  position: relative;
+}
+/* Hide stock bootstrap-select carets (they stack and look broken) */
+body.hrms-ui #wrapper > .content .bootstrap-select .caret,
+body.hrms-ui #wrapper > .content .bootstrap-select .bs-caret,
+body.hrms-ui #wrapper > .content .bootstrap-select .bs-caret .caret,
+body.hrms-ui #wrapper > .content .bootstrap-select .filter-option::after {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  border: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  content: none !important;
+}
+/* Single simple down-chevron */
+body.hrms-ui #wrapper > .content .bootstrap-select > .dropdown-toggle::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 2px solid #64748b;
+  border-bottom: 2px solid #64748b;
+  transform: rotate(45deg);
+  pointer-events: none;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+body.hrms-ui #wrapper > .content .bootstrap-select.open > .dropdown-toggle::after,
+body.hrms-ui #wrapper > .content .bootstrap-select.show > .dropdown-toggle::after {
+  margin-top: -1px;
+  transform: rotate(225deg);
+}
+body.hrms-ui #wrapper > .content .btn-info,
+body.hrms-ui #wrapper > .content .btn-primary,
+body.hrms-ui #wrapper > .content .timesheets_filter,
+body.hrms-ui #wrapper > .content .t2g-att-checkio-btn {
+  background: var(--hrms-accent) !important;
+  border-color: var(--hrms-accent) !important;
+  color: #fff !important;
+}
+body.hrms-ui #wrapper > .content .btn-default {
+  background: #f8fafc !important;
+  border-color: var(--hrms-line) !important;
+  color: var(--hrms-ink) !important;
+}
+body.hrms-ui #wrapper > .content .btn-sm {
+  border-radius: 999px !important;
+}
+
+body.hrms-ui #wrapper > .content .t2g-att-stats {
+  border: 0 !important;
+  border-radius: 0 !important;
+  gap: 12px !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+body.hrms-ui #wrapper > .content .t2g-att-stat-card {
+  border: 1px solid var(--hrms-line) !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 150px;
+}
+body.hrms-ui #wrapper > .content .leave-summary-cards {
+  gap: 12px !important;
+}
+body.hrms-ui #wrapper > .content .leave-summary-card,
+body.hrms-ui #wrapper > .content .leave-balance-card {
+  border-radius: 14px !important;
+  border-color: var(--hrms-line) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+body.hrms-ui #wrapper > .content .t2g-att-cal,
+body.hrms-ui #wrapper > .content .t2g-att-detail,
+body.hrms-ui #wrapper > .content .t2g-reg-cal,
+body.hrms-ui #wrapper > .content .t2g-reg-form {
+  border-radius: 14px !important;
+  border-color: var(--hrms-line) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+body.hrms-ui #wrapper > .content .t2g-reg-tabs button {
+  border-radius: 999px !important;
+  margin: 0 4px 6px;
+  border: 1px solid var(--hrms-line);
+}
+body.hrms-ui #wrapper > .content .t2g-reg-tabs button.active {
+  background: var(--hrms-accent) !important;
+  border-color: var(--hrms-accent) !important;
+}
+
+body.hrms-ui #wrapper > .content .table > thead > tr > th {
+  background: #f8fafc;
+  border-bottom: 1px solid var(--hrms-line) !important;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+body.hrms-ui #wrapper > .content .table > tbody > tr > td {
+  border-color: #f1f5f9 !important;
+  vertical-align: middle;
+}
+body.hrms-ui #wrapper > .content .table-striped > tbody > tr:nth-of-type(odd) {
+  background: #fafbfc;
+}
+
+body.hrms-ui #wrapper > .content .bio-tabs > li > a,
+body.hrms-ui #wrapper > .content .nav-tabs > li > a,
+body.hrms-ui #wrapper > .content .horizontal-tabs .nav-tabs > li > a {
+  border-radius: 999px !important;
+  margin-right: 6px;
+  padding: 8px 14px !important;
+}
+body.hrms-ui #wrapper > .content .bio-tabs > li.active > a,
+body.hrms-ui #wrapper > .content .nav-tabs > li.active > a {
+  background: #e2e8f0 !important;
+  color: var(--hrms-ink) !important;
+  border: 0 !important;
+}
+
+body.hrms-ui #wrapper > .content .t2g-sync-banner {
+  border-radius: 14px !important;
+}
+
+body.hrms-ui #wrapper > .content .emp-att-card {
+  border-radius: 14px !important;
+  border: 1px solid var(--hrms-line);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+body.hrms-ui #wrapper > .content .emp-att-card .panel-body {
+  border-radius: 14px;
+}
+body.hrms-ui #wrapper > .content .pagination button {
+  border-radius: 999px !important;
+}
+body.hrms-ui #wrapper > .content .pagination button.active {
+  background: var(--hrms-accent) !important;
+  border-color: var(--hrms-accent) !important;
+}
+
+/* Leave apply / HRMS modals only — never Suggestion modal */
+body.hrms-ui #requisition_m .modal-content,
+body.hrms-ui .modal.leave-apply-modal .modal-content {
+  border-radius: 16px !important;
+  border: 1px solid var(--hrms-line);
+  overflow: hidden;
+}
+body.hrms-ui #requisition_m .modal-header,
+body.hrms-ui .modal.leave-apply-modal .modal-header {
+  background: #f8fafc;
+  border-bottom: 1px solid var(--hrms-line);
+}
+body.hrms-ui #requisition_m .modal-footer,
+body.hrms-ui .modal.leave-apply-modal .modal-footer {
+  background: #f8fafc;
+  border-top: 1px solid var(--hrms-line);
+}
+
+/* HRMS top quick strip (inside content only) */
+.hrms-topnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0 2px;
+}
+.hrms-topnav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--hrms-line, #e2e8f0);
+  color: #0f172a !important;
+  text-decoration: none !important;
+  font-size: 12px;
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.hrms-topnav a:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+.hrms-topnav a i {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 12px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.hrms-topnav a i::before {
+  display: block;
+  line-height: 1;
+}
+.hrms-topnav a.active {
+  background: #141e46;
+  border-color: #141e46;
+  color: #fff !important;
+}
+.hrms-topnav a.active i {
+  background: rgba(255,255,255,.18);
+  color: #fff;
+}
+
+@media (max-width: 767px) {
+  .hrms-topnav {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .hrms-topnav a {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: flex-start;
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .hrms-topnav a span,
+  .hrms-topnav a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+body.hrms-ui .hrms-home .content,
+body.hrms-ui .time-off-page .content {
+  background: var(--hrms-bg) !important;
+}

@@ -36,8 +36,8 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         /* or any other display property you want */
     }
 
-    /* privacy policy styling */
-    .navbar-nav>li>a {
+    /* Only underline Company Policies — not every navbar link */
+    .navbar-nav > li > a[href*="company_policies"] {
         text-decoration: underline !important;
         color: white !important;
     }
@@ -73,6 +73,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     }
     $CI->load->model('timesheets/timesheets_model');
 
+    if (function_exists('get_option')) {
+        $tz = (string) get_option('default_timezone');
+        if ($tz !== '' && date_default_timezone_get() !== $tz) {
+            date_default_timezone_set($tz);
+        }
+    }
+
     $allows_updating_check_in_time = 0;
     if (function_exists('get_timesheets_option')) {
         $data_allows_updating = get_timesheets_option('allows_updating_check_in_time');
@@ -81,26 +88,98 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         }
     }
 
+    // 13-hour cooldown window: after 13 hours, punches disappear, auto-checkout occurs if not checked out, and user is ready for next day's punch.
+    $cooldown_hours = 13;
+
+    // If staff member has an unclosed Workroom check-in older than 13 hours, trigger auto-checkout
+    try {
+        $CI->load->model('cron_model');
+        if (method_exists($CI->cron_model, 'processCheckinForStaff')) {
+            $CI->cron_model->processCheckinForStaff((int) get_staff_user_id());
+        }
+    } catch (Throwable $e) {
+    }
+
+    $today_ymd = date('Y-m-d');
+    $data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
+    $latest_wr_date = !empty($data_check_in_out[0]['date']) ? date('Y-m-d', strtotime($data_check_in_out[0]['date'])) : '';
+
+    $html_list = '';
+    $time_from_checkin = 999;
     $type_check_in_out = '';
 
-    $data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
-    $html_list = '';
+    if (!empty($data_check_in_out[0]['date'])) {
+        $last_type = (int) ($data_check_in_out[0]['type_check'] ?? 0);
+        $last_date = $data_check_in_out[0]['date'];
+        $last_ts = strtotime($last_date);
 
-    $type_check_in_out = $data_check_in_out[0]['type_check'];
+        if ($last_type === 1) {
+            $hours = (time() - $last_ts) / 3600;
+            if ($hours < $cooldown_hours && $latest_wr_date === $today_ymd) {
+                $type_check_in_out = 1;
+                $time_from_checkin = $hours;
+                $html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('h:i:s A', $last_ts) . '</span>';
+            } else {
+                $type_check_in_out = 2;
+                $time_from_checkin = 999;
+                $html_list = '';
+            }
+        } elseif ($last_type === 2) {
+            $in_date = !empty($data_check_in_out[1]['date']) ? $data_check_in_out[1]['date'] : $last_date;
+            $in_ts = strtotime($in_date);
+            $hours = (time() - $in_ts) / 3600;
 
-    $time_from_checkin = '';
-	
-    if ($type_check_in_out == 1) {
-
-        $html_list = '<div class="row ttt"><div class="col-md-12"><div class="alert alert-success">Check in : ' . Date('h:i:s A', strtotime($data_check_in_out[0]['date'])) . '</div></div></div>';
-        $time_from_checkin = abs(strtotime("now") - strtotime($data_check_in_out[0]['date'])) / 3600;
-    } else {
-        $html_list = '<div class="row"><div class="col-md-12"><div class="alert alert-success">Check in : ' . Date('h:i:s A', strtotime($data_check_in_out[1]['date'])) . '</div></div></div>';
-
-        $html_list .= '<div class="row"><div class="col-md-12"><div class="alert alert-warning">Check out : ' . Date('h:i:s A', strtotime($data_check_in_out[0]['date'])) . '</div></div></div>';
-
-        $time_from_checkin = abs(strtotime("now") - strtotime($data_check_in_out[1]['date'])) / 3600;
+            if ($hours < $cooldown_hours && $latest_wr_date === $today_ymd) {
+                $type_check_in_out = 2;
+                $time_from_checkin = $hours;
+                $html_list = '';
+                if (!empty($data_check_in_out[1]['date']) && date('Y-m-d', $in_ts) === $today_ymd) {
+                    $html_list .= '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('h:i:s A', $in_ts) . '</span> ';
+                }
+                $html_list .= '<span class="header-workroom-pill header-workroom-pill-out header-source-pill" title="Workroom web check-out"><span class="header-source-tag">Workroom</span> Check out : ' . Date('h:i:s A', $last_ts) . '</span>';
+            } else {
+                // 13 hours cooldown passed or older day: disappear pills and start next day!
+                $type_check_in_out = 2;
+                $time_from_checkin = 999;
+                $html_list = '';
+            }
+        }
     }
+
+    // Navbar Biomax pill: auto from today's biometric sheet (STRICTLY today only).
+    $biomax_checkin_label = '';
+    $biomax_is_checked_out = false;
+    $biomax_last_out_ts = 0;
+
+    try {
+        $CI->load->model('biometric_model');
+        $biomax_today = $CI->biometric_model->get_staff_today_punch((int) get_staff_user_id());
+        if (is_array($biomax_today)) {
+            // Strict date verification: attendance_date MUST equal today (e.g. 12-Sep-2026).
+            $today_dmy = date('d-M-Y');
+            $row_date = trim((string) ($biomax_today['attendance_date'] ?? ''));
+            if (strcasecmp($today_dmy, $row_date) === 0) {
+                $bio_summary = $CI->biometric_model->get_biomax_punch_summary($biomax_today);
+                if ($bio_summary && !empty($bio_summary['first_time_formatted'])) {
+                    // Check 13-hour cooldown from first punch
+                    $bio_hours_elapsed = (time() - $bio_summary['first_ts']) / 3600;
+                    if ($bio_hours_elapsed < $cooldown_hours) {
+                        $biomax_checkin_label = $bio_summary['first_time_formatted'];
+                        $biomax_is_checked_out = $bio_summary['is_checked_out'];
+                        $biomax_last_out_ts = $bio_summary['last_ts'];
+                    }
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $biomax_checkin_label = '';
+    }
+
+    // If today's biometric report is synced:
+    // Show only [BIOMAX] Check in : hh:mm:ss AM, and hide all Workroom buttons (checkout & checkin).
+    // If today's biometric report is not yet synced (or WFH employee):
+    // Show Workroom [Check in]. As soon as biometric report comes alive, it takes the first punch and hides checkout.
+    // If no report arrives within 13 hours, Workroom auto-cooldown applies and resets for next day.
     ?>
 
     <nav>
@@ -238,46 +317,55 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         <a href="/admin/company_policies">Company Policies</a>
                     </li>
 
-                    <!-- Suggestion + Check in/out: one aligned button group -->
+                    <!-- Left: actions + status (Biomax punch when synced, else Workroom check in/out) -->
                     <li id="headerActionButtons" class="header-action-buttons check-time-btn">
-                        <button type="button" id="openStaffSuggestionModal" class="btn btn-info btn-suggestion-header" title="<?php echo _l('suggestion_box'); ?>" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;">
-                            <i class="fa fa-lightbulb-o"></i> <?php echo _l('suggestion_box'); ?>
-                        </button>
+                        <?php if ($biomax_checkin_label !== '') { ?>
+                            <span class="header-biomax-pill" title="Office Biomax device punch (from sheet)">
+                                <span class="header-source-tag">Biomax</span> Check in : <?php echo html_escape($biomax_checkin_label); ?>
+                            </span>
+                        <?php } else { ?>
+                            <?php
+                            if ($type_check_in_out != 1 && ($time_from_checkin >= 13 || $allows_updating_check_in_time == 1)) {
+                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                                <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                                <input type="hidden" name="type_check" value="1">
+                                <input type="hidden" name="edit_date" value="">
+                                <input type="hidden" name="point_id" value="">
+                                <input type="hidden" name="location_user" value="">
+                                <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
+                            <?php echo form_close();
+                            } ?>
 
-                        <?php
-                        if (($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin()) && $time_from_checkin >= 15) {
-                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                            <input type="hidden" name="type_check" value="1">
-                            <input type="hidden" name="edit_date" value="">
-                            <input type="hidden" name="point_id" value="">
-                            <input type="hidden" name="location_user" value="">
-                            <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
-                        <?php echo form_close();
-                        } ?>
+                            <?php
+                            if ($type_check_in_out == 1) {
+                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                                <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                                <input type="hidden" name="type_check" value="2">
+                                <input type="hidden" name="edit_date" value="">
+                                <input type="hidden" name="point_id" value="">
+                                <input type="hidden" name="location_user" value="">
+                                <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
+                            <?php echo form_close();
+                            } ?>
 
-                        <?php
-                        if ($type_check_in_out == 1 || is_admin()) {
-                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                            <input type="hidden" name="type_check" value="2">
-                            <input type="hidden" name="edit_date" value="">
-                            <input type="hidden" name="point_id" value="">
-                            <input type="hidden" name="location_user" value="">
-                            <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
-                        <?php echo form_close();
-                        } ?>
+                            <?php
+                            if (!($time_from_checkin >= 13)) {
+                                echo $html_list;
+                            }
+                            ?>
+                        <?php } ?>
                     </li>
 
                     <style>
                         #headerActionButtons.header-action-buttons {
                             display: inline-flex !important;
                             align-items: center;
-                            gap: 8px;
-                            padding: 8px 10px !important;
+                            gap: 6px;
+                            padding: 6px 8px !important;
                             width: auto !important;
                             vertical-align: middle;
                             list-style: none;
+                            flex-wrap: nowrap;
                         }
                         #headerActionButtons .header-action-form {
                             display: inline-block !important;
@@ -303,6 +391,54 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             background-color: #0284c7 !important;
                             border-color: #7dd3fc !important;
                             color: #fff !important;
+                        }
+                        .header-source-tag {
+                            display: inline-block;
+                            padding: 0 4px;
+                            border-radius: 3px;
+                            font-size: 8px;
+                            font-weight: 800;
+                            letter-spacing: 0.03em;
+                            text-transform: uppercase;
+                            line-height: 1.35;
+                        }
+                        .header-biomax-pill,
+                        .header-workroom-pill {
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 4px;
+                            padding: 3px 8px;
+                            border-radius: 5px;
+                            color: #fff !important;
+                            font-size: 11px;
+                            font-weight: 600;
+                            line-height: 1.2;
+                            white-space: nowrap;
+                            font-variant-numeric: tabular-nums;
+                            cursor: default;
+                            user-select: none;
+                            pointer-events: none;
+                            border: none;
+                            box-shadow: none;
+                            transition: none !important;
+                            text-decoration: none !important;
+                            margin: 0 !important;
+                            height: 24px;
+                        }
+                        .header-biomax-pill {
+                            background-color: #0a1140 !important;
+                        }
+                        .header-biomax-pill .header-source-tag {
+                            background: rgba(96, 165, 250, 0.25);
+                            color: #93c5fd;
+                        }
+                        .header-workroom-pill {
+                            background-color: #ca8a04 !important;
+                        }
+                        .header-workroom-pill .header-source-tag {
+                            background: rgba(0, 0, 0, 0.18);
+                            color: #fff;
                         }
                         @media screen and (max-width: 1099px) {
                             #headerActionButtons.header-action-buttons {
@@ -433,20 +569,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                 ?>
 
 
-                <li class="check-time-btn">
-
-                    <!-- This list will show check in/out info on header -->
-                    <?php
-
-                    if (!($time_from_checkin >= 15)) {
-                        echo html_entity_decode($html_list);
-                    }
-
-                    ?>
-                </li>
-
-
-
                 <?php// if (is_staff_member()) { ?>
 
                     <!--<li class="icon header-newsfeed">
@@ -502,6 +624,12 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                     <ul class="dropdown-menu animated fadeIn">
 
                         <li class="header-my-profile"><a href="<?php echo admin_url('profile'); ?>"><?php echo _l('nav_my_profile'); ?></a></li>
+
+                        <li class="header-suggestion-box">
+                            <a href="#" id="openStaffSuggestionModal" class="open-staff-suggestion" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;">
+                                <i class="fa fa-lightbulb-o" style="margin-right: 6px;"></i> <?php echo _l('suggestion_box'); ?> Box
+                            </a>
+                        </li>
 
                         <!-- <li class="header-my-timesheets"><a href="<?php echo admin_url('staff/timesheets'); ?>"><?php echo _l('my_timesheets'); ?></a>
 
@@ -716,7 +844,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     document.addEventListener('click', function (e) {
         var t = e.target;
         while (t && t !== document) {
-            if (t.id === 'openStaffSuggestionModal') {
+            if (t.id === 'openStaffSuggestionModal' || (t.classList && t.classList.contains('open-staff-suggestion')) || (t.closest && t.closest('#openStaffSuggestionModal, .open-staff-suggestion'))) {
                 openStaffSuggestionModal(e);
                 return;
             }

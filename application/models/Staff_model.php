@@ -1869,7 +1869,7 @@ class Staff_model extends App_Model
     }
 
     /**
-     * Employment category for leave rates: fte | intern | wfh
+     * Employment category for leave rates: fte | intern | wfh | contractual
      */
     public function get_employment_category($staffid)
     {
@@ -1878,7 +1878,11 @@ class Staff_model extends App_Model
             return 'fte';
         }
 
-        if (!$this->db->field_exists('employment_category', db_prefix() . 'staff_info')) {
+        static $has_category_col = null;
+        if ($has_category_col === null) {
+            $has_category_col = $this->db->field_exists('employment_category', db_prefix() . 'staff_info');
+        }
+        if (!$has_category_col) {
             return 'fte';
         }
 
@@ -1887,11 +1891,47 @@ class Staff_model extends App_Model
             ->get(db_prefix() . 'staff_info')
             ->row();
         $cat = strtolower(trim((string) ($row->employment_category ?? 'fte')));
-        if (!in_array($cat, ['fte', 'intern', 'wfh'], true)) {
+        if (!in_array($cat, ['fte', 'intern', 'wfh', 'contractual'], true)) {
             return 'fte';
         }
 
         return $cat;
+    }
+
+    /**
+     * Batch employment categories for many staff (avoids N+1 on leave balance).
+     * @return array<int,string> staffid => fte|intern|wfh|contractual
+     */
+    public function get_employment_categories_batch(array $staff_ids)
+    {
+        $out = [];
+        $staff_ids = array_values(array_filter(array_map('intval', $staff_ids)));
+        foreach ($staff_ids as $sid) {
+            $out[$sid] = 'fte';
+        }
+        if (!$staff_ids) {
+            return $out;
+        }
+
+        static $has_category_col = null;
+        if ($has_category_col === null) {
+            $has_category_col = $this->db->field_exists('employment_category', db_prefix() . 'staff_info');
+        }
+        if (!$has_category_col) {
+            return $out;
+        }
+
+        $rows = $this->db->select('staffid, employment_category')
+            ->where_in('staffid', $staff_ids)
+            ->get(db_prefix() . 'staff_info')
+            ->result_array();
+        foreach ($rows as $row) {
+            $sid = (int) $row['staffid'];
+            $cat = strtolower(trim((string) ($row['employment_category'] ?? 'fte')));
+            $out[$sid] = in_array($cat, ['fte', 'intern', 'wfh', 'contractual'], true) ? $cat : 'fte';
+        }
+
+        return $out;
     }
 
     /**
@@ -1906,6 +1946,33 @@ class Staff_model extends App_Model
 
         return (int) $this->db->where('staffid', $staffid)
             ->count_all_results(db_prefix() . 'hr_list_staff_quitting_work') > 0;
+    }
+
+    /**
+     * Batch resignation flags.
+     * @return array<int,bool>
+     */
+    public function get_resigned_staff_map(array $staff_ids)
+    {
+        $staff_ids = array_values(array_filter(array_map('intval', $staff_ids)));
+        $map = [];
+        foreach ($staff_ids as $sid) {
+            $map[$sid] = false;
+        }
+        if (!$staff_ids || !$this->db->table_exists(db_prefix() . 'hr_list_staff_quitting_work')) {
+            return $map;
+        }
+
+        $rows = $this->db->select('staffid')
+            ->where_in('staffid', $staff_ids)
+            ->group_by('staffid')
+            ->get(db_prefix() . 'hr_list_staff_quitting_work')
+            ->result_array();
+        foreach ($rows as $row) {
+            $map[(int) $row['staffid']] = true;
+        }
+
+        return $map;
     }
 
     /**
@@ -1945,7 +2012,7 @@ class Staff_model extends App_Model
         }
 
         $category = $staffid > 0 ? $this->get_employment_category($staffid) : 'fte';
-        if ($category === 'intern' || $category === 'wfh') {
+        if ($category === 'intern' || $category === 'wfh' || $category === 'contractual') {
             return 1.0;
         }
 
@@ -2069,6 +2136,20 @@ class Staff_model extends App_Model
         return $totalLeavesPreviousMonth - $sum_of_leaves;
     }*/
 	
+	/**
+	 * Opening EL balance on the 1st of $month/$year.
+	 *
+	 * Correct roll-forward (matches HR expectation):
+	 *   opening(this month) = opening(prev) + earned(prev) − approved EL taken(prev)
+	 * Example: balance 3, take 2 → remain 1 → next month opening 1, then +1.25 earned.
+	 *
+	 * Prefer DOJ roll-forward (earn − taken each month) so Leave Balance matches View Details.
+	 * Stale day-1 type_of_leave='0' snapshots often store a wrong opening (e.g. 2.5) and must
+	 * NOT short-circuit the month when DOJ exists — that caused CF 2.5 vs table opening 6.25.
+	 * Snapshots are only used when DOJ is missing (legacy seed).
+	 * Do NOT reuse carry_forward from the latest leave application (that column stores month
+	 * opening, not remaining after deduction).
+	 */
 	 function carryForward($staffid, $doj, $month, $year)
     {
         $staffid = (int) $staffid;
@@ -2082,19 +2163,149 @@ class Staff_model extends App_Model
             return 0;
         }
 
-        $monthFormatted = str_pad($month, 2, '0', STR_PAD_LEFT);
-        $firstDayOfTheMonth = "$year-$monthFormatted-01 00:00:00";
-
-        $sql = "SELECT carry_forward FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time <= '$firstDayOfTheMonth' ORDER by id DESC LIMIT 1";
-
-        $query = $this->db->query($sql);
-        $sum_of_leaves = $query ? $query->row() : null;
-        if (!$sum_of_leaves) {
-            return 0;
+        static $cache = [];
+        $cache_key = $staffid . '-' . $year . '-' . $month;
+        if (array_key_exists($cache_key, $cache)) {
+            return $cache[$cache_key];
         }
 
-        $carry = (float) ($sum_of_leaves->carry_forward ?? 0);
-        // Financial year starts April: cap carry into April (and later months that still hold FY opening).
+        if ((empty($doj) || $doj === '0000-00-00' || !strtotime($doj)) && $staffid > 0) {
+            $info = $this->db->select('doj')->where('staffid', $staffid)->get(db_prefix() . 'staff_info')->row();
+            $doj = $info->doj ?? null;
+        }
+
+        $firstDayOfTheMonth = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+        $el_keys = $this->earned_leave_type_keys_sql();
+        $has_doj = !empty($doj) && $doj !== '0000-00-00' && strtotime($doj);
+
+        if ($has_doj) {
+            // Authoritative path: open at DOJ with 0, roll earn − taken through previous month.
+            $carry = 0.0;
+            $cursor_y = (int) date('Y', strtotime($doj));
+            $cursor_m = (int) date('n', strtotime($doj));
+        } else {
+            // No DOJ: latest monthly opening snapshot (HR seed on day 1).
+            $snap = $this->db->query(
+                "SELECT carry_forward, start_time
+                 FROM tbltimesheets_requisition_leave
+                 WHERE staff_id = ?
+                   AND start_time <= ?
+                   AND DAY(start_time) = 1
+                   AND (type_of_leave = '0' OR type_of_leave = 0 OR type_of_leave = '')
+                 ORDER BY start_time DESC, id DESC
+                 LIMIT 1",
+                [$staffid, $firstDayOfTheMonth]
+            )->row();
+
+            if ($snap) {
+                $carry = (float) ($snap->carry_forward ?? 0);
+                $cursor_y = (int) date('Y', strtotime($snap->start_time));
+                $cursor_m = (int) date('n', strtotime($snap->start_time));
+            } else {
+                $legacy = $this->db->query(
+                    "SELECT carry_forward FROM tbltimesheets_requisition_leave
+                     WHERE staff_id = ? AND start_time <= ?
+                     ORDER BY id DESC LIMIT 1",
+                    [$staffid, $firstDayOfTheMonth]
+                )->row();
+                $carry = $legacy ? (float) ($legacy->carry_forward ?? 0) : 0.0;
+                if ($month === 4) {
+                    $cap = $this->get_leave_carry_forward_cap($staffid);
+                    if ($carry > $cap) {
+                        $carry = $cap;
+                    }
+                }
+                $cache[$cache_key] = $carry;
+                return $carry;
+            }
+
+            // Snapshot for this exact month is the opening only when we have no DOJ to recompute.
+            if ($cursor_y === $year && $cursor_m === $month) {
+                if ($month === 4) {
+                    $cap = $this->get_leave_carry_forward_cap($staffid);
+                    if ($carry > $cap) {
+                        $carry = $cap;
+                    }
+                }
+                $cache[$cache_key] = $carry;
+                return $carry;
+            }
+        }
+
+        // Preload approved EL taken from snapshot/DOJ month through previous month.
+        $range_start = sprintf('%04d-%02d-01', $cursor_y, $cursor_m);
+        $prev = $this->previous_calendar_month($month, $year);
+        $range_end = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $prev['year'], $prev['month'])));
+
+        $taken_by_ym = [];
+        if (strtotime($range_start) <= strtotime($range_end)) {
+            $taken_rows = $this->db->query(
+                "SELECT YEAR(start_time) AS y, MONTH(start_time) AS m,
+                        COALESCE(SUM(number_of_leaving_day), 0) AS taken
+                 FROM tbltimesheets_requisition_leave
+                 WHERE staff_id = ?
+                   AND status = 1
+                   AND type_of_leave IN ($el_keys)
+                   AND start_time >= ?
+                   AND start_time < ?
+                 GROUP BY YEAR(start_time), MONTH(start_time)",
+                [$staffid, $range_start . ' 00:00:00', $firstDayOfTheMonth]
+            )->result_array();
+            foreach ($taken_rows as $row) {
+                $taken_by_ym[(int) $row['y'] . '-' . (int) $row['m']] = (float) $row['taken'];
+            }
+        }
+
+        $is_resigned = false;
+        $category = $this->get_employment_category($staffid);
+        $override_table = $this->ensure_earned_leave_override_table();
+        $override_rows = $this->db->select('month, year, earned_days')
+            ->from($override_table)
+            ->where('staff_id', $staffid)
+            ->where('year >=', $cursor_y)
+            ->where('year <=', $year)
+            ->get()
+            ->result_array();
+        $overrides = [];
+        foreach ($override_rows as $row) {
+            $overrides[(int) $row['year'] . '-' . (int) $row['month']] = (float) $row['earned_days'];
+        }
+
+        $y = $cursor_y;
+        $m = $cursor_m;
+        while ($y < $year || ($y === $year && $m < $month)) {
+            $ym = $y . '-' . $m;
+            $as_of = sprintf('%04d-%02d-%02d', $y, $m, min(28, (int) date('j')));
+            if (isset($overrides[$ym])) {
+                $earned = (float) $overrides[$ym];
+            } else {
+                $earned = (float) $this->calculateEarnedLeavesFast(
+                    $doj,
+                    $staffid,
+                    $m,
+                    $y,
+                    $is_resigned,
+                    $category,
+                    $as_of
+                );
+            }
+            $taken = $taken_by_ym[$ym] ?? 0.0;
+            $carry = round($carry + $earned - $taken, 2);
+
+            $m++;
+            if ($m > 12) {
+                $m = 1;
+                $y++;
+            }
+            // Cap when entering April (FY boundary).
+            if ($m === 4) {
+                $cap = $this->get_leave_carry_forward_cap($staffid);
+                if ($carry > $cap) {
+                    $carry = $cap;
+                }
+            }
+        }
+
         if ($month === 4) {
             $cap = $this->get_leave_carry_forward_cap($staffid);
             if ($carry > $cap) {
@@ -2102,7 +2313,35 @@ class Staff_model extends App_Model
             }
         }
 
+        $cache[$cache_key] = $carry;
         return $carry;
+    }
+
+    /**
+     * Storage keys that count as earned leave for deduction / carry math.
+     */
+    public function earned_leave_type_keys()
+    {
+        return ['earned-leave', '8', 'Leave', 'annual_leave', 'planned_leaves'];
+    }
+
+    public function earned_leave_type_keys_sql()
+    {
+        $keys = [];
+        foreach ($this->earned_leave_type_keys() as $k) {
+            $keys[] = $this->db->escape($k);
+        }
+        return implode(',', $keys);
+    }
+
+    public function previous_calendar_month($month, $year)
+    {
+        $month = (int) $month;
+        $year = (int) $year;
+        if ($month <= 1) {
+            return ['month' => 12, 'year' => $year - 1];
+        }
+        return ['month' => $month - 1, 'year' => $year];
     }
 	
 
@@ -2274,21 +2513,7 @@ class Staff_model extends App_Model
         $absent_status = [];
         $status_approve = [];
 
-        $q = $this->db->query(
-            "SELECT r.staff_id, r.carry_forward
-            FROM tbltimesheets_requisition_leave r
-            INNER JOIN (
-                SELECT staff_id, MAX(id) AS max_id
-                FROM tbltimesheets_requisition_leave
-                WHERE staff_id IN ($id_list) AND start_time <= ?
-                GROUP BY staff_id
-            ) latest ON r.id = latest.max_id",
-            [$firstDay]
-        );
-        foreach ($q->result_array() as $r) {
-            $carry_forward[(int) $r['staff_id']] = $r['carry_forward'];
-        }
-
+        // Latest leave_balance column (legacy display only; real balance recomputed below).
         $q = $this->db->query(
             "SELECT r.staff_id, r.leave_balance
             FROM tbltimesheets_requisition_leave r
@@ -2304,52 +2529,67 @@ class Staff_model extends App_Model
             $leave_balance[(int) $r['staff_id']] = $r['leave_balance'];
         }
 
+        // Approved earned-leave days only (LOP / other types must not reduce EL balance).
+        $el_keys = $this->earned_leave_type_keys_sql();
         $q = $this->db->query(
             "SELECT staff_id, SUM(number_of_leaving_day) AS total
             FROM tbltimesheets_requisition_leave
             WHERE staff_id IN ($id_list)
               AND start_time BETWEEN ? AND ?
-              AND end_time BETWEEN ? AND ?
               AND status = 1
+              AND type_of_leave IN ($el_keys)
             GROUP BY staff_id",
-            [$firstDayDate, $lastDay, $firstDayDate, $lastDay]
+            [$firstDayDate, $lastDay]
         );
         foreach ($q->result_array() as $r) {
             $leave_taken[(int) $r['staff_id']] = (float) $r['total'];
         }
 
         $q = $this->db->query(
-            "SELECT staff_id, COUNT(status) AS total
+            "SELECT staff_id,
+                SUM(CASE WHEN status = 4 THEN 1 ELSE 0 END) AS absent_total,
+                SUM(CASE WHEN status IN (2, 0) THEN 1 ELSE 0 END) AS pending_total
             FROM tbltimesheets_requisition_leave
             WHERE staff_id IN ($id_list)
               AND start_time BETWEEN ? AND ?
-              AND status = 4
+              AND status IN (0, 2, 4)
             GROUP BY staff_id",
             [$firstDayDate, $lastDay]
         );
         foreach ($q->result_array() as $r) {
-            $absent_status[(int) $r['staff_id']] = (int) $r['total'];
-        }
-
-        $q = $this->db->query(
-            "SELECT staff_id, COUNT(status) AS total
-            FROM tbltimesheets_requisition_leave
-            WHERE staff_id IN ($id_list)
-              AND start_time BETWEEN ? AND ?
-              AND status IN (2, 0)
-            GROUP BY staff_id",
-            [$firstDayDate, $lastDay]
-        );
-        foreach ($q->result_array() as $r) {
-            $status_approve[(int) $r['staff_id']] = (int) $r['total'];
+            $sid = (int) $r['staff_id'];
+            $absent_status[$sid] = (int) $r['absent_total'];
+            $status_approve[$sid] = (int) $r['pending_total'];
         }
 
         $earned_overrides = $this->get_earned_leave_overrides_batch(array_values($staff_ids), $month, $year);
 
+        // Reuse resignation + category maps across months in the same request (All Months).
+        static $staff_ctx_cache = [];
+        $ctx_key = implode(',', array_values($staff_ids));
+        if (!isset($staff_ctx_cache[$ctx_key])) {
+            $staff_ctx_cache[$ctx_key] = [
+                'resigned'   => $this->get_resigned_staff_map(array_values($staff_ids)),
+                'categories' => $this->get_employment_categories_batch(array_values($staff_ids)),
+            ];
+        }
+        $resigned = $staff_ctx_cache[$ctx_key]['resigned'];
+        $categories = $staff_ctx_cache[$ctx_key]['categories'];
+        $as_of = sprintf('%04d-%02d-%02d', $year, $month, min(28, (int) date('j')));
+
         foreach ($rows as &$leaveData) {
             $sid = (int) $leaveData['staffid'];
-            $leaveData['carry_forward'] = $carry_forward[$sid] ?? 0;
-            $default_earned = $this->calculateEarnedLeaves($leaveData['doj'] ?? null, $sid, $month, $year);
+            // True opening = prev closing (earned − EL taken), not stale application column.
+            $leaveData['carry_forward'] = $this->carryForward($sid, $leaveData['doj'] ?? null, $month, $year);
+            $default_earned = $this->calculateEarnedLeavesFast(
+                $leaveData['doj'] ?? null,
+                $sid,
+                $month,
+                $year,
+                !empty($resigned[$sid]),
+                $categories[$sid] ?? 'fte',
+                $as_of
+            );
             $leaveData['earned_leave'] = isset($earned_overrides[$sid])
                 ? (float) $earned_overrides[$sid]
                 : $default_earned;
@@ -2368,6 +2608,42 @@ class Staff_model extends App_Model
         unset($leaveData);
 
         return $rows;
+    }
+
+    /**
+     * Same earned-leave math as calculateEarnedLeaves, without per-row DB hits.
+     */
+    public function calculateEarnedLeavesFast($doj, $staffid, $month, $year, $is_resigned, $category, $as_of)
+    {
+        $staffid = (int) $staffid;
+        $month = (int) $month;
+        $year = (int) $year;
+        if ($staffid > 0 && $is_resigned) {
+            return 0.0;
+        }
+
+        $category = in_array($category, ['fte', 'intern', 'wfh', 'contractual'], true) ? $category : 'fte';
+        if ($category === 'intern' || $category === 'wfh' || $category === 'contractual') {
+            $base = 1.0;
+        } else {
+            $base = 1.25;
+            if (!empty($doj) && $doj !== '0000-00-00' && strtotime($doj)) {
+                $tenureYears = floor((strtotime($as_of) - strtotime($doj)) / (365 * 24 * 60 * 60));
+                if ($tenureYears >= 2) {
+                    $base = 1.75;
+                }
+            }
+        }
+
+        $emp_month = $this->employment_month_number($doj, $month, $year);
+        if ($emp_month <= 0 || $emp_month === 1) {
+            return 0.0;
+        }
+        if ($emp_month === 2) {
+            return round($base * 2, 2);
+        }
+
+        return round($base, 2);
     }
 
     /**

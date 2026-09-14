@@ -104,41 +104,17 @@ $valid_cur_date = date('Y-m-d');
             <div class="row">
 
               <div class="col-md-12 mtop15">
-
-                <a href="#" onclick="new_requisition(); return false;" class="btn mright5 btn-info pull-left display-block" data-toggle="sidebar-right" data-target=".requisition_m"  >
-
-                  <?php echo 'Apply for Leave'; ?>
-
-                </a>
-
-                <!--<a href="<?php //echo admin_url('timesheets/calendar_leave_application'); ?>" class="btn btn-default">
-
-                  <i class="fa fa-calendar menu-icon"></i>&nbsp;
-
-                  <?php //echo _l('ts_calendar_view'); ?>
-
-                </a>-->
-
-                <a href="<?php echo admin_url('staff/leave_balance'); ?>" class="btn btn-primary">
-
-                  <?php echo "Leave Balance"; ?>
-
-                </a>
-				<a href="<?php echo admin_url('holiday/manageHolidayStaff'); ?>" class="btn btn-primary">
-
-                  <?php echo "View Saturday Leaves"; ?>
-
-                </a>
-
-                
-
-
-                <div class="clearfix"></div>
-
-                <br>
-
-                <br>          
-
+                <div class="leave-page-actions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
+                  <a href="#" onclick="new_requisition(); return false;" class="btn btn-info" data-toggle="sidebar-right" data-target=".requisition_m">
+                    <?php echo 'Leave apply'; ?>
+                  </a>
+                  <a href="<?php echo admin_url('staff/leave_balance'); ?>" class="btn btn-primary">
+                    <?php echo "Leave Balance"; ?>
+                  </a>
+                  <a href="<?php echo admin_url('holiday/manageHolidayStaff'); ?>" class="btn btn-primary">
+                    <?php echo "View Saturday Leaves"; ?>
+                  </a>
+                </div>
               </div>
 
             </div>
@@ -415,7 +391,7 @@ render_datatable($table_data,'table_registration_leave',
 <!-- start -->
 
 <style>
-  #requisition_m .modal-dialog { width: 720px; max-width: 95%; }
+  #requisition_m .modal-dialog { width: 720px; max-width: min(720px, 96vw); }
   #requisition_m .leave-apply-label { color: #6b7280; font-weight: 500; margin-bottom: 6px; }
   #requisition_m .leave-apply-label .req { color: #e11d48; }
   #requisition_m .leave-summary-box {
@@ -436,10 +412,15 @@ render_datatable($table_data,'table_registration_leave',
   #requisition_m .attach-hint { color: #9ca3af; font-size: 12px; margin-top: 4px; }
   #requisition_m .modal-footer { text-align: center; }
   #requisition_m .modal-footer .btn { min-width: 110px; margin: 0 6px; }
-  #requisition_m .date_session_row { display: flex; gap: 10px; align-items: flex-end; }
-  #requisition_m .date_session_row .date-col { flex: 1.4; }
-  #requisition_m .date_session_row .session-col { flex: 1; }
+  #requisition_m .date_session_row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  #requisition_m .date_session_row .date-col { flex: 1.4; min-width: 140px; }
+  #requisition_m .date_session_row .session-col { flex: 1; min-width: 120px; }
   #requisition_m .date_session_row .form-group { margin-bottom: 0; }
+  @media (max-width: 1199px) {
+    #requisition_m .date_input > .col-md-8,
+    #requisition_m .date_input > .col-md-4 { width: 100%; float: none; }
+    #requisition_m .leave-summary-box { margin-top: 12px; margin-bottom: 12px; }
+  }
 </style>
 
 <div class="modal fade" id="requisition_m" tabindex="-1" role="dialog">
@@ -460,10 +441,10 @@ render_datatable($table_data,'table_registration_leave',
 	// get_remain_day_off() fills the real card balance when the modal opens.
 	$leave_balance = 0;
 	$manager_name = isset($results) ? $results : '';
-	$cc_staff = !empty($pro) ? $pro : (isset($cc_staff) ? $cc_staff : []);
+	$cc_staff = isset($cc_staff) && is_array($cc_staff) ? $cc_staff : [];
 	$allowed_apply_leave_slugs = [
-		'loss-of-pay',
 		'earned-leave',
+		'loss-of-pay',
 	];
 	$hidden_apply_leave_slugs = [
 		'comp-off',
@@ -476,7 +457,7 @@ render_datatable($table_data,'table_registration_leave',
       <div class="form" id="new_requisition">
 
         <input type="hidden" name="subject" id="subject" value="Leave Application">
-        <input type="hidden" name="number_of_leaving_day" id="number_of_leaving_day" value="1">
+        <input type="hidden" name="number_of_leaving_day" id="number_of_leaving_day" value="0">
         <input type="hidden" name="number_day_off" id="number_day_off" value="0">
         <input type="hidden" name="type_of_leave_text" id="type_of_leave_text" value="<?php echo html_escape($manager_name); ?>">
         <input type="hidden" name="carry_forward" id="carry_forward" value="<?php echo html_escape($carry_forward); ?>">
@@ -511,7 +492,7 @@ render_datatable($table_data,'table_registration_leave',
               <label class="leave-apply-label">From date <span class="req">*</span></label>
               <div class="date_session_row">
                 <div class="date-col start_time">
-                  <?php echo render_date_input('start_time','',_d($valid_cur_date)); ?>
+                  <?php echo render_date_input('start_time','',''); ?>
                 </div>
                 <div class="session-col">
                   <select name="start_session" id="start_session" class="selectpicker" data-width="100%">
@@ -526,7 +507,7 @@ render_datatable($table_data,'table_registration_leave',
               <label class="leave-apply-label">To date <span class="req">*</span></label>
               <div class="date_session_row">
                 <div class="date-col end_time">
-                  <?php echo render_date_input('end_time','',_d($valid_cur_date)); ?>
+                  <?php echo render_date_input('end_time','',''); ?>
                 </div>
                 <div class="session-col">
                   <select name="end_session" id="end_session" class="selectpicker" data-width="100%">
@@ -541,8 +522,8 @@ render_datatable($table_data,'table_registration_leave',
           <div class="col-md-4">
             <div class="leave-summary-box" id="apply_leave_balance_box">
               <div class="sum-row">Leave Balance: <span class="sum-val" id="leave_balance_value"><?php echo html_escape($leave_balance); ?></span></div>
-              <div class="sum-row">Applying For: <span class="sum-val" id="applying_for_value">1 Day</span></div>
-              <div class="sum-row">Balance after apply: <span class="sum-val" id="remaining_balance_value">-</span></div>
+              <div class="sum-row">Applying For: <span class="sum-val" id="applying_for_value">—</span></div>
+              <div class="sum-row">Balance after apply: <span class="sum-val" id="remaining_balance_value">—</span></div>
               <div id="loss_of_pay_notice" class="lop-notice" style="display:none;"></div>
               <div id="sandwich_leave_notice" class="text-warning" style="font-size:12px;margin-top:6px;display:none;"></div>
               <div id="number_days_off_2" class="hide"></div>
@@ -580,11 +561,6 @@ render_datatable($table_data,'table_registration_leave',
           <div id="cc_add_link" class="leave-cc-add">
             <i class="fa fa-plus-circle"></i> <span>Add</span>
           </div>
-        </div>
-
-        <div class="form-group">
-          <label class="leave-apply-label">Contact details</label>
-          <input type="text" name="contact_details" id="contact_details" class="form-control" placeholder="Phone / email">
         </div>
 
         <div class="form-group">
@@ -802,11 +778,32 @@ $('#end_time').change(function() {
 
 
 var type  = $('#rel_type').find(":selected").val();
+function tsLeavePrevMonthMinDate() {
+	var d = new Date();
+	d.setDate(1);
+	d.setMonth(d.getMonth() - 1);
+	var m = (d.getMonth() + 1);
+	var mm = (m < 10 ? '0' : '') + m;
+	return d.getFullYear() + '/' + mm + '/01';
+}
+function tsInitLeaveDatePickers() {
+	var minD = tsLeavePrevMonthMinDate();
+	if (jQuery.fn.datetimepicker) {
+		jQuery('#start_time').datetimepicker({ timepicker:false, formatDate:'Y/m/d', minDate: minD });
+		jQuery('#end_time').datetimepicker({ datepicker:true, timepicker:false, minDate: minD });
+	}
+	var prev = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+	var $start = $('input[name="start_time"]');
+	var $end = $('input[name="end_time"]');
+	if ($start.length && $start.data('datepicker')) { $start.datepicker('setStartDate', prev); }
+	if ($end.length && $end.data('datepicker')) { $end.datepicker('setStartDate', prev); }
+}
+tsInitLeaveDatePickers();
 if(type=='planned_leaves'){
 jQuery('#start_time').datetimepicker({
 		 timepicker:false,
 		 formatDate:'Y/m/d',
-		 minDate:'-1970/01/02'//yesterday is minimum date(for today use 0 or -1970/01/01)
+		 minDate: tsLeavePrevMonthMinDate()
 		});
 
 }
@@ -844,7 +841,7 @@ $('#rel_type').change(function() {
 	case 'planned_leaves':
 		jQuery('#start_time').datetimepicker({
 		formatDate:'Y/m/d',
-		 minDate:'-1970/01/02',
+		 minDate: tsLeavePrevMonthMinDate(),
 		 timepicker:false
 
 		});
@@ -852,7 +849,7 @@ $('#rel_type').change(function() {
 		  datepicker:true,
 		  timepicker:false,
 		   disabledWeekDays:[-1],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
 	case 'unplanned_leaves': 
@@ -860,13 +857,13 @@ $('#rel_type').change(function() {
 	jQuery('#start_time').datetimepicker({
 		  datepicker:true,
 		  timepicker:false,
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 	jQuery('#end_time').datetimepicker({
 		  datepicker:true,
 		  timepicker:false,
 		   disabledWeekDays:[-1],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;	
 	case 'saturday-leaves': 
@@ -876,7 +873,7 @@ $('#rel_type').change(function() {
 		  timepicker:false,
 		  disabledWeekDays:[0,1,2,3,4,5],
 		   useCurrent: false, // disable focusable
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
 	case 'half-days': 
@@ -884,7 +881,7 @@ $('#rel_type').change(function() {
 		jQuery('#end_time').datetimepicker({
 		  datepicker:true,
 		  disabledWeekDays:[0,1,2,3,4,5],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
 	case 'unpaid-half-days': 
@@ -897,7 +894,7 @@ $('#rel_type').change(function() {
 	case 'short-leaves':
 		jQuery('#start_time').datetimepicker({
 		formatDate:'Y/m/d',
-		 minDate:'-1970/01/02',
+		 minDate: tsLeavePrevMonthMinDate(),
 		 timepicker:false
 
 		});
@@ -905,7 +902,7 @@ $('#rel_type').change(function() {
 		  datepicker:true,
 		  timepicker:false,
 		   disabledWeekDays:[-1],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
 		jQuery('.start_time').show();	
@@ -913,32 +910,34 @@ $('#rel_type').change(function() {
 		jQuery('#start_time').datetimepicker({
 		datepicker:true,
 		  timepicker:false,
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 
 		});
 		jQuery('#end_time').datetimepicker({
 		 datepicker:true,
 		  timepicker:false,
 		   disabledWeekDays:[-1],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
 		case 'holiday-leaves':
 		jQuery('#start_time').datetimepicker({
 		datepicker:true,
 		  timepicker:false,
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 
 		});
 		jQuery('#end_time').datetimepicker({
 		 datepicker:true,
 		  timepicker:false,
 		   disabledWeekDays:[-1],
-		  minDate:'2013/12/03'
+		  minDate: tsLeavePrevMonthMinDate()
 		});
 		break;
+	case 'earned-leave':
+	case 'loss-of-pay':
 	default:
-		console.log('not select any option');
+		tsInitLeaveDatePickers();
 }
 });
 

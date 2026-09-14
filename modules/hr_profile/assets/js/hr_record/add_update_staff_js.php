@@ -141,11 +141,105 @@
 			}
 			$('#appointmentModal div[app-field-wrapper="role_v"]').hide();
 			$('#appointmentModal #div_hourly_rate').hide();
+			init_employment_leave_sync();
 
 		});
 
 		init_selectpicker();
 		$(".selectpicker").selectpicker('refresh');
 	}
+
+	function init_employment_leave_sync() {
+		"use strict";
+
+		var $form = $('#add_edit_member');
+		if (!$form.length || !$form.find('[name="employment_category"]').length) {
+			return;
+		}
+
+		var $rate = $form.find('[name="earned_leave_rate"]');
+		$rate.prop('readonly', false).prop('disabled', false);
+
+		function parseDoj(raw) {
+			raw = $.trim(raw || '');
+			if (!raw) {
+				return null;
+			}
+			// Y-m-d
+			var m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+			if (m) {
+				return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+			}
+			// d/m/Y or d-m-Y
+			m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+			if (m) {
+				return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+			}
+			var d = new Date(raw);
+			return isNaN(d.getTime()) ? null : d;
+		}
+
+		function monthlyRate(category, doj) {
+			category = (category || 'fte').toLowerCase();
+			if (category === 'intern' || category === 'contractual' || category === 'wfh') {
+				return 1;
+			}
+			// Full time: 1.25, or 1.75 after 2 years
+			if (doj) {
+				var now = new Date();
+				var years = (now - doj) / (365 * 24 * 60 * 60 * 1000);
+				if (years >= 2) {
+					return 1.75;
+				}
+			}
+			return 1.25;
+		}
+
+		function isFirstEmploymentMonth(doj) {
+			if (!doj) {
+				return false;
+			}
+			var now = new Date();
+			return doj.getFullYear() === now.getFullYear() && doj.getMonth() === now.getMonth();
+		}
+
+		function syncEarnedLeave(forceFill) {
+			var category = $form.find('[name="employment_category"]').val() || 'fte';
+			var doj = parseDoj($form.find('[name="doj"]').val());
+			var $msg = $('#earned_leave_first_month_msg');
+			var current = $.trim($rate.val() || '');
+
+			if (isFirstEmploymentMonth(doj)) {
+				$msg.removeClass('hide');
+				if (forceFill || current === '') {
+					$rate.val('0');
+				}
+				return;
+			}
+
+			$msg.addClass('hide');
+			if (forceFill || current === '') {
+				$rate.val(String(monthlyRate(category, doj)));
+			}
+		}
+
+		$form.off('changed.bs.select.employmentLeave change.employmentLeave', '[name="employment_category"]')
+			.on('changed.bs.select.employmentLeave change.employmentLeave', '[name="employment_category"]', function() {
+				syncEarnedLeave(true);
+			});
+		$form.off('change.employmentLeave blur.employmentLeave', '[name="doj"]')
+			.on('change.employmentLeave blur.employmentLeave', '[name="doj"]', function() {
+				syncEarnedLeave(false);
+			});
+		$form.off('dp.change.employmentLeave', '[name="doj"]')
+			.on('dp.change.employmentLeave', '[name="doj"]', function() {
+				syncEarnedLeave(false);
+			});
+
+		// Keep saved/manual value if present; only auto-fill when empty.
+		syncEarnedLeave(false);
+	}
+
+	init_employment_leave_sync();
 
 </script>

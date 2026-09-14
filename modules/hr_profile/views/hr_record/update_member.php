@@ -712,6 +712,33 @@
 
                   <div class="row">
                      <div class="col-md-6">
+                        <?php
+                        $employment_category = isset($employment_category) ? $employment_category : (isset($member->employment_category) ? $member->employment_category : 'fte');
+                        $employment_options = array(
+                           array('field_val' => 'intern', 'field_label' => 'Intern'),
+                           array('field_val' => 'contractual', 'field_label' => 'Contractual'),
+                           array('field_val' => 'fte', 'field_label' => 'Full time'),
+                        );
+                        echo render_select('employment_category', $employment_options, array('field_val', 'field_label'), 'Employment Type', $employment_category);
+                        ?>
+                     </div>
+                     <div class="col-md-6">
+                        <?php
+                        $earned_leave_value = isset($earned_leave_rate) ? $earned_leave_rate : '';
+                        echo render_input('earned_leave_rate', 'Earned Leave (per month)', $earned_leave_value, 'number', [
+                           'step' => '0.01',
+                           'min' => '0',
+                           'placeholder' => 'e.g. 1.25',
+                        ]);
+                        ?>
+                        <p id="earned_leave_first_month_msg" class="text-warning hide" style="margin-top:6px;">
+                           Your leave is not granted; it will carry forward with next month.
+                        </p>
+                     </div>
+                  </div>
+
+                  <div class="row">
+                     <div class="col-md-6">
                         <?php $value = (isset($member) ? $member->f_time : ''); ?>
 
                         <?php echo render_select('f_time', array(array('field_val' => 'yes', 'field_label' => 'yes'), array('field_val' => 'no', 'field_label' => 'no')), array('field_label', 'field_label'), 'Is Flexible Timing?', $value); ?>

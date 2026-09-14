@@ -12,7 +12,7 @@
   .t2g-att-stat-card strong { font-size: 20px; font-weight: 700; color: #0f172a; }
   .t2g-att-alert { background: #fff7ed; border: 1px solid #fed7aa; color: #c2410c; font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 6px; margin-bottom: 14px; }
   .t2g-att-layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-  .t2g-att-cal-wrap { flex: 1 1 620px; min-width: 340px; }
+  .t2g-att-cal-wrap { flex: 1 1 480px; min-width: 0; }
   .t2g-att-cal {
     background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px 14px;
   }
@@ -36,14 +36,16 @@
   .t2g-att-cal-code {
     display: block; margin-top: 6px; font-size: 12px; font-weight: 800; text-align: center; line-height: 1.2;
   }
-  .t2g-att-cal-code.code-ok { color: #1d4ed8; }
+  .t2g-att-cal-code.code-ok { color: #15803d; }
+  .t2g-att-cal-code.code-half { color: #c2410c; }
   .t2g-att-cal-code.code-bad { color: #dc2626; }
   .t2g-att-cal-code.code-leave { color: #7c3aed; }
   .t2g-att-cal-code.code-off { color: #64748b; }
   .t2g-att-cal-code.code-holiday { color: #0369a1; }
   .t2g-att-cal-emp { display: none; }
-  .t2g-att-cal-day.tone-ok { background: #dbeafe; border-color: #93c5fd; }
-  .t2g-att-cal-day.tone-bad { background: #ffedd5; border-color: #fdba74; }
+  .t2g-att-cal-day.tone-ok { background: #dcfce7; border-color: #86efac; }
+  .t2g-att-cal-day.tone-half { background: #ffedd5; border-color: #fdba74; }
+  .t2g-att-cal-day.tone-bad { background: #fee2e2; border-color: #fca5a5; }
   .t2g-att-cal-day.tone-leave { background: #f3e8ff; border-color: #d8b4fe; }
   .t2g-att-cal-day.tone-holiday { background: #e0f2fe; border-color: #7dd3fc; }
   .t2g-att-cal-day.tone-off { background: #f8fafc; border-color: #e2e8f0; }
@@ -58,12 +60,13 @@
   }
   .t2g-att-cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
   .t2g-att-cal-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid transparent; }
-  .t2g-att-cal-legend .lg-ok { background: #dbeafe; border-color: #93c5fd; }
-  .t2g-att-cal-legend .lg-bad { background: #ffedd5; border-color: #fdba74; }
+  .t2g-att-cal-legend .lg-ok { background: #dcfce7; border-color: #86efac; }
+  .t2g-att-cal-legend .lg-half { background: #ffedd5; border-color: #fdba74; }
+  .t2g-att-cal-legend .lg-bad { background: #fee2e2; border-color: #fca5a5; }
   .t2g-att-cal-legend .lg-leave { background: #f3e8ff; border-color: #d8b4fe; }
   .t2g-att-cal-legend .lg-off { background: #f8fafc; border-color: #e2e8f0; }
   .t2g-att-detail {
-    flex: 0 1 400px; min-width: 320px; background: #fff; border: 1px solid #e2e8f0;
+    flex: 0 1 340px; min-width: 260px; background: #fff; border: 1px solid #e2e8f0;
     border-radius: 8px; min-height: 420px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.06);
   }
   .t2g-att-empty {
@@ -78,7 +81,7 @@
   .t2g-att-day-emp { font-size: 13px; font-weight: 600; color: #334155; }
   .t2g-att-day-shift { font-size: 12px; color: #64748b; margin-top: 2px; }
   .t2g-att-day-body { padding: 12px 16px 16px; overflow-x: auto; }
-  .t2g-att-metrics { width: 100%; font-size: 10px; border-collapse: collapse; margin-bottom: 12px; min-width: 340px; }
+  .t2g-att-metrics { width: 100%; font-size: 10px; border-collapse: collapse; margin-bottom: 12px; min-width: 280px; }
   .t2g-att-metrics th, .t2g-att-metrics td { border: 1px solid #e2e8f0; padding: 6px 4px; text-align: center; }
   .t2g-att-metrics th { background: #f8fafc; font-weight: 700; color: #475569; white-space: nowrap; }
   .t2g-att-metrics td { font-weight: 600; color: #0f172a; }
@@ -88,7 +91,7 @@
   .t2g-att-subtable th { background: #f8fafc; font-weight: 700; width: 35%; }
   .t2g-att-actions-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
   .t2g-att-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
-  .t2g-att-filters .form-control { max-width: 170px; height: 34px; font-size: 12px; }
+  .t2g-att-filters .form-control { max-width: 220px; height: 34px; font-size: 12px; }
   .t2g-att-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; margin-bottom: 12px; }
   .t2g-att-badge-in { background: #16a34a; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
   .t2g-att-badge-out { background: #dc2626; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
@@ -97,6 +100,16 @@
   .t2g-att-checkio-btn {
     background: #1e3a5f !important; border-color: #1e3a5f !important; color: #fff !important;
     font-weight: 600; border-radius: 6px; padding: 8px 16px; white-space: nowrap;
+  }
+  @media (min-width: 1200px) {
+    .t2g-att-layout { flex-wrap: nowrap; }
+    .t2g-att-cal-wrap { flex: 1 1 auto; }
+    .t2g-att-detail { flex: 0 0 360px; max-width: 38%; }
+  }
+  @media (max-width: 1199px) {
+    .t2g-att-cal-wrap, .t2g-att-detail { flex: 1 1 100%; max-width: 100%; min-width: 0; }
+    .t2g-att-cal-day { min-height: 64px; }
+    .t2g-att-stat-card { min-width: 120px; }
   }
   .t2g-att-checkio-btn:hover, .t2g-att-checkio-btn:focus { background: #152a47 !important; border-color: #152a47 !important; color: #fff !important; }
 </style>
@@ -170,8 +183,9 @@
                   </div>
                   <div class="t2g-att-cal-grid" id="t2g_cal_grid"></div>
                   <div class="t2g-att-cal-legend">
-                    <span><i class="lg-ok"></i> OK (9+ hrs)</span>
-                    <span><i class="lg-bad"></i> Exception / &lt;9 hrs</span>
+                    <span><i class="lg-ok"></i> Present (9+ hrs)</span>
+                    <span><i class="lg-half"></i> Half day (5–9 hrs)</span>
+                    <span><i class="lg-bad"></i> Absent (&lt;5 hrs)</span>
                     <span><i class="lg-leave"></i> Leave</span>
                     <span><i class="lg-off"></i> Off / Holiday</span>
                   </div>
@@ -233,8 +247,31 @@
   var calendarData = <?php echo json_encode($calendar['days'] ?? []); ?>;
   var dayMap = {};
   var selectedDate = '';
+  var calendarLoading = false;
 
   calendarData.forEach(function(d) { dayMap[d.date] = d; });
+
+  function showCalendarLoading() {
+    $('#t2g_cal_grid').html('<div style="grid-column:1/-1;padding:28px;text-align:center;color:#64748b;font-size:13px;"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</div>');
+    $('#t2g_month_stats strong').text('—');
+  }
+
+  function reloadCalendar(newMonth) {
+    if (newMonth) monthYear = newMonth;
+    if (calendarLoading) return;
+    calendarLoading = true;
+    showCalendarLoading();
+    $.getJSON(admin_url + 'timesheets/my_attendance_calendar', { month: monthYear, staff_id: staffId() })
+      .done(function(res) {
+        calendarData = res.days || [];
+        dayMap = {};
+        calendarData.forEach(function(d) { dayMap[d.date] = d; });
+        selectedDate = '';
+        renderCalendar();
+        renderDayPanel(null);
+      })
+      .always(function() { calendarLoading = false; });
+  }
 
   function esc(s) { return $('<div>').text(s || '').html(); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -284,9 +321,8 @@
     if (day.status === 'weekend' || code === 'O') return 'off';
     if (day.status === 'holiday' || code === 'HO' || code === 'H') return 'holiday';
     if (day.status === 'leave' || day.status === 'saturday_leave') return 'leave';
-    if (['EL', 'PL', 'SL', 'UL', 'CO', 'MAL', 'PHD', 'UHD', 'PAL', 'SHL'].indexOf(code) >= 0) return 'leave';
+    if (['EL', 'PL', 'L', 'SL', 'UL', 'LOP', 'CO', 'MAL', 'PHD', 'UHD', 'PAL', 'SHL'].indexOf(code) >= 0) return 'leave';
 
-    // Approved regularization = Present (green), regardless of original punch gaps.
     if (day.status === 'regularised') {
       return 'ok';
     }
@@ -295,24 +331,36 @@
     }
 
     var req = day.required_hours || 9;
+    var half = 5;
     var hrs = dayHours(day);
 
-    if (day.status === 'absent' || day.status === 'punch_missing' || day.status === 'rejected' || code === 'AB' || code === 'A') {
+    if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') {
       return 'bad';
     }
-    if (day.status === 'short_hours' || code === 'HD') return 'bad';
-    if (day.can_regularise && hrs > 0 && hrs < req) return 'bad';
-    if (hrs > 0 && hrs < req && (day.status === 'ok' || code === 'P')) return 'bad';
-    if (day.status === 'ok' || code === 'P') {
-      return hrs >= req ? 'ok' : (hrs > 0 ? 'bad' : 'neutral');
+    // Rejected regularization must not force Absent if hours say half day / present.
+    if (day.status === 'rejected') {
+      if (hrs >= req) return 'ok';
+      if (hrs >= half) return 'half';
+      return 'bad';
+    }
+    if (day.status === 'half_day' || code === 'HD') {
+      return 'half';
+    }
+    if (hrs >= req || day.status === 'ok' || code === 'P') {
+      return hrs >= req ? 'ok' : (hrs >= half ? 'half' : (hrs > 0 ? 'bad' : 'neutral'));
+    }
+    if (day.status === 'short_hours') {
+      return hrs >= half ? 'half' : 'bad';
     }
     if (hrs >= req) return 'ok';
-    if (hrs > 0 && hrs < req) return 'bad';
+    if (hrs >= half) return 'half';
+    if (hrs > 0) return 'bad';
     return 'neutral';
   }
 
   function dayCodeClass(tone) {
     if (tone === 'ok') return 'code-ok';
+    if (tone === 'half') return 'code-half';
     if (tone === 'bad') return 'code-bad';
     if (tone === 'leave') return 'code-leave';
     if (tone === 'off' || tone === 'holiday') return tone === 'holiday' ? 'code-holiday' : 'code-off';
@@ -329,8 +377,20 @@
   function updateMonthStats() {
     var workHrs = [], actualHrs = [], penalty = 0, exceptions = 0;
     calendarData.forEach(function(d) {
-      if (d.status === 'absent' || d.status === 'short_hours' || d.status === 'punch_missing') {
+      var code = String(d.code || '').toUpperCase();
+      // Penalty days = full Absent days shown on calendar (AB / A).
+      // Do not count short_hours / half-day as penalty — those are exceptions only.
+      var isAbsent = (
+        d.status === 'absent' ||
+        d.status === 'punch_missing' ||
+        d.status === 'rejected' ||
+        code === 'AB' ||
+        code === 'A'
+      );
+      if (isAbsent) {
         penalty++;
+      }
+      if (isAbsent || d.status === 'short_hours') {
         exceptions++;
       }
       var tw = parseHrs(d.total_work_hrs);
@@ -473,18 +533,6 @@
     return $s.is('select') ? $s.val() : $s.val();
   }
 
-  function reloadCalendar(newMonth) {
-    if (newMonth) monthYear = newMonth;
-    $.getJSON(admin_url + 'timesheets/my_attendance_calendar', { month: monthYear, staff_id: staffId() }).done(function(res) {
-      calendarData = res.days || [];
-      dayMap = {};
-      calendarData.forEach(function(d) { dayMap[d.date] = d; });
-      selectedDate = '';
-      renderCalendar();
-      renderDayPanel(null);
-    });
-  }
-
   function shiftMonth(delta) {
     var vm = parseMonthYear(monthYear);
     var d = new Date(vm.year, vm.month + delta, 1);
@@ -506,7 +554,32 @@
     $('#attRegModal').modal('show');
   }
 
-  renderCalendar();
+  // Deferred calendar load — page shell paints first.
+  reloadCalendar(monthYear);
+
+  function loadAttendanceStaffPicker() {
+    var $sel = $('#att_reg_staff');
+    if (!$sel.is('select')) return;
+    var cur = String($sel.val() || '');
+    $.getJSON(admin_url + 'timesheets/get_viewable_staff_json').done(function(res) {
+      var staff = res.staff || [];
+      if (!staff.length) return;
+      $sel.empty();
+      for (var i = 0; i < staff.length; i++) {
+        var s = staff[i];
+        var id = String(s.staffid);
+        var name = $.trim((s.firstname || '') + ' ' + (s.lastname || ''));
+        $sel.append($('<option></option>').attr('value', id).text(name));
+      }
+      if (cur && $sel.find('option[value="' + cur + '"]').length) {
+        $sel.val(cur);
+      }
+      if ($sel.hasClass('selectpicker') || $sel.data('selectpicker')) {
+        $sel.selectpicker('refresh');
+      }
+    });
+  }
+  loadAttendanceStaffPicker();
 
   $(document).on('click', '.t2g-att-cal-day:not(.other-month)', function() {
     selectedDate = $(this).data('date');

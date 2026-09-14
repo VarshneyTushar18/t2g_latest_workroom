@@ -3408,6 +3408,19 @@ class Hr_profile_model extends App_Model
 		if (isset($data['fakepasswordremembered'])) {
 			unset($data['fakepasswordremembered']);
 		}
+
+		// Official Details: employment type lives in staff_info (not tblstaff).
+		$employment_category_save = null;
+		if (array_key_exists('employment_category', $data)) {
+			$employment_category_save = $data['employment_category'];
+			unset($data['employment_category']);
+		}
+		$earned_leave_rate_save = null;
+		if (array_key_exists('earned_leave_rate', $data)) {
+			$earned_leave_rate_save = $data['earned_leave_rate'];
+			unset($data['earned_leave_rate']);
+		}
+
 		// First check for all cases if the email exists.
 		$this->db->where('email', $data['email']);
 		$email = $this->db->get(db_prefix() . 'staff')->row();
@@ -3542,6 +3555,14 @@ class Hr_profile_model extends App_Model
 			}
 			hooks()->do_action('staff_member_created', $staffid);
 
+			$this->sync_staff_info_employment(
+				$staffid,
+				$employment_category_save,
+				isset($data['doj']) ? $data['doj'] : null,
+				isset($data['staff_identifi']) ? $data['staff_identifi'] : null
+			);
+			$this->sync_staff_earned_leave_rate($staffid, $earned_leave_rate_save);
+
 			return $staffid;
 		}
 
@@ -3564,6 +3585,20 @@ class Hr_profile_model extends App_Model
 		if (isset($data['fakepasswordremembered'])) {
 			unset($data['fakepasswordremembered']);
 		}
+
+		// Official Details: employment type lives in staff_info (not tblstaff).
+		$employment_category_save = null;
+		if (array_key_exists('employment_category', $data)) {
+			$employment_category_save = $data['employment_category'];
+			unset($data['employment_category']);
+		}
+		$earned_leave_rate_save = null;
+		if (array_key_exists('earned_leave_rate', $data)) {
+			$earned_leave_rate_save = $data['earned_leave_rate'];
+			unset($data['earned_leave_rate']);
+		}
+		$doj_save = array_key_exists('doj', $data) ? $data['doj'] : null;
+		$empid_save = array_key_exists('staff_identifi', $data) ? $data['staff_identifi'] : null;
 
 		$data = hooks()->apply_filters('before_update_staff_member', $data, $id);
 		if ($this->get_staff($id)->admin == '1') {
@@ -3774,6 +3809,14 @@ class Hr_profile_model extends App_Model
 		$this->db->update(db_prefix() . 'staff', $data);
 
 		if ($this->db->affected_rows() > 0) {
+			$affectedRows++;
+		}
+
+		// Persist Official Details employment category into staff_info (leave rates).
+		if ($this->sync_staff_info_employment($id, $employment_category_save, $doj_save, $empid_save)) {
+			$affectedRows++;
+		}
+		if ($this->sync_staff_earned_leave_rate($id, $earned_leave_rate_save)) {
 			$affectedRows++;
 		}
 
@@ -7483,15 +7526,128 @@ class Hr_profile_model extends App_Model
 
 	public function update_staff_to_staff_info($data, $staffid)
 	{
+		$category = isset($data['employment_category']) ? $data['employment_category'] : null;
+		$doj = isset($data['doj']) ? $data['doj'] : null;
+		$empid = isset($data['staff_identifi']) ? $data['staff_identifi'] : null;
 
-		echo ' tst ';
-		die;
-		$this->db->set(array(
-			'empid' => $data['staff_identifi'],
-			'doj' => date("m/d/Y", strtotime($data['doj']))
-		));
-		$this->db->where('staffid', $staffid); // Add your condition here
-		$this->db->update('tblstaff_info');
+		return $this->sync_staff_info_employment($staffid, $category, $doj, $empid);
+	}
+
+	/**
+	 * Upsert employment category / DOJ / emp id on tblstaff_info for leave rates.
+	 * Categories: fte | intern | wfh | contractual
+	 */
+	public function sync_staff_info_employment($staffid, $employment_category = null, $doj = null, $empid = null)
+	{
+		$staffid = (int) $staffid;
+		if ($staffid <= 0 || !$this->db->table_exists(db_prefix() . 'staff_info')) {
+			return false;
+		}
+
+		$payload = [];
+
+		if ($employment_category !== null && $employment_category !== '') {
+			$cat = strtolower(trim((string) $employment_category));
+			// Map Official Details labels to leave-rate keys.
+			$map = [
+				'full time' => 'fte',
+				'full_time' => 'fte',
+				'fulltime' => 'fte',
+				'fte' => 'fte',
+				'intern' => 'intern',
+				'contractual' => 'contractual',
+				'contract' => 'contractual',
+				'wfh' => 'wfh',
+			];
+			$cat = $map[$cat] ?? $cat;
+			if (in_array($cat, ['fte', 'intern', 'wfh', 'contractual'], true)
+				&& $this->db->field_exists('employment_category', db_prefix() . 'staff_info')) {
+				$payload['employment_category'] = $cat;
+			}
+		}
+
+		if ($doj !== null && $doj !== '') {
+			$doj_sql = to_sql_date($doj);
+			if (!$doj_sql && strtotime($doj)) {
+				$doj_sql = date('Y-m-d', strtotime($doj));
+			}
+			if ($doj_sql) {
+				$payload['doj'] = $doj_sql;
+			}
+		}
+
+		if ($empid !== null && $empid !== '' && $this->db->field_exists('empid', db_prefix() . 'staff_info')) {
+			$payload['empid'] = $empid;
+		}
+
+		if (empty($payload)) {
+			return false;
+		}
+
+		$exists = $this->db->where('staffid', $staffid)->count_all_results(db_prefix() . 'staff_info') > 0;
+		if ($exists) {
+			$this->db->where('staffid', $staffid);
+			$this->db->update(db_prefix() . 'staff_info', $payload);
+			return $this->db->affected_rows() > 0;
+		}
+
+		$payload['staffid'] = $staffid;
+		$this->db->insert(db_prefix() . 'staff_info', $payload);
+		return (bool) $this->db->insert_id();
+	}
+
+	/**
+	 * Save Official Details earned leave value as current-month override (editable by HR).
+	 */
+	public function sync_staff_earned_leave_rate($staffid, $earned_leave_rate)
+	{
+		if ($earned_leave_rate === null || $earned_leave_rate === '') {
+			return false;
+		}
+
+		$staffid = (int) $staffid;
+		if ($staffid <= 0) {
+			return false;
+		}
+
+		$this->load->model('staff_model');
+		return (bool) $this->staff_model->save_earned_leave_override(
+			$staffid,
+			(int) date('n'),
+			(int) date('Y'),
+			$earned_leave_rate,
+			get_staff_user_id()
+		);
+	}
+
+	/**
+	 * Value for Official Details earned-leave textbox (override for current month, else calculated).
+	 */
+	public function get_staff_earned_leave_display_rate($staffid)
+	{
+		$staffid = (int) $staffid;
+		if ($staffid <= 0) {
+			return '';
+		}
+
+		$this->load->model('staff_model');
+		$month = (int) date('n');
+		$year = (int) date('Y');
+		$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staffid], $month, $year);
+		if (isset($overrides[$staffid])) {
+			return (string) $overrides[$staffid];
+		}
+
+		$doj = null;
+		$info = $this->db->select('doj')->where('staffid', $staffid)->get(db_prefix() . 'staff_info')->row();
+		if ($info && !empty($info->doj)) {
+			$doj = $info->doj;
+		} else {
+			$staff = $this->get_staff($staffid);
+			$doj = $staff->doj ?? null;
+		}
+
+		return (string) $this->staff_model->calculateEarnedLeaves($doj, $staffid, $month, $year);
 	}
 
 	public function send_mail_to_new_candidate_for_credientials($id)

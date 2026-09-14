@@ -974,7 +974,7 @@ function timesheets_attendance_approval_staff_ids()
 
 /**
  * Staff who may approve / reject leave applications.
- * Only: Sarabjeet, Admin, Super Admin, HR / Super HR (not team managers).
+ * Only: Sarabjeet Singh, Admin, Super Admin, HR / Super HR (not team managers).
  *
  * @return int[]
  */
@@ -1180,6 +1180,86 @@ function timesheets_get_viewable_staff_list($viewer_id = '')
 
 	$ids = timesheets_get_team_staff_ids($viewer_id);
 	if (!is_array($ids) || !$ids) {
+		return [];
+	}
+
+	return $CI->db->select('staffid, firstname, lastname')
+		->where_in('staffid', $ids)
+		->where('active', 1)
+		->order_by('firstname', 'ASC')
+		->get(db_prefix() . 'staff')
+		->result_array();
+}
+
+/**
+ * Leave form "CC to" options for the applying staff:
+ * - all active staff in the same department(s) as that user
+ * - plus active HR / Super HR (always available to CC)
+ * Excludes the applying staff themselves.
+ *
+ * @param int|string $staff_id
+ * @return array
+ */
+function timesheets_get_leave_cc_staff_list($staff_id = '')
+{
+	$CI = &get_instance();
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+	if ($staff_id <= 0) {
+		return [];
+	}
+
+	$ids = [];
+
+	// Same department(s) as the applying user.
+	$dept_rows = $CI->db->select('departmentid')
+		->where('staffid', $staff_id)
+		->get(db_prefix() . 'staff_departments')
+		->result_array();
+	$dept_ids = array_values(array_unique(array_filter(array_map('intval', array_column($dept_rows, 'departmentid')))));
+	if ($dept_ids) {
+		$dept_staff = $CI->db->select('staffid')
+			->from(db_prefix() . 'staff_departments')
+			->where_in('departmentid', $dept_ids)
+			->get()
+			->result_array();
+		foreach ($dept_staff as $row) {
+			$ids[] = (int) $row['staffid'];
+		}
+	}
+
+	// Always include HR / Super HR.
+	$hr_q = $CI->db->select(db_prefix() . 'staff.staffid')
+		->from(db_prefix() . 'staff')
+		->join(db_prefix() . 'roles', db_prefix() . 'roles.roleid = ' . db_prefix() . 'staff.role', 'left')
+		->where(db_prefix() . 'staff.active', 1)
+		->group_start()
+			->where_in(db_prefix() . 'staff.role', [24, 30])
+			->or_where_in('LOWER(' . db_prefix() . 'roles.name)', ['hr', 'super hr'])
+		->group_end()
+		->get()
+		->result_array();
+	foreach ($hr_q as $row) {
+		$ids[] = (int) $row['staffid'];
+	}
+
+	// Also include staff assigned to any department whose name contains "HR".
+	$hr_dept_staff = $CI->db->select(db_prefix() . 'staff_departments.staffid')
+		->from(db_prefix() . 'staff_departments')
+		->join(db_prefix() . 'departments', db_prefix() . 'departments.departmentid = ' . db_prefix() . 'staff_departments.departmentid', 'inner')
+		->join(db_prefix() . 'staff', db_prefix() . 'staff.staffid = ' . db_prefix() . 'staff_departments.staffid', 'inner')
+		->where(db_prefix() . 'staff.active', 1)
+		->like(db_prefix() . 'departments.name', 'HR')
+		->get()
+		->result_array();
+	foreach ($hr_dept_staff as $row) {
+		$ids[] = (int) $row['staffid'];
+	}
+
+	$ids = array_values(array_unique(array_filter($ids, static function ($id) use ($staff_id) {
+		return (int) $id > 0 && (int) $id !== (int) $staff_id;
+	})));
+
+	if (!$ids) {
 		return [];
 	}
 

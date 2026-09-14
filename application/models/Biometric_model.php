@@ -125,10 +125,10 @@ class Biometric_model extends App_Model
         }
 
         $table = db_prefix() . 'biometric_report';
-        $today_suffix = '-' . date('M-Y');
+        $today = date('d-M-Y');
         $today_rows = (int) $this->db
             ->from($table)
-            ->like('attendance_date', $today_suffix, 'before')
+            ->where('attendance_date', $today)
             ->count_all_results();
 
         return [
@@ -139,6 +139,7 @@ class Biometric_model extends App_Model
             'last_sync_age_s'   => $age_seconds,
             'is_live'           => $is_live,
             'last_sync'         => $meta,
+            'today'             => $today,
             'today_rows'        => $today_rows,
             'manual_import'     => false,
         ];
@@ -339,14 +340,28 @@ class Biometric_model extends App_Model
         $staff = db_prefix() . 'staff';
         $this->db->select($table . '.employee_name, ' . $table . '.employee_code, ' . $table . '.attendance_date, ' . $table . '.shift, ' . $table . '.punch_records, ' . $staff . '.firstname, ' . $staff . '.lastname, ' . $staff . '.staffid');
         $this->db->from($table);
+        $info = db_prefix() . 'staff_info';
+        // Match Emp ID on staff_identifi OR staff_info.empid.
         $this->db->join(
             $staff,
-            'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code)',
+            '(TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code)
+              OR ' . $staff . '.staffid = (
+                    SELECT si.staffid FROM ' . $info . ' si
+                    WHERE TRIM(COALESCE(si.empid, \'\')) = TRIM(' . $table . '.employee_code)
+                    LIMIT 1
+              ))',
             'left',
             false
         );
         if (!empty($staff_id) && is_numeric($staff_id)) {
             $this->db->where($staff . '.staffid', (int) $staff_id);
+        } elseif (!empty($filters['staff_ids']) && is_array($filters['staff_ids'])) {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $filters['staff_ids']))));
+            if ($ids) {
+                $this->db->where_in($staff . '.staffid', $ids);
+            } else {
+                $this->db->where('1 = 0', null, false);
+            }
         }
 
         $like_group = [];
@@ -468,10 +483,25 @@ class Biometric_model extends App_Model
 
         if ($staff_id !== '' && $staff_id !== null && is_numeric($staff_id)) {
             $this->db->where($staff . '.staffid', (int) $staff_id);
+        } elseif (!empty($filters['staff_ids']) && is_array($filters['staff_ids'])) {
+            $ids = array_values(array_unique(array_filter(array_map('intval', $filters['staff_ids']))));
+            if ($ids) {
+                $this->db->where_in($staff . '.staffid', $ids);
+            } else {
+                $this->db->where('1 = 0', null, false);
+            }
         }
 
         $month = $filters['month'] ?? '';
-        if (!empty($month) && preg_match('/^\d{4}-\d{2}$/', $month)) {
+        $day = $filters['day'] ?? '';
+
+        // Exact day wins over month (Today / Pick a day).
+        if (!empty($day)) {
+            $formatted = $this->normalize_attendance_date($day);
+            if ($formatted !== false) {
+                $this->db->where($table . '.attendance_date', $formatted);
+            }
+        } elseif (!empty($month) && preg_match('/^\d{4}-\d{2}$/', $month)) {
             // attendance_date stored as d-M-Y, e.g. 08-Nov-2025
             $dt = DateTime::createFromFormat('Y-m', $month);
             if ($dt) {
@@ -492,17 +522,259 @@ class Biometric_model extends App_Model
         }
 
         $staff = db_prefix() . 'staff';
-        $row = $this->db->select('firstname, lastname')
-            ->from($staff)
-            ->where('TRIM(' . $staff . '.staff_identifi) = ' . $this->db->escape($employee_code), null, false)
-            ->limit(1)
-            ->get()
-            ->row_array();
+        $info = db_prefix() . 'staff_info';
+        $row = $this->db->query(
+            'SELECT s.firstname, s.lastname
+             FROM ' . $staff . ' s
+             LEFT JOIN ' . $info . ' i ON i.staffid = s.staffid
+             WHERE TRIM(COALESCE(s.staff_identifi, \'\')) = ?
+                OR TRIM(COALESCE(i.empid, \'\')) = ?
+             LIMIT 1',
+            [$employee_code, $employee_code]
+        )->row_array();
 
         if (!$row) {
             return '';
         }
 
         return trim(trim((string) ($row['firstname'] ?? '')) . ' ' . trim((string) ($row['lastname'] ?? '')));
+    }
+
+    /**
+     * Today's Biomax sheet row for a staff member (navbar Check in pill).
+     * Daily only: matches tblbiometric_report.attendance_date for today (d-M-Y).
+     * No punch for today → null (pill hidden until the office bridge syncs today's row).
+     *
+     * @return array{a_in_time?:string,a_out_time?:string,punch_records?:string,attendance_date?:string}|null
+     */
+    public function get_staff_today_punch($staff_id)
+    {
+        $staff_id = (int) $staff_id;
+        if ($staff_id <= 0) {
+            return null;
+        }
+
+        $staff = db_prefix() . 'staff';
+        $info = db_prefix() . 'staff_info';
+        $codes = $this->db->query(
+            'SELECT TRIM(COALESCE(s.staff_identifi, \'\')) AS identifi,
+                    TRIM(COALESCE(i.empid, \'\')) AS empid
+             FROM ' . $staff . ' s
+             LEFT JOIN ' . $info . ' i ON i.staffid = s.staffid
+             WHERE s.staffid = ?
+             LIMIT 1',
+            [$staff_id]
+        )->row_array();
+
+        if (!$codes) {
+            return null;
+        }
+
+        $employee_codes = [];
+        foreach (['identifi', 'empid'] as $k) {
+            $c = trim((string) ($codes[$k] ?? ''));
+            if ($c !== '' && !in_array($c, $employee_codes, true)) {
+                $employee_codes[] = $c;
+            }
+        }
+        if (empty($employee_codes)) {
+            return null;
+        }
+
+        // Ensure timezone is aligned with application default_timezone.
+        if (function_exists('get_option')) {
+            $tz = (string) get_option('default_timezone');
+            if ($tz !== '' && date_default_timezone_get() !== $tz) {
+                date_default_timezone_set($tz);
+            }
+        }
+
+        // Strictly today's calendar date key (e.g. 12-Sep-2026). Never matches previous or next days.
+        $today = date('d-M-Y');
+
+        $table = db_prefix() . 'biometric_report';
+        $placeholders = implode(',', array_fill(0, count($employee_codes), '?'));
+        $params = array_merge([$today], $employee_codes);
+        $row = $this->db->query(
+            'SELECT * FROM ' . $table . '
+             WHERE attendance_date = ?
+               AND TRIM(employee_code) IN (' . $placeholders . ')
+             ORDER BY id DESC
+             LIMIT 1',
+            $params
+        )->row_array();
+
+        // Soft fallback: case-insensitive day match if format casing differs (Sep vs SEP).
+        if (!$row) {
+            $params2 = array_merge([$today], $employee_codes);
+            $row = $this->db->query(
+                'SELECT * FROM ' . $table . '
+                 WHERE LOWER(attendance_date) = LOWER(?)
+                   AND TRIM(employee_code) IN (' . $placeholders . ')
+                 ORDER BY id DESC
+                 LIMIT 1',
+                $params2
+            )->row_array();
+        }
+
+        if ($row) {
+            $has_punch = !empty(trim((string) ($row['a_in_time'] ?? '')))
+                || !empty(trim((string) ($row['a_out_time'] ?? '')))
+                || !empty(trim((string) ($row['punch_records'] ?? '')));
+            if (!$has_punch) {
+                return null;
+            }
+        }
+
+        return $row ?: null;
+    }
+
+    /**
+     * Get summary of Biomax punches for today:
+     * - first_time_formatted: original arrival punch (e.g. '10:49:00 AM')
+     * - first_ts: unix timestamp of first punch
+     * - last_time_formatted: latest punch (e.g. '02:28:00 PM')
+     * - last_ts: unix timestamp of latest punch
+     * - last_type: 'in' | 'out'
+     * - is_checked_out: true if last swipe is 'out'
+     *
+     * @param array|null $row
+     * @return array{first_time_formatted:string,first_ts:int,last_time_formatted:string,last_ts:int,last_type:string,is_checked_out:bool}|null
+     */
+    public function get_biomax_punch_summary($row)
+    {
+        if (!is_array($row) || empty($row)) {
+            return null;
+        }
+
+        $date_str = trim((string) ($row['attendance_date'] ?? ''));
+        $first_time = '';
+        $last_time = '';
+        $last_type = '';
+
+        $records = trim((string) ($row['punch_records'] ?? ''));
+        if ($records !== '' && preg_match_all('/(\d{1,2}:\d{2}(?::\d{2})?)\s*\(?\s*(in|out)\s*\)?/i', $records, $matches, PREG_SET_ORDER)) {
+            $first_time = $matches[0][1];
+            $last_match = end($matches);
+            $last_time = $last_match[1];
+            $last_type = strtolower($last_match[2]);
+        }
+
+        if ($first_time === '' && !empty($row['a_in_time'])) {
+            $first_time = trim((string) $row['a_in_time']);
+        }
+
+        if ($last_time === '' && !empty($row['a_out_time'])) {
+            $last_time = trim((string) $row['a_out_time']);
+            $last_type = 'out';
+        }
+
+        if ($first_time === '' && $last_time === '') {
+            return null;
+        }
+
+        $is_checked_out = ($last_type === 'out');
+        if (!$is_checked_out && $last_type === '' && !empty($row['a_out_time'])) {
+            $out_clean = trim((string) $row['a_out_time']);
+            if ($out_clean !== '' && $out_clean !== '00:00' && $out_clean !== '00:00:00' && strtolower($out_clean) !== 'nil') {
+                $is_checked_out = true;
+                $last_type = 'out';
+                if ($last_time === '') {
+                    $last_time = $out_clean;
+                }
+            }
+        }
+
+        $first_ts = 0;
+        if ($first_time !== '' && $date_str !== '') {
+            $clean_first = trim(preg_replace('/\s*\(.*$/', '', $first_time));
+            $t = strtotime($date_str . ' ' . $clean_first);
+            if ($t !== false) {
+                $first_ts = $t;
+            }
+        }
+
+        $last_ts = 0;
+        if ($last_time !== '' && $date_str !== '') {
+            $clean_last = trim(preg_replace('/\s*\(.*$/', '', $last_time));
+            $t = strtotime($date_str . ' ' . $clean_last);
+            if ($t !== false) {
+                $last_ts = $t;
+            }
+        }
+
+        return [
+            'first_time_formatted' => $this->format_punch_time_display($first_time),
+            'first_ts'             => $first_ts,
+            'last_time_formatted'  => $this->format_punch_time_display($last_time),
+            'last_ts'              => $last_ts,
+            'last_type'            => $last_type,
+            'is_checked_out'       => $is_checked_out,
+        ];
+    }
+
+    /**
+     * Check if a Biomax row has a recorded out punch or the last swipe was OUT.
+     *
+     * @param array|null $row
+     * @return bool
+     */
+    public function is_biomax_checked_out($row)
+    {
+        if (!is_array($row) || empty($row)) {
+            return false;
+        }
+
+        // 1. Inspect punch_records for the latest punch type (in vs out).
+        $records = trim((string) ($row['punch_records'] ?? ''));
+        if ($records !== '') {
+            if (preg_match_all('/(\d{1,2}:\d{2}(?::\d{2})?)\s*\(?\s*(in|out)\s*\)?/i', $records, $matches)) {
+                if (!empty($matches[2])) {
+                    $last_type = strtolower((string) end($matches[2]));
+                    return $last_type === 'out';
+                }
+            }
+        }
+
+        // 2. Fallback to a_out_time presence.
+        $out = trim((string) ($row['a_out_time'] ?? ''));
+        if ($out !== '' && $out !== '00:00' && $out !== '00:00:00' && strtolower($out) !== 'nil') {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Format Biomax sheet time (HH:MM / HH:MM:SS) as h:i:s A for navbar.
+     */
+    public function format_punch_time_display($time)
+    {
+        $time = trim((string) $time);
+        if ($time === '' || $time === '00:00' || $time === '00:00:00' || strtolower($time) === 'nil') {
+            return '';
+        }
+
+        // Strip trailing (in)/(out) if present in punch snippets.
+        $time = preg_replace('/\s*\((in|out)\)\s*$/i', '', $time);
+        $time = trim((string) $time);
+
+        $formats = ['H:i:s', 'H:i', 'h:i:s A', 'h:i A', 'h:i:s a', 'h:i a'];
+        foreach ($formats as $fmt) {
+            $dt = DateTime::createFromFormat($fmt, $time);
+            if ($dt instanceof DateTime) {
+                $errors = DateTime::getLastErrors();
+                if (empty($errors['warning_count']) && empty($errors['error_count'])) {
+                    return $dt->format('h:i:s A');
+                }
+            }
+        }
+
+        $ts = strtotime($time);
+        if ($ts !== false) {
+            return date('h:i:s A', $ts);
+        }
+
+        return $time;
     }
 }

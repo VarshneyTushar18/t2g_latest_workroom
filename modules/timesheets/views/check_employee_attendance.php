@@ -1,28 +1,42 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <link rel="stylesheet" type="text/css" id="fullcalendar-css" href="<?= base_url(); ?>/assets/plugins/fullcalendar/lib/main.min.css?v=3.0.4">
 <script type="text/javascript" id="fullcalendar-js" src="<?= base_url(); ?>/assets/plugins/fullcalendar/lib/main.min.js?v=3.0.4"></script>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <?php init_head(); ?>
 
 <style>
   .right-elements { display: block; }
   .pagination button {
-    margin: 0 5px; text-decoration: none; padding: 5px 10px;
-    border: 1px solid #ccc; border-radius: 5px;
+    margin: 0; text-decoration: none; padding: 5px 10px;
+    border: 1px solid #ccc; border-radius: 5px; background: #fff; min-width: 36px;
   }
   .pagination button.active {
-    background-color: #141e46; color: white; border-color: #007bff;
+    background-color: #141e46; color: white; border-color: #141e46;
   }
-  .pagination-container { clear: both; text-align: center; margin-top: 10px; }
-  .calendar-header { font-size: 18px; margin-bottom: 10px; }
+  .pagination button:disabled { opacity: .45; cursor: default; }
+  .pagination .pg-ellipsis {
+    display: inline-flex; align-items: center; padding: 0 6px; color: #64748b; user-select: none;
+  }
+  .pagination-container { clear: both; text-align: center; margin-top: 14px; }
+  .pagination { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; }
+  .line-suggestion { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .line-suggestion .btn { margin: 0; padding: 4px 8px; font-size: 11px; }
+  .emp-att-meta { font-size: 12px; color: #64748b; margin: 6px 0 0; }
+  .calendar-header {
+    font-size: 12px; font-weight: 700; margin: 0 0 14px; padding-bottom: 8px;
+    color: #0f172a; border-bottom: 1px solid #eef2f7;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .emp-att-card .fc-header-toolbar { display: none !important; margin: 0 !important; padding: 0 !important; }
+  .emp-att-card [id^="calendar-"] { margin-top: 2px; }
 
   .emp-att-card {
     cursor: pointer;
     transition: box-shadow .15s ease, transform .15s ease;
     position: relative;
+    margin-bottom: 12px;
   }
+  .emp-att-card .panel-body { padding: 8px 10px 10px; }
   .emp-att-card:hover {
     box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
     transform: translateY(-2px);
@@ -31,27 +45,34 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    margin-top: 10px;
-    padding-top: 10px;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px solid #e5e7eb;
   }
   .emp-att-card .btn-view-card {
     background: #2563eb;
     color: #fff !important;
     border: 0;
-    border-radius: 6px;
-    padding: 6px 14px;
+    border-radius: 5px;
+    padding: 3px 10px;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 11px;
   }
   .emp-att-card .btn-view-card:hover {
     background: #1d4ed8;
     color: #fff !important;
   }
   .emp-att-card .open-hint {
-    font-size: 12px; color: #64748b; margin: 0;
+    font-size: 10px; color: #64748b; margin: 0;
   }
+
+  /* Compact chips for 3×3 grid (9 calendars) */
+  .emp-att-grid-col { padding-left: 8px; padding-right: 8px; }
+  .emp-att-card .fc { font-size: 10px; }
+  .emp-att-card .fc-col-header-cell-cushion { padding: 2px 0; font-size: 9px; }
+  .emp-att-card .fc-daygrid-day-number { font-size: 9px; padding: 1px 2px; }
+  .emp-att-card .fc-daygrid-day-frame { min-height: 28px !important; }
 
   /* Fullscreen popup */
   #empAttFs {
@@ -86,6 +107,28 @@
   #empAttFs .fs-note {
     font-size: 12px; color: #64748b; margin: 0 0 10px;
   }
+  #empAttFs .fs-punch-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 0 0 12px; padding: 8px 10px; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 8px;
+  }
+  #empAttFs .fs-punch-bar .fs-punch-label {
+    flex: 1 1 auto; font-size: 13px; color: #334155; margin: 0; font-weight: 600;
+  }
+  #empAttFs .fs-punch-bar .fs-punch-label span { color: #0f172a; }
+  #empAttFs .fs-punch-bar .btn-all-month {
+    background: #141e46; color: #fff; border: 0; border-radius: 6px;
+    padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  #empAttFs .fs-punch-bar .btn-all-month[disabled] {
+    opacity: .45; cursor: default;
+  }
+  #empAttFsCalendar .fc-daygrid-day.emp-att-day-selected {
+    background: #fef9c3 !important;
+  }
+  #empAttFsCalendar .fc-daygrid-day {
+    cursor: pointer;
+  }
   #empAttFs #empAttFsCalendar { min-height: 520px; }
   #empAttFs table { width: 100%; margin: 0; }
   #empAttFs table th, #empAttFs table td {
@@ -99,26 +142,28 @@
   }
   #empAttFs .fs-loading { padding: 40px; text-align:center; color:#64748b; }
 
-  /* Attendance status chips — readable Present / Absent codes */
+  /* Attendance status chips — compact on cards, larger in fullscreen */
   .emp-att-card .fc,
   #empAttFsCalendar .fc {
     font-size: 12px;
   }
-  .emp-att-card .fc-daygrid-day-frame,
+  .emp-att-card .fc-daygrid-day-frame {
+    min-height: 28px !important;
+  }
   #empAttFsCalendar .fc-daygrid-day-frame {
     min-height: 52px;
   }
   .emp-att-card .fc-daygrid-event,
   #empAttFsCalendar .fc-daygrid-event {
-    margin: 2px 2px 0 !important;
+    margin: 0 1px !important;
     border: 0 !important;
-    border-radius: 5px !important;
+    border-radius: 3px !important;
     box-shadow: none !important;
     background: transparent !important;
   }
   .emp-att-card .fc-daygrid-event-harness,
   #empAttFsCalendar .fc-daygrid-event-harness {
-    margin-top: 2px !important;
+    margin-top: 1px !important;
   }
   .emp-att-card .fc-event-main,
   #empAttFsCalendar .fc-event-main {
@@ -128,18 +173,23 @@
     display: block;
     width: 100%;
     text-align: center;
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: 0.02em;
-    line-height: 1.35;
-    padding: 3px 2px;
-    border-radius: 5px;
+    line-height: 1.2;
+    padding: 1px 0;
+    border-radius: 3px;
     color: #fff !important;
     white-space: nowrap;
     overflow: visible;
   }
+  #empAttFsCalendar .att-chip {
+    font-size: 12px;
+    padding: 3px 2px;
+    border-radius: 5px;
+  }
   .line-suggestion .btn {
-    min-width: 42px;
+    min-width: 36px;
     margin: 0 4px 6px 0;
     font-weight: 700;
   }
@@ -155,19 +205,39 @@
 
             <?php if (has_permission('attendance_management', '', 'view') || is_admin() || (get_staff_user_id() == 23) || attendance_permission() || is_HR()) { ?>
               <?php echo form_open(); ?>
-              <div class="row filter_by">
+              <div class="row filter_by emp-att-filters">
                 <div class="col-md-2 leads-filter-column">
+                  <label class="control-label">Month</label>
                   <?php echo render_input('month_year', '', isset($selectedMonth) ? $selectedMonth: date('Y-m'), 'month'); ?>
+                </div>
+                <div class="col-md-2 leads-filter-column">
+                  <label class="control-label">Department</label>
+                  <?php echo render_select('department_id', $departments ?? [], array('departmentid', 'name'), '', $department_id ?? '') ?>
                 </div>
                 <?php if (is_admin() || is_HR() || is_super_hr() || (get_staff_user_id() == 23)): ?>
                   <div class="col-md-2 leads-filter-column">
-                    <?php echo render_select('reporting_person', $staffs_in_select_option, array('staffid', 'full_name'), '', $staffs_under_manager) ?>
+                    <label class="control-label">Reporting manager</label>
+                    <?php echo render_select('reporting_person', $staffs_in_select_option, array('staffid', 'full_name'), '', $reporting_person ?? '', ['data-live-search' => 'true', 'data-none-selected-text' => 'Select manager']) ?>
                   </div>
                 <?php endif ?>
-                <div class="col-md-1">
-                  <button type="submit" class="btn btn-info timesheets_filter">Go</button>
+                <div class="col-md-3 leads-filter-column">
+                  <label class="control-label">Employee name</label>
+                  <?php echo render_select('staff_id', $staff_options ?? [], array('staffid', 'full_name'), '', $staff_id ?? '', ['data-live-search' => 'true', 'data-none-selected-text' => 'Select employee']) ?>
+                </div>
+                <div class="col-md-2">
+                  <label class="control-label">&nbsp;</label>
+                  <div>
+                    <button type="submit" class="btn btn-info timesheets_filter">Go</button>
+                    <?php if (!empty($staff_id) || !empty($department_id) || !empty($reporting_person)) { ?>
+                      <a href="<?php echo admin_url('timesheets/check_employee_attendance'); ?>" class="btn btn-default">Clear</a>
+                    <?php } ?>
+                  </div>
                 </div>
               </div>
+              <p class="emp-att-meta">
+                Showing <?php echo count($staffToDisplay); ?> of <?php echo (int) ($totalStaff ?? 0); ?> staff
+                · 9 calendars per page · page <?php echo (int) $currentPage; ?>/<?php echo (int) $totalPages; ?>
+              </p>
               <?php echo form_close(); ?>
             <?php } ?>
 
@@ -189,17 +259,17 @@
               <div class="col-md-12">
                 <hr />
                 <?php foreach ($staffToDisplay as $staff): ?>
-                  <div class="col-md-4">
+                  <div class="col-lg-4 col-md-6 emp-att-grid-col">
                     <div class="panel_s emp-att-card"
                          data-staffid="<?= (int) $staff['staffid'] ?>"
                          data-name="<?= htmlspecialchars($staff['full_name'], ENT_QUOTES) ?>"
                          data-code="<?= htmlspecialchars($staff['staff_identifi'] ?? '', ENT_QUOTES) ?>">
                       <div class="panel-body">
                         <div class="dt-loader hide"></div>
-                        <div class="calendar-header"><?= html_escape($staff['full_name']) ?> - <?= html_escape($staff['staff_identifi'] ?? '') ?></div>
+                        <div class="calendar-header" title="<?= html_escape($staff['full_name']) ?>"><?= html_escape($staff['full_name']) ?> · <?= html_escape($staff['staff_identifi'] ?? '') ?></div>
                         <div id="calendar-<?= $staff['staffid'] ?>"></div>
                         <div class="card-actions">
-                          <span class="open-hint"><i class="fa fa-expand"></i> Full screen + swipes</span>
+                          <span class="open-hint"><i class="fa fa-expand"></i> Full screen</span>
                           <button type="button" class="btn btn-view-card btn-view-emp-att"
                                   data-staffid="<?= (int) $staff['staffid'] ?>"
                                   data-name="<?= htmlspecialchars($staff['full_name'], ENT_QUOTES) ?>"
@@ -236,7 +306,7 @@
                       var calendar = new FullCalendar.Calendar(calendarEl, {
                         initialView: 'dayGridMonth',
                         initialDate: '<?= $month_year ?>-01',
-                        height: 360,
+                        height: 220,
                         headerToolbar: { left: '', center: '', right: '' },
                         dayMaxEvents: false,
                         fixedWeekCount: false,
@@ -276,10 +346,11 @@
                             '<br>Total Time: ' + (info.event.extendedProps.total_time || '—') +
                             '<br>Check in: ' + (info.event.extendedProps.check_in_time || '—') +
                             '<br>Check out: ' + (info.event.extendedProps.check_out_time || '—');
-                          info.el.setAttribute('data-bs-toggle', 'tooltip');
+                          info.el.setAttribute('data-toggle', 'tooltip');
+                          info.el.setAttribute('data-html', 'true');
                           info.el.setAttribute('title', tooltipContent);
-                          if (window.bootstrap && bootstrap.Tooltip) {
-                            new bootstrap.Tooltip(info.el, { html: true });
+                          if (window.jQuery && jQuery.fn.tooltip) {
+                            jQuery(info.el).tooltip({ html: true, container: 'body' });
                           }
                         }
                       });
@@ -288,23 +359,57 @@
                   </script>
                 <?php endforeach; ?>
 
+                <?php if ((int) $totalPages > 1): ?>
                 <div class="pagination-container">
                   <?php echo form_open(); ?>
-                  <input type="hidden" name="month_year" value="<?php echo $selectedMonth; ?>">
-                  <input type="hidden" name="reporting_person" value="<?php echo $staffs_under_manager; ?>">
+                  <input type="hidden" name="month_year" value="<?php echo html_escape($selectedMonth); ?>">
+                  <?php if (!empty($reporting_person)) { ?>
+                    <input type="hidden" name="reporting_person" value="<?php echo (int) $reporting_person; ?>">
+                  <?php } ?>
+                  <?php if (!empty($department_id)) { ?>
+                    <input type="hidden" name="department_id" value="<?php echo (int) $department_id; ?>">
+                  <?php } ?>
+                  <?php if (!empty($staff_id)) { ?>
+                    <input type="hidden" name="staff_id" value="<?php echo (int) $staff_id; ?>">
+                  <?php } ?>
                   <div class="pagination">
-                    <?php if ($currentPage > 1): ?>
-                      <button type="submit" name="page" value="<?php echo $currentPage - 1; ?>"><i class="fa fa-arrow-left"></i> Prev</button>
+                    <?php
+                      $cur = (int) $currentPage;
+                      $tot = (int) $totalPages;
+                      $window = 2;
+                      $pages = [];
+                      $pages[] = 1;
+                      for ($i = max(2, $cur - $window); $i <= min($tot - 1, $cur + $window); $i++) {
+                          $pages[] = $i;
+                      }
+                      if ($tot > 1) {
+                          $pages[] = $tot;
+                      }
+                      $pages = array_values(array_unique($pages));
+                      sort($pages);
+                    ?>
+                    <button type="submit" name="page" value="<?php echo max(1, $cur - 1); ?>" <?php echo $cur <= 1 ? 'disabled' : ''; ?>>
+                      <i class="fa fa-arrow-left"></i> Prev
+                    </button>
+                    <?php
+                      $prevShown = 0;
+                      foreach ($pages as $p):
+                        if ($prevShown && $p > $prevShown + 1):
+                    ?>
+                      <span class="pg-ellipsis">…</span>
                     <?php endif; ?>
-                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                      <button type="submit" name="page" value="<?php echo $i; ?>" <?php if ($i == $currentPage) echo 'class="active"'; ?>><?php echo $i; ?></button>
-                    <?php endfor; ?>
-                    <?php if ($currentPage < $totalPages): ?>
-                      <button type="submit" name="page" value="<?php echo $currentPage + 1; ?>">Next <i class="fa fa-arrow-right"></i></button>
-                    <?php endif; ?>
+                      <button type="submit" name="page" value="<?php echo $p; ?>" <?php echo $p === $cur ? 'class="active"' : ''; ?>><?php echo $p; ?></button>
+                    <?php
+                        $prevShown = $p;
+                      endforeach;
+                    ?>
+                    <button type="submit" name="page" value="<?php echo min($tot, $cur + 1); ?>" <?php echo $cur >= $tot ? 'disabled' : ''; ?>>
+                      Next <i class="fa fa-arrow-right"></i>
+                    </button>
                   </div>
                   </form>
                 </div>
+                <?php endif; ?>
                 <hr class="hr-panel-heading" />
               </div>
             </div>
@@ -333,9 +438,14 @@
         <div id="empAttFsCalendar"></div>
       </div>
       <div class="fs-panel">
-        <h4>Biometric / punch swipes</h4>
+        <h4>Punches</h4>
+        <div class="fs-punch-bar">
+          <p class="fs-punch-label" id="empAttFsPunchLabel">Showing: <span>all month</span></p>
+          <button type="button" class="btn-all-month" id="empAttFsAllMonth" disabled>View all month</button>
+        </div>
+        <h4 style="font-size:14px; margin-top:4px;">Biometric / punch swipes</h4>
         <p class="fs-note" id="empAttFsBioNote"></p>
-        <div style="max-height:280px; overflow:auto; margin-bottom:16px;">
+        <div style="max-height:240px; overflow:auto; margin-bottom:16px;">
           <table>
             <thead>
               <tr><th>Date</th><th>Time</th><th>IN/OUT</th><th>Source</th></tr>
@@ -345,8 +455,8 @@
             </tbody>
           </table>
         </div>
-        <h4>Workroom check-in / check-out</h4>
-        <div style="max-height:280px; overflow:auto;">
+        <h4 style="font-size:14px;">Workroom check-in / check-out</h4>
+        <div style="max-height:240px; overflow:auto;">
           <table>
             <thead>
               <tr><th>Date</th><th>Time</th><th>IN/OUT</th><th>Source</th></tr>
@@ -368,6 +478,9 @@
   var fsCal = null;
   var monthYear = <?= json_encode($month_year) ?>;
   var csrf = (typeof csrfData !== 'undefined') ? csrfData : { token_name: 'csrf_token_name', hash: '' };
+  var allBioSwipes = [];
+  var allCioSwipes = [];
+  var selectedPunchDate = null;
 
   function typeBadge(type) {
     var t = String(type || '').toUpperCase();
@@ -376,11 +489,11 @@
     return t || '—';
   }
 
-  function fillSwipeTable(tbodySel, rows) {
+  function fillSwipeTable(tbodySel, rows, emptyMsg) {
     var $tb = $(tbodySel);
     $tb.empty();
     if (!rows || !rows.length) {
-      $tb.html('<tr><td colspan="4" class="text-muted">No records for this month</td></tr>');
+      $tb.html('<tr><td colspan="4" class="text-muted">' + (emptyMsg || 'No records') + '</td></tr>');
       return;
     }
     rows.forEach(function (r) {
@@ -391,6 +504,57 @@
     });
   }
 
+  function filterRowsByDate(rows, dateStr) {
+    if (!dateStr) {
+      return rows || [];
+    }
+    return (rows || []).filter(function (r) {
+      return String(r.date || '') === String(dateStr);
+    });
+  }
+
+  function updatePunchFilterUi() {
+    if (selectedPunchDate) {
+      $('#empAttFsPunchLabel').html('Showing punches for <span>' + selectedPunchDate + '</span>');
+      $('#empAttFsAllMonth').prop('disabled', false);
+    } else {
+      $('#empAttFsPunchLabel').html('Showing: <span>all month</span>');
+      $('#empAttFsAllMonth').prop('disabled', true);
+    }
+  }
+
+  function renderPunchTables() {
+    var emptyDay = selectedPunchDate
+      ? ('No punches on ' + selectedPunchDate)
+      : 'No records for this month';
+    fillSwipeTable('#empAttFsBioBody', filterRowsByDate(allBioSwipes, selectedPunchDate), emptyDay);
+    fillSwipeTable('#empAttFsCioBody', filterRowsByDate(allCioSwipes, selectedPunchDate), emptyDay);
+    updatePunchFilterUi();
+  }
+
+  function highlightSelectedDay(dateStr) {
+    $('#empAttFsCalendar .fc-daygrid-day').removeClass('emp-att-day-selected');
+    if (!dateStr || !fsCal) {
+      return;
+    }
+    var cell = fsCal.el.querySelector('.fc-daygrid-day[data-date="' + dateStr + '"]');
+    if (cell) {
+      cell.classList.add('emp-att-day-selected');
+    }
+  }
+
+  function selectPunchDay(dateStr) {
+    selectedPunchDate = dateStr || null;
+    renderPunchTables();
+    highlightSelectedDay(selectedPunchDate);
+  }
+
+  function clearPunchDayFilter() {
+    selectedPunchDate = null;
+    renderPunchTables();
+    highlightSelectedDay(null);
+  }
+
   function closeFs() {
     $('#empAttFs').removeClass('open').attr('aria-hidden', 'true');
     $('body').css('overflow', '');
@@ -398,15 +562,21 @@
       fsCal.destroy();
       fsCal = null;
     }
+    allBioSwipes = [];
+    allCioSwipes = [];
+    selectedPunchDate = null;
   }
 
   function openFs(staffId, name, code) {
     $('#empAttFs').addClass('open').attr('aria-hidden', 'false');
     $('body').css('overflow', 'hidden');
     $('#empAttFsTitle').text(name + (code ? (' — ' + code) : ''));
-    $('#empAttFsMeta').text('Month: ' + monthYear);
-    $('#empAttFsLoading').show();
+    $('#empAttFsMeta').text('Month: ' + monthYear + ' · click a day to see that day punches');
+    $('#empAttFsLoading').text('Loading attendance & swipes…').show();
     $('#empAttFsContent').hide();
+    selectedPunchDate = null;
+    allBioSwipes = [];
+    allCioSwipes = [];
 
     var payload = { staffid: staffId, month_year: monthYear };
     payload[csrf.token_name] = csrf.hash;
@@ -418,9 +588,10 @@
         return;
       }
       $('#empAttFsContent').show();
-      $('#empAttFsBioNote').text(res.bio_note || 'Biometric API integration coming soon.');
-      fillSwipeTable('#empAttFsBioBody', res.biometric_swipes || []);
-      fillSwipeTable('#empAttFsCioBody', res.check_in_out || []);
+      $('#empAttFsBioNote').text(res.bio_note || '');
+      allBioSwipes = res.biometric_swipes || [];
+      allCioSwipes = res.check_in_out || [];
+      clearPunchDayFilter();
 
       if (fsCal) {
         fsCal.destroy();
@@ -433,6 +604,16 @@
         height: 'auto',
         headerToolbar: { left: 'title', center: '', right: '' },
         dayMaxEvents: false,
+        dateClick: function (info) {
+          selectPunchDay(info.dateStr);
+        },
+        eventClick: function (info) {
+          info.jsEvent.preventDefault();
+          var d = info.event.startStr || (info.event.start ? info.event.start.toISOString().slice(0, 10) : '');
+          if (d) {
+            selectPunchDay(d.slice(0, 10));
+          }
+        },
         events: (res.events || []).map(function (e) {
           var title = String(e.title || '').toUpperCase();
           if (title === 'A') title = 'AB';
@@ -462,8 +643,10 @@
           var tip = 'Status: ' + info.event.title +
             ' | Total: ' + (info.event.extendedProps.total_time || '') +
             ' | In: ' + (info.event.extendedProps.check_in_time || '') +
-            ' | Out: ' + (info.event.extendedProps.check_out_time || '');
+            ' | Out: ' + (info.event.extendedProps.check_out_time || '') +
+            ' | Click to see punches';
           info.el.setAttribute('title', tip);
+          info.el.style.cursor = 'pointer';
         }
       });
       fsCal.render();
@@ -488,10 +671,99 @@
     openFs($(this).data('staffid'), $(this).data('name'), $(this).data('code'));
   });
   $('#empAttFsClose').on('click', closeFs);
+  $('#empAttFsAllMonth').on('click', function () {
+    clearPunchDayFilter();
+  });
   $(document).on('keydown', function (e) {
     if (e.key === 'Escape' && $('#empAttFs').hasClass('open')) {
       closeFs();
     }
+  });
+
+  function fillSelect($sel, rows, keepVal, blankText) {
+    var $el = $($sel);
+    if (!$el.length) {
+      return '';
+    }
+    // Prefer the real <select> behind bootstrap-select.
+    if ($el.hasClass('dropdown-toggle') || $el.closest('.bootstrap-select').length) {
+      var $linked = $el.closest('.bootstrap-select').find('select').first();
+      if ($linked.length) {
+        $el = $linked;
+      }
+    }
+    $el.empty().append($('<option></option>').attr('value', '').text(''));
+    (rows || []).forEach(function (r) {
+      if (!r || r.staffid === undefined || r.staffid === null || r.staffid === '') {
+        return;
+      }
+      $el.append(
+        $('<option></option>').attr('value', String(r.staffid)).text(r.full_name || ('#' + r.staffid))
+      );
+    });
+    var next = '';
+    if (keepVal && $el.find('option[value="' + String(keepVal) + '"]').length) {
+      next = String(keepVal);
+      $el.val(next);
+    } else {
+      $el.val('');
+    }
+    if ($.fn.selectpicker) {
+      if (blankText) {
+        $el.attr('data-none-selected-text', blankText);
+      }
+      try {
+        $el.selectpicker('refresh');
+      } catch (e) {
+        $el.selectpicker({ liveSearch: true, noneSelectedText: blankText || 'Nothing selected' });
+      }
+    }
+    return next;
+  }
+
+  function reloadFilterOptions(opts) {
+    opts = opts || {};
+    var $dept = $('select[name="department_id"]');
+    var dept = $dept.val() || '';
+    if (Array.isArray(dept)) {
+      dept = dept[0] || '';
+    }
+    var mgrSel = $('select[name="reporting_person"]');
+    var empSel = $('select[name="staff_id"]');
+    var mgrKeep = opts.resetManager ? '' : (mgrSel.val() || '');
+    var empKeep = opts.resetEmployee ? '' : (empSel.val() || '');
+    if (Array.isArray(mgrKeep)) mgrKeep = mgrKeep[0] || '';
+    if (Array.isArray(empKeep)) empKeep = empKeep[0] || '';
+
+    $.getJSON(admin_url + 'timesheets/check_employee_attendance_filter_options', {
+      department_id: dept,
+      reporting_person: mgrKeep
+    }).done(function (data) {
+      if (!data || typeof data !== 'object') {
+        data = { managers: [], employees: [] };
+      }
+      if (mgrSel.length) {
+        mgrKeep = fillSelect(mgrSel, data.managers || [], data.reporting_person || mgrKeep, 'Select manager');
+      }
+      fillSelect(empSel, data.employees || [], empKeep, 'Select employee');
+    }).fail(function () {
+      // Keep existing options if AJAX fails.
+    });
+  }
+
+  var filterReloadTimer = null;
+  function scheduleFilterReload(opts) {
+    clearTimeout(filterReloadTimer);
+    filterReloadTimer = setTimeout(function () {
+      reloadFilterOptions(opts);
+    }, 80);
+  }
+
+  $(document).on('changed.bs.select', 'select[name="department_id"]', function () {
+    scheduleFilterReload({ resetManager: true, resetEmployee: true });
+  });
+  $(document).on('changed.bs.select', 'select[name="reporting_person"]', function () {
+    scheduleFilterReload({ resetManager: false, resetEmployee: true });
   });
 })(jQuery);
 </script>

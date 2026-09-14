@@ -38,14 +38,26 @@ class Biometric extends AdminController
 		{
 		 $data['title'] = 'Biometric Attendance';
 		$data['can_filter_all'] = $this->can_view_all_biometric();
+		$data['can_filter_team'] = $this->can_filter_team_biometric();
+		$data['team_staff'] = $this->get_biometric_team_staff_list();
 		$data['sync_status'] = $this->biometric_model->get_sync_status();
-		$data['default_month'] = $this->biometric_model->get_latest_attendance_month() ?: date('Y-m');
+		$data['default_month'] = date('Y-m');
+		$data['default_day'] = date('Y-m-d');
+		$data['default_range'] = 'today'; // today | month | day | custom_month
 
+		$viewable_ids = $this->get_biometric_viewable_staff_ids();
 		$filters = [
-			'month'      => $data['default_month'],
+			'day'        => date('d-M-Y'),
+			'month'      => '',
 			'department' => '',
-			'staff'      => $this->can_view_all_biometric() ? '' : get_staff_user_id(),
+			'staff'      => '',
+			'staff_ids'  => $viewable_ids,
 		];
+		// Non-managers without a team: self only (staff_ids already = [self]).
+		if ($viewable_ids !== null && count($viewable_ids) === 1) {
+			$filters['staff'] = $viewable_ids[0];
+			$filters['staff_ids'] = null;
+		}
 
 		$data['initial_rows'] = $this->biometric_model->get_attendance_filtered(10, 0, $filters);
 		$data['initial_total'] = $this->biometric_model->get_attendance_filtered_count($filters);
@@ -64,15 +76,133 @@ class Biometric extends AdminController
 				];
 			}
 		} else {
-			$data['result'] = $this->departments_model->get_staff_departments_biometric();
+			$data['result'] = [];
 		}
 
 		$this->load->view('admin/biometric/attendance_import_view', $data);
 		}
 
+	/**
+	 * Company-wide biometric: HR / Admin only — NOT Manager role.
+	 */
 	private function can_view_all_biometric()
 	{
-		return is_admin() || is_manager() || is_super_admin() || is_HR() || is_admin2();
+		return is_admin()
+			|| is_super_admin()
+			|| is_HR()
+			|| (function_exists('is_super_hr') && is_super_hr())
+			|| is_admin2();
+	}
+
+	/**
+	 * Team managers may filter their direct reports (team_manage), not other depts.
+	 */
+	private function can_filter_team_biometric()
+	{
+		if ($this->can_view_all_biometric()) {
+			return false;
+		}
+		$ids = $this->get_biometric_viewable_staff_ids();
+
+		return is_array($ids) && count($ids) > 1;
+	}
+
+	/**
+	 * null = all staff; otherwise list of allowed staffids (self + direct reports).
+	 *
+	 * @return int[]|null
+	 */
+	private function get_biometric_viewable_staff_ids()
+	{
+		if ($this->can_view_all_biometric()) {
+			return null;
+		}
+
+		$uid = (int) get_staff_user_id();
+		$ids = [$uid];
+		$rows = $this->db->select('staffid')
+			->from(db_prefix() . 'staff')
+			->where('team_manage', $uid)
+			->where('active', 1)
+			->get()
+			->result_array();
+		foreach ($rows as $row) {
+			$ids[] = (int) $row['staffid'];
+		}
+
+		return array_values(array_unique(array_filter($ids)));
+	}
+
+	/**
+	 * Staff dropdown rows for the current viewer (team only).
+	 */
+	private function get_biometric_team_staff_list()
+	{
+		$ids = $this->get_biometric_viewable_staff_ids();
+		if ($ids === null) {
+			return [];
+		}
+		if (!$ids) {
+			return [];
+		}
+
+		$rows = $this->db->select('staffid, firstname, lastname')
+			->from(db_prefix() . 'staff')
+			->where_in('staffid', $ids)
+			->where('active', 1)
+			->order_by('firstname', 'ASC')
+			->get()
+			->result_array();
+
+		return array_map(function ($s) {
+			return [
+				'staffid'   => $s['staffid'],
+				'full_name' => trim($s['firstname'] . ' ' . $s['lastname']),
+			];
+		}, $rows);
+	}
+
+	/**
+	 * Clamp requested staff/department filters to what the viewer may see.
+	 *
+	 * @return array{staff:string|int,department:string|int,staff_ids:int[]|null}
+	 */
+	private function resolve_biometric_filters($staff, $department)
+	{
+		if ($department === '#' || $department === 'all' || $department === null) {
+			$department = '';
+		}
+		if ($staff === '#' || $staff === 'all' || $staff === null) {
+			$staff = '';
+		}
+
+		$viewable = $this->get_biometric_viewable_staff_ids();
+
+		if ($viewable === null) {
+			return [
+				'staff'      => $staff,
+				'department' => $department,
+				'staff_ids'  => null,
+			];
+		}
+
+		// Managers / employees: never allow other-department browsing.
+		$department = '';
+
+		if ($staff !== '' && is_numeric($staff)) {
+			$staff = (int) $staff;
+			if (!in_array($staff, $viewable, true)) {
+				$staff = '';
+			}
+		} else {
+			$staff = '';
+		}
+
+		return [
+			'staff'      => $staff,
+			'department' => $department,
+			'staff_ids'  => $staff !== '' ? null : $viewable,
+		];
 	}
 
 	public function sync_status()
@@ -147,26 +277,28 @@ class Biometric extends AdminController
 				}
 
 				$month = $this->input->get('month');
-				$department = $this->input->get('department');
-				$staff = $this->input->get('staff');
-
-				if ($department === '#' || $department === 'all' || $department === null) {
-					$department = '';
-				}
-				if ($staff === '#' || $staff === 'all' || $staff === null) {
-					$staff = '';
-				}
-
-				if (!$this->can_view_all_biometric()) {
-					$staff = get_staff_user_id();
-					$department = '';
-				}
+				$day = $this->input->get('day');
+				$range = $this->input->get('range');
+				$scoped = $this->resolve_biometric_filters(
+					$this->input->get('staff'),
+					$this->input->get('department')
+				);
 
 				$filters = [
-					'month' => $month,
-					'department' => $department,
-					'staff' => $staff,
+					'month' => '',
+					'day' => '',
+					'department' => $scoped['department'],
+					'staff' => $scoped['staff'],
+					'staff_ids' => $scoped['staff_ids'],
 				];
+
+				if ($range === 'today' || ($day && !$month && $range !== 'month' && $range !== 'custom_month')) {
+					$filters['day'] = $day ?: date('Y-m-d');
+				} elseif ($range === 'day' && $day) {
+					$filters['day'] = $day;
+				} else {
+					$filters['month'] = $month ?: date('Y-m');
+				}
 
 				$data = $this->biometric_model->get_attendance_filtered($limit, $offset, $filters);
 				$total = $this->biometric_model->get_attendance_filtered_count($filters);
@@ -342,37 +474,38 @@ class Biometric extends AdminController
 
 public function get_staff_by_department()
 {
-    if (!$this->can_view_all_biometric()) {
-        echo json_encode([]);
+    // HR/Admin: staff by department. Team managers: only their reportees (ignore dept).
+    if ($this->can_view_all_biometric()) {
+        $dept_id = $this->input->get('dept_id');
+        if ($dept_id === '#' || $dept_id === 'all') {
+            $dept_id = '';
+        }
+
+        $this->db->select('s.staffid, s.firstname, s.lastname');
+        $this->db->from(db_prefix() . 'staff_departments sd');
+        $this->db->join(db_prefix() . 'staff s', 's.staffid = sd.staffid');
+        $this->db->where('s.active', 1);
+
+        if ($dept_id !== '' && $dept_id !== null && is_numeric($dept_id)) {
+            $this->db->where('sd.departmentid', (int) $dept_id);
+        }
+
+        $this->db->group_by('s.staffid');
+        $this->db->order_by('s.firstname', 'ASC');
+        $staff = $this->db->get()->result_array();
+
+        $result = array_map(function ($s) {
+            return [
+                'staffid' => $s['staffid'],
+                'full_name' => $s['firstname'] . ' ' . $s['lastname'],
+            ];
+        }, $staff);
+
+        echo json_encode($result);
         return;
     }
 
-    $dept_id = $this->input->get('dept_id');
-    if ($dept_id === '#' || $dept_id === 'all') {
-        $dept_id = '';
-    }
-
-    $this->db->select('s.staffid, s.firstname, s.lastname');
-    $this->db->from(db_prefix() . 'staff_departments sd');
-    $this->db->join(db_prefix() . 'staff s', 's.staffid = sd.staffid');
-    $this->db->where('s.active', 1);
-
-    if ($dept_id !== '' && $dept_id !== null && is_numeric($dept_id)) {
-        $this->db->where('sd.departmentid', (int) $dept_id);
-    }
-
-    $this->db->group_by('s.staffid');
-    $this->db->order_by('s.firstname', 'ASC');
-    $staff = $this->db->get()->result_array();
-
-    $result = array_map(function ($s) {
-        return [
-            'staffid' => $s['staffid'],
-            'full_name' => $s['firstname'] . ' ' . $s['lastname'],
-        ];
-    }, $staff);
-
-    echo json_encode($result);
+    echo json_encode($this->get_biometric_team_staff_list());
 }
 
     public function swipes()
@@ -385,18 +518,16 @@ public function get_staff_by_department()
     {
         $from = $this->input->get('from') ?: date('Y-m-d');
         $to = $this->input->get('to') ?: date('Y-m-d');
-        $staff = $this->input->get('staff');
-
-        if (!$this->can_view_all_biometric()) {
-            $staff = get_staff_user_id();
-        } elseif ($staff === '#' || $staff === 'all' || $staff === null) {
-            $staff = '';
-        }
+        $scoped = $this->resolve_biometric_filters(
+            $this->input->get('staff'),
+            ''
+        );
 
         $swipes = $this->biometric_model->get_swipes([
             'from' => $from,
             'to' => $to,
-            'staff' => $staff,
+            'staff' => $scoped['staff'],
+            'staff_ids' => $scoped['staff_ids'],
         ]);
 
         $this->output

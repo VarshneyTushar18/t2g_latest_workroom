@@ -73,11 +73,17 @@ foreach ($report['monthly'] as $m) {
 <div class="ld-panel">
   <div class="ld-summary">
     <div class="ld-summary-item"><span>Available Balance</span><strong><?php echo leave_detail_fmt_num($s['available_balance']); ?></strong></div>
-    <div class="ld-summary-item"><span>Opening Balance</span><strong><?php echo leave_detail_fmt_num($s['opening_balance']); ?></strong></div>
-    <div class="ld-summary-item"><span>Granted</span><strong><?php echo leave_detail_fmt_num($s['granted']); ?></strong></div>
-    <div class="ld-summary-item"><span>Availed</span><strong><?php echo leave_detail_fmt_num($s['availed']); ?></strong></div>
-    <div class="ld-summary-item"><span>Lapsed</span><strong><?php echo leave_detail_fmt_num($s['lapsed']); ?></strong></div>
+    <div class="ld-summary-item"><span>Opening</span><strong><?php echo leave_detail_fmt_num($s['opening_balance']); ?></strong></div>
+    <div class="ld-summary-item"><span>Granted (this month)</span><strong><?php echo leave_detail_fmt_num($s['granted']); ?></strong></div>
+    <div class="ld-summary-item"><span>Had (open + grant)</span><strong><?php echo leave_detail_fmt_num($s['had'] ?? ($s['opening_balance'] + $s['granted'])); ?></strong></div>
+    <div class="ld-summary-item"><span>Taken</span><strong><?php echo leave_detail_fmt_num($s['availed']); ?></strong></div>
   </div>
+  <p class="text-muted" style="margin:-8px 0 16px;font-size:12px;">
+    Maths: Had <?php echo leave_detail_fmt_num($s['had'] ?? ($s['opening_balance'] + $s['granted'])); ?>
+    − Taken <?php echo leave_detail_fmt_num($s['availed']); ?>
+    = Remain <?php echo leave_detail_fmt_num($s['available_balance']); ?>.
+    Next month = remain + that month’s earn.
+  </p>
 
   <?php if ($has_chart_data) { ?>
   <div class="ld-chart-wrap">
@@ -89,19 +95,16 @@ foreach ($report['monthly'] as $m) {
     <div class="ld-chart-bars">
       <?php foreach ($report['monthly'] as $m) {
         if (empty($m['is_elapsed'])) {
-          $bal_h = 0;
-          $con_h = 0;
-        } else {
-          $bal_h = $report['slug'] === 'earned-leave' && $m['balance'] !== null
-            ? round(((float) $m['balance'] / $max_chart) * 85) : 0;
-          $con_h = round(((float) $m['consumed'] / $max_chart) * 85);
+          continue;
         }
-        $col_class = empty($m['is_elapsed']) ? 'ld-chart-col future' : 'ld-chart-col';
+        $bal_h = $report['slug'] === 'earned-leave' && $m['balance'] !== null
+          ? round(((float) $m['balance'] / $max_chart) * 85) : 0;
+        $con_h = round(((float) $m['consumed'] / $max_chart) * 85);
       ?>
-        <div class="<?php echo $col_class; ?>">
+        <div class="ld-chart-col">
           <div class="bars">
-            <?php if (!empty($m['is_elapsed']) && $report['slug'] === 'earned-leave' && $bal_h > 0) { ?><div class="bar bal" style="height:<?php echo (int) $bal_h; ?>px;" title="Balance <?php echo leave_detail_fmt_num($m['balance']); ?>"></div><?php } ?>
-            <?php if (!empty($m['is_elapsed']) && $con_h > 0) { ?><div class="bar con" style="height:<?php echo (int) $con_h; ?>px;" title="Consumed <?php echo leave_detail_fmt_num($m['consumed']); ?>"></div><?php } ?>
+            <?php if ($report['slug'] === 'earned-leave' && $bal_h > 0) { ?><div class="bar bal" style="height:<?php echo (int) $bal_h; ?>px;" title="Balance <?php echo leave_detail_fmt_num($m['balance']); ?>"></div><?php } ?>
+            <?php if ($con_h > 0) { ?><div class="bar con" style="height:<?php echo (int) $con_h; ?>px;" title="Consumed <?php echo leave_detail_fmt_num($m['consumed']); ?>"></div><?php } ?>
           </div>
           <label><?php echo html_escape($m['label']); ?></label>
         </div>
@@ -121,15 +124,17 @@ foreach ($report['monthly'] as $m) {
       <thead>
         <tr>
           <th>Month</th>
+          <th class="text-right">Opening</th>
           <th class="text-right">Granted</th>
-          <th class="text-right">Consumed</th>
-          <th class="text-right">Closing Balance</th>
+          <th class="text-right">Taken</th>
+          <th class="text-right">Closing (= open + grant − taken)</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($elapsed_months as $m) { ?>
           <tr>
             <td><?php echo html_escape($m['full_label'] ?? $m['label']); ?></td>
+            <td class="num"><?php echo isset($m['opening']) && $m['opening'] !== null ? leave_detail_fmt_num($m['opening']) : '—'; ?></td>
             <td class="num"><?php echo leave_detail_fmt_num($m['granted']); ?></td>
             <td class="num"><?php echo leave_detail_fmt_num($m['consumed']); ?></td>
             <td class="num"><?php echo $m['balance'] !== null ? leave_detail_fmt_num($m['balance']) : '—'; ?></td>

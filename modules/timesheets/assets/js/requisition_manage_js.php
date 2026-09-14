@@ -91,14 +91,20 @@
       get_remain_day_off();
       enforce_earned_vs_lop();
       update_leave_subject();
+      // Immediate recalculation from current Applying For days (don't wait for AJAX).
+      var days = parseFloat($('#number_of_leaving_day').val() || 0);
+      update_remaining_balance_display(days);
     });
 
     $('select[name="staff_id"]').on('change', function() {
       get_remain_day_off();
       loadLeaveBalanceCards();
+      loadLeaveCcStaff();
     });
 
     loadLeaveBalanceCards();
+    loadLeaveCcStaff();
+    loadLeaveFormStaffPicker();
 
     $(document).on('click', '.leave-card-view-details', function(e) {
       e.preventDefault();
@@ -378,15 +384,13 @@
       }
       if (isNaN(elBal)) { elBal = 0; }
 
-      if (leaveType === 'earned-leave') {
-        if (elBal <= 0 || number_of_leaving_day > (elBal + 0.001)) {
-          // Already converted by enforce_earned_vs_lop; ensure value is LOP before post.
-          $('select[name="type_of_leave"]').val('loss-of-pay');
-          if ($('select[name="type_of_leave"]').hasClass('selectpicker')) {
-            $('select[name="type_of_leave"]').selectpicker('refresh');
-          }
-          leaveType = 'loss-of-pay';
-        }
+      if (!leaveType) {
+        alert_float('warning', 'Please select a leave type.');
+        return false;
+      }
+      if (leaveType === 'earned-leave' && (elBal <= 0 || number_of_leaving_day > (elBal + 0.001))) {
+        alert_float('warning', 'Not enough earned leave for this request. Choose Loss of Pay or reduce days.');
+        return false;
       }
       if(parseFloat(number_of_leaving_day) <= 0){
         alert_float('warning', '<?php echo _l('the_minimum_number_of_days_off_must_be_0.5'); ?>');
@@ -482,26 +486,30 @@
     var current = $select.val() || '';
     var notice = '';
 
+    // Never auto-prefill leave type. User must choose; we only advise / enable options.
     if (elBal <= 0) {
       if ($elOpt.length) {
         $elOpt.prop('disabled', true);
       }
-      if (current === 'earned-leave' || current === '') {
-        $select.val('loss-of-pay');
-        current = 'loss-of-pay';
+      if (current === 'earned-leave') {
+        // User picked EL with no balance — clear so they choose LOP deliberately.
+        $select.val('');
+        current = '';
+        notice = 'No earned leave balance. Choose Loss of Pay' +
+          (days > 0 ? (' for ' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days')) : '') + '.';
+      } else if (current === '') {
+        notice = 'Select leave type. Earned Leave unavailable (balance 0) — use Loss of Pay.';
       }
-      notice = 'No earned leave balance. Applying as Loss of Pay' +
-        (days > 0 ? (' (' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days') + ')') : '') + '.';
     } else {
       if ($elOpt.length) {
         $elOpt.prop('disabled', false);
       }
       if (current === 'earned-leave' && days > (elBal + 0.001)) {
-        $select.val('loss-of-pay');
-        current = 'loss-of-pay';
         notice = 'Earned leave available: ' + format_leave_number(elBal) +
           ' day(s), but request is ' + format_leave_number(days) +
-          ' day(s). Converted to Loss of Pay.';
+          ' day(s). Reduce days or choose Loss of Pay.';
+      } else if (current === '') {
+        notice = 'Select leave type and dates to see balance after apply.';
       }
     }
 
@@ -538,7 +546,32 @@
     var remaining = balance;
     if (leaveType === 'earned-leave') {
       remaining = Math.round((balance - days) * 100) / 100;
+    } else if (!leaveType) {
+      // Don't show a fake "unchanged" balance — wait until type is chosen.
+      $('#remaining_balance_value').text('—').removeClass('is-negative');
+      if (forcedNotice) {
+        $('#loss_of_pay_notice').text(forcedNotice).show();
+      } else {
+        $('#loss_of_pay_notice').text('Select leave type to calculate balance after apply.').show();
+      }
+      return;
+    } else if (leaveType === 'loss-of-pay') {
+      remaining = balance; // LOP does not deduct earned leave
     }
+
+    // No dates yet → don't pretend days were applied
+    if (!days || days <= 0) {
+      $('#remaining_balance_value').text(leaveType === 'earned-leave' || leaveType === 'loss-of-pay'
+        ? format_leave_number(balance)
+        : '—').removeClass('is-negative');
+      if (forcedNotice) {
+        $('#loss_of_pay_notice').text(forcedNotice).show();
+      } else if (leaveType === 'earned-leave' || leaveType === 'loss-of-pay') {
+        $('#loss_of_pay_notice').text('Select From/To dates to calculate days and balance.').show();
+      }
+      return;
+    }
+
     var label = format_leave_number(remaining);
     $('#remaining_balance_value').text(label);
 
@@ -550,21 +583,16 @@
 
     if (leaveType === 'loss-of-pay') {
       $('#remaining_balance_value').removeClass('is-negative');
-      if (days > 0) {
-        $('#loss_of_pay_notice')
-          .text('Loss of Pay: ' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days') + ' (earned leave balance unchanged)')
-          .show();
-      } else {
-        $('#loss_of_pay_notice').hide().text('');
-      }
+      $('#loss_of_pay_notice')
+        .text('Loss of Pay: ' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days') + ' (earned leave balance unchanged)')
+        .show();
       return;
     }
 
     if (remaining < 0) {
-      var lop = Math.round(Math.abs(remaining) * 100) / 100;
       $('#remaining_balance_value').addClass('is-negative');
       $('#loss_of_pay_notice')
-        .text('Insufficient earned leave. Will apply as Loss of Pay: ' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days'))
+        .text('Insufficient earned leave for ' + format_leave_number(days) + (days === 1 ? ' Day' : ' Days') + '. Reduce days or choose Loss of Pay.')
         .show();
     } else {
       $('#remaining_balance_value').removeClass('is-negative');
@@ -583,7 +611,7 @@
 
     if(!startVal || !endVal){
       $('#number_of_leaving_day').val(0);
-      $('#applying_for_value').text('0 Days');
+      $('#applying_for_value').text('—');
       $('#sandwich_leave_notice').hide().text('');
       enforce_earned_vs_lop();
       update_leave_subject();
@@ -660,7 +688,11 @@
       html += '<div class="leave-balance-card" data-slug="' + card.slug + '">';
       html += '<div class="leave-balance-card-head">';
       html += '<div class="leave-balance-card-title">' + card.label + '</div>';
-      html += '<div class="leave-balance-card-granted">Granted: ' + granted + '</div>';
+      html += '<div class="leave-balance-card-granted">Had: ' + granted;
+      if (card.slug === 'earned-leave' && card.monthly_earn !== undefined) {
+        html += ' <span style="font-weight:400;color:#9ca3af;">(+' + formatLeaveBalanceNumber(card.monthly_earn) + ' earn)</span>';
+      }
+      html += '</div>';
       html += '</div>';
       html += '<div class="leave-balance-card-body">';
       html += '<div class="leave-balance-card-value' + balanceClass + '">' + balance + '</div>';
@@ -669,7 +701,7 @@
       html += '</div>';
       if (showFoot) {
         html += '<div class="leave-balance-card-foot">';
-        html += '<div class="leave-balance-card-consumed">' + consumed + ' of ' + granted + ' Consumed</div>';
+        html += '<div class="leave-balance-card-consumed">' + consumed + ' of ' + granted + ' taken → remain ' + balance + '</div>';
         html += '<div class="leave-balance-card-progress"><span style="width:' + (card.progress || 0) + '%;"></span></div>';
         html += '</div>';
       }
@@ -690,6 +722,64 @@
     $.get(admin_url + 'timesheets/get_leave_balance_cards/' + staffId, { year: year, month: month }).done(function(response) {
       try { response = typeof response === 'string' ? JSON.parse(response) : response; } catch (e) { response = {}; }
       renderLeaveBalanceCards(response.cards || []);
+    });
+  }
+
+  function loadLeaveCcStaff() {
+    var $sel = $('#followers_id');
+    if (!$sel.length) {
+      return;
+    }
+    var staffId = $('select[name="staff_id"]').val() || $('input[name="staff_id"]').val();
+    if (!staffId) {
+      return;
+    }
+    $.get(admin_url + 'timesheets/get_leave_cc_staff/' + staffId).done(function(response) {
+      try { response = typeof response === 'string' ? JSON.parse(response) : response; } catch (e) { response = {}; }
+      var staff = response.staff || [];
+      var prev = $sel.val();
+      $sel.empty().append('<option value=""></option>');
+      for (var i = 0; i < staff.length; i++) {
+        var s = staff[i];
+        var id = String(s.staffid);
+        var name = (s.firstname || '') + ' ' + (s.lastname || '');
+        $sel.append($('<option></option>').attr('value', id).text($.trim(name)));
+      }
+      if (prev && $sel.find('option[value="' + prev + '"]').length) {
+        $sel.val(prev);
+      } else {
+        $sel.val('');
+      }
+      if ($sel.hasClass('selectpicker') || $sel.data('selectpicker')) {
+        $sel.selectpicker('refresh');
+      }
+    });
+  }
+
+  function loadLeaveFormStaffPicker() {
+    var $sel = $('select[name="staff_id"]');
+    if (!$sel.length) {
+      return;
+    }
+    var cur = String($sel.val() || '');
+    $.getJSON(admin_url + 'timesheets/get_viewable_staff_json').done(function(res) {
+      var staff = res.staff || [];
+      if (!staff.length) {
+        return;
+      }
+      $sel.empty();
+      for (var i = 0; i < staff.length; i++) {
+        var s = staff[i];
+        var id = String(s.staffid);
+        var name = $.trim((s.firstname || '') + ' ' + (s.lastname || ''));
+        $sel.append($('<option></option>').attr('value', id).text(name));
+      }
+      if (cur && $sel.find('option[value="' + cur + '"]').length) {
+        $sel.val(cur);
+      }
+      if ($sel.hasClass('selectpicker') || $sel.data('selectpicker')) {
+        $sel.selectpicker('refresh');
+      }
     });
   }
 
@@ -727,13 +817,9 @@
       if(response.html){
         $('#number_days_off_2').html(response.html);
       }
-      if(response.valid_date && !$('input[name="start_time"]').val()){
-        $('input[name="start_time"]').val(response.valid_date);
-        $('input[name="end_time"]').val(response.valid_date);
-        update_applying_for();
-      } else {
-        enforce_earned_vs_lop();
-      }
+      // Do not auto-fill dates — days must come from the user's date selection.
+      enforce_earned_vs_lop();
+      update_applying_for();
       if(typeof response.number_day_off !== 'undefined'){
         $('input[name="number_day_off"]').val(response.number_day_off);
       }
@@ -760,15 +846,40 @@
     $('#requisition_m').modal('show');
     $('.edit-title').addClass('hide');
     $('.add-title').removeClass('hide');
-    $('#requisition_m select[name="rel_type"]').val('').selectpicker('refresh');
+    // name is type_of_leave (id=rel_type) — do not auto-pick LOP/EL
+    var $leaveType = $('#requisition_m select[name="type_of_leave"], #requisition_m #rel_type');
+    $leaveType.val('');
+    if ($leaveType.hasClass('selectpicker')) {
+      $leaveType.selectpicker('refresh');
+    }
     $('#requisition_m textarea[name="reason"]').val('');
-    $('#contact_details').val('');
     $('#cc_picker_wrap').addClass('hide');
     $('#cc_add_link').removeClass('hide');
+    $('#loss_of_pay_notice').hide().text('');
+    // Clear dates so Applying For / balance wait for user selection
+    clear_leave_apply_dates();
     setTimeout(function(){
+      clear_leave_apply_dates();
       get_remain_day_off();
       update_applying_for();
     }, 200);
+  }
+
+  function clear_leave_apply_dates(){
+    "use strict";
+    var $start = $('input[name="start_time"]');
+    var $end = $('input[name="end_time"]');
+    $start.val('');
+    $end.val('');
+    // Some Perfex datepickers refill "today" on init — clear again after that.
+    try {
+      if ($start.data('DateTimePicker')) { $start.data('DateTimePicker').clear(); }
+      if ($end.data('DateTimePicker')) { $end.data('DateTimePicker').clear(); }
+    } catch (e) {}
+    $('#number_of_leaving_day').val(0);
+    $('#applying_for_value').text('—');
+    $('#remaining_balance_value').text('—').removeClass('is-negative');
+    $('#sandwich_leave_notice').hide().text('');
   }
 
   function add_requisition(){
@@ -820,9 +931,7 @@
          table_registration_leave.DataTable().ajax.reload().columns.adjust().responsive.recalc();
 
        }else if(response.success == false){
-        alert_float('danger', "<?php echo _l('Add_requisition_success') ; ?>");
-        $('#requisition_m').removeClass('sidebar-open');
-        table_registration_leave.DataTable().ajax.reload().columns.adjust().responsive.recalc();
+        alert_float('danger', response.message || "<?php echo _l('please_check_again') ; ?>");
       }else{
         alert_float('warning', "<?php echo _l('Requisition_information_already_exists') ; ?>");
       }

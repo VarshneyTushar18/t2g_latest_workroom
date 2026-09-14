@@ -48,14 +48,187 @@ class timesheets extends AdminController
 		$this->load->view('timesheets_dashboard', $data);
 	}
 
+	/**
+	 * HRMS home — quick-action card layout (local UX hub).
+	 */
+	public function hrms_home()
+	{
+		if (!(
+			has_permission('attendance_management', '', 'view_own') ||
+			has_permission('attendance_management', '', 'view') ||
+			has_permission('leave_management', '', 'view_own') ||
+			has_permission('leave_management', '', 'view') ||
+			is_admin()
+		)) {
+			access_denied('timesheets');
+		}
 
+		$can_leave = has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin();
+
+			$quick_actions = [
+			[
+				'label' => 'Leave apply',
+				'href' => admin_url('timesheets/requisition_manage'),
+				'icon' => 'fa-file-text',
+				'tone' => 'blue',
+			],
+			[
+				'label' => 'My attendance',
+				'href' => admin_url('timesheets/my_attendance'),
+				'icon' => 'fa-clock',
+				'tone' => 'teal',
+			],
+			[
+				'label' => 'Leave balance',
+				'href' => admin_url('staff/leave_balance'),
+				'icon' => 'fa-pie-chart',
+				'tone' => 'amber',
+			],
+		];
+
+		if (!$can_leave) {
+			$quick_actions = array_values(array_filter($quick_actions, function ($a) {
+				return $a['label'] === 'My attendance';
+			}));
+			$quick_actions[] = [
+				'label' => 'Regularization',
+				'href' => admin_url('timesheets/attendance_regularization'),
+				'icon' => 'fa-edit',
+				'tone' => 'slate',
+			];
+		}
+
+		$data['title'] = 'HRMS';
+		$data['quick_actions'] = $quick_actions;
+
+		$this->load->view('hrms_home', $data);
+	}
 
 	/**
+	 * Time off hub — balances + requests + month calendar (local UX).
+	 */
+	public function time_off()
+	{
+		if (!(
+			has_permission('leave_management', '', 'view_own') ||
+			has_permission('leave_management', '', 'view') ||
+			is_admin()
+		)) {
+			access_denied('timesheets');
+		}
 
+		$staff_id = (int) get_staff_user_id();
+		$year = (int) date('Y');
+		$month = (int) date('m');
+		$month_year = date('Y-m');
+
+		$cards = [];
+		if (method_exists($this->timesheets_model, 'get_staff_leave_balance_cards')) {
+			$cards = $this->timesheets_model->get_staff_leave_balance_cards($staff_id, $year, $month);
+		}
+
+		$balance_rows = [];
+		$total_available = 0.0;
+		foreach ((array) $cards as $card) {
+			$label = (string) ($card['label'] ?? $card['name'] ?? $card['type'] ?? 'Leave');
+			$available = $card['balance'] ?? $card['available'] ?? $card['remaining'] ?? $card['days'] ?? null;
+			if ($available === null && isset($card['value'])) {
+				$available = $card['value'];
+			}
+			$available_num = is_numeric($available) ? (float) $available : null;
+			if ($available_num !== null) {
+				$total_available += $available_num;
+			}
+			$balance_rows[] = [
+				'label' => $label,
+				'available' => $available_num !== null ? rtrim(rtrim(number_format($available_num, 2, '.', ''), '0'), '.') : (string) $available,
+			];
+		}
+
+		$prefix = db_prefix();
+		$this->db->select('id, subject, reason, start_time, end_time, number_of_leaving_day, type_of_leave, type_of_leave_text, status');
+		$this->db->from($prefix . 'timesheets_requisition_leave');
+		$this->db->where('staff_id', $staff_id);
+		$this->db->order_by('start_time', 'DESC');
+		$this->db->limit(12);
+		$req_q = $this->db->get();
+		$requests = $req_q !== false ? $req_q->result_array() : [];
+
+		$status_map = [
+			'0' => 'Pending',
+			'1' => 'Approved',
+			'2' => 'Rejected',
+			'-1' => 'Cancelled',
+		];
+
+		$request_rows = [];
+		$calendar_events = [];
+		foreach ($requests as $r) {
+			$st = (string) ($r['status'] ?? '');
+			$status_label = $status_map[$st] ?? 'Unknown';
+			if ($st === '1') {
+				$status_label = 'Used';
+			}
+			$type = trim((string) ($r['type_of_leave_text'] ?? ''));
+			if ($type === '') {
+				$type = trim((string) ($r['type_of_leave'] ?? 'Leave'));
+			}
+			$start = substr((string) ($r['start_time'] ?? ''), 0, 10);
+			$days = $r['number_of_leaving_day'] ?? '';
+			$request_rows[] = [
+				'id' => (int) $r['id'],
+				'date_label' => $start ? date('M jS Y', strtotime($start)) : '—',
+				'subtitle' => $type . ($days !== '' ? (' · ' . $days . ' day' . ((float) $days == 1 ? '' : 's')) : ''),
+				'status' => $status_label,
+				'status_code' => $st,
+				'href' => admin_url('timesheets/requisition_detail/' . (int) $r['id']),
+			];
+		}
+
+		// Calendar events: approved + pending leaves overlapping this year (simple range load).
+		$this->db->select('id, start_time, end_time, number_of_leaving_day, type_of_leave_text, type_of_leave, status');
+		$this->db->from($prefix . 'timesheets_requisition_leave');
+		$this->db->where('staff_id', $staff_id);
+		$this->db->where('status !=', 2);
+		$this->db->where('YEAR(start_time) = ' . $year, null, false);
+		$cal_q = $this->db->get();
+		$cal_rows = $cal_q !== false ? $cal_q->result_array() : [];
+		foreach ($cal_rows as $r) {
+			$start = substr((string) ($r['start_time'] ?? ''), 0, 10);
+			$end = substr((string) ($r['end_time'] ?? $start), 0, 10);
+			if ($start === '') {
+				continue;
+			}
+			// FullCalendar end is exclusive for all-day events.
+			$end_exclusive = date('Y-m-d', strtotime($end . ' +1 day'));
+			$title = trim((string) ($r['type_of_leave_text'] ?? $r['type_of_leave'] ?? 'Leave'));
+			$color = ((string) $r['status'] === '1') ? '#93c5fd' : '#fde68a';
+			$calendar_events[] = [
+				'title' => $title !== '' ? $title : 'Leave',
+				'start' => $start,
+				'end' => $end_exclusive,
+				'allDay' => true,
+				'backgroundColor' => $color,
+				'borderColor' => 'transparent',
+				'textColor' => '#0f172a',
+			];
+		}
+
+		$data['title'] = 'Time off';
+		$data['balance_rows'] = $balance_rows;
+		$data['total_available'] = rtrim(rtrim(number_format($total_available, 2, '.', ''), '0'), '.');
+		$data['request_rows'] = $request_rows;
+		$data['calendar_events'] = $calendar_events;
+		$data['month_year'] = $month_year;
+		$data['apply_url'] = admin_url('timesheets/requisition_manage');
+		$data['balance_url'] = admin_url('staff/leave_balance');
+
+		$this->load->view('time_off', $data);
+	}
+
+	/**
 	 * setting
-
 	 * @return
-
 	 */
 	public function data_check()
 	{
@@ -1327,18 +1500,21 @@ class timesheets extends AdminController
 			unset($data['number_day_off']);
 			unset($data['start_session'], $data['end_session'], $data['contact_details'], $data['apply_leave_balance']);
 
-			// Keep contact details in reason text if provided.
-			$contact = $this->input->post('contact_details');
-			if (!empty($contact)) {
-				$reason = isset($data['reason']) ? $data['reason'] : '';
-				$data['reason'] = trim('Contact: ' . $contact . "\n" . $reason);
-			}
-
 			$data['start_time'] = $this->timesheets_model->format_date_time($data['start_time']);
 
 			$data['end_time'] = $this->timesheets_model->format_date_time($data['end_time']);
 
-
+			// Allow leave for current month + previous month (e.g. Aug leave applied in Sept).
+			$leave_start_ymd = date('Y-m-d', strtotime($data['start_time']));
+			$leave_end_ymd = date('Y-m-d', strtotime($data['end_time']));
+			if (!$this->timesheets_model->leave_date_in_allowed_window($leave_start_ymd)
+				|| !$this->timesheets_model->leave_date_in_allowed_window($leave_end_ymd)) {
+				echo json_encode([
+					'success' => false,
+					'message' => 'Leave can be applied only for the current month and the previous month.',
+				]);
+				die;
+			}
 			//$data['start_time'] = $this->timesheets_model->format_date_time($data['start_time_s']);
 
 			//$data['end_time'] = $this->timesheets_model->format_date_time($data['end_time_s']);
@@ -1351,6 +1527,17 @@ class timesheets extends AdminController
 			if (!isset($data['staff_id'])) {
 
 				$data['staff_id'] = get_staff_user_id();
+			}
+
+			// CC to: same department as applying user + HR.
+			$this->load->helper('timesheets/timesheets');
+			$followers_id = isset($data['followers_id']) ? (int) $data['followers_id'] : 0;
+			if ($followers_id > 0) {
+				$allowed_cc = timesheets_get_leave_cc_staff_list((int) $data['staff_id']);
+				$allowed_ids = array_map('intval', array_column($allowed_cc, 'staffid'));
+				if (!in_array($followers_id, $allowed_ids, true)) {
+					$data['followers_id'] = '';
+				}
 			}
 
 			$this->load->model('staff_model');
@@ -1390,8 +1577,9 @@ class timesheets extends AdminController
 			}
 
 			// Keep leave_balance / carry_forward synced with Leave Management cards.
-			$leave_month = (int) date('m', strtotime($data['start_time']));
-			$leave_year = (int) date('Y', strtotime($data['start_time']));
+			// Always use *current* month balance (even if leave dates are previous month).
+			$leave_month = (int) date('m');
+			$leave_year = (int) date('Y');
 			$days_for_balance = (float) ($data['number_of_leaving_day'] ?? ($data['number_of_days'] ?? 0));
 
 			// Earned leave only if balance covers the full request; otherwise Loss of Pay.
@@ -2067,13 +2255,9 @@ class timesheets extends AdminController
 
 		$data['userid'] = get_staff_user_id();
 
-		$day_off = $this->timesheets_model->get_current_date_off($data['userid']);
-
-		$data['days_off'] = $day_off->days_off;
-
-		$data['number_day_off'] = $day_off->number_day_off;
-
-
+		// Fast open: skip day-off snapshot + leave-balance cards on first paint (AJAX fills cards).
+		$data['days_off'] = 0;
+		$data['number_day_off'] = 0;
 
 		$data['data_timekeeping_form'] = get_timesheets_option('timekeeping_form');
 
@@ -2092,10 +2276,12 @@ class timesheets extends AdminController
 
 		$this->load->model('staff_model');
 
-		// Light staff list for leave form select / CC picker.
+		// Staff / CC lists load via AJAX after paint (avoids embedding 900+ options in HTML).
 		$this->load->helper('timesheets/timesheets');
-		$data['pro'] = timesheets_get_viewable_staff_list();
-		$data['cc_staff'] = $data['pro'];
+		$uid = (int) $data['userid'];
+		$me = $this->db->select('staffid, firstname, lastname')->where('staffid', $uid)->get(db_prefix() . 'staff')->row_array();
+		$data['pro'] = $me ? [$me] : [];
+		$data['cc_staff'] = [];
 
 		$data['tab'] = $this->input->get('tab');
 
@@ -2108,7 +2294,8 @@ class timesheets extends AdminController
 
 		$data['type_of_leave'] = $this->timesheets_model->get_type_of_leave();
 
-		$data['leave_balance_cards'] = $this->timesheets_model->get_staff_leave_balance_cards($data['userid'], (int) date('Y'), (int) date('m'));
+		// Cards load via get_leave_balance_cards AJAX after paint.
+		$data['leave_balance_cards'] = [];
 		$data['leave_balance_year'] = (int) date('Y');
 		$data['leave_balance_month'] = (int) date('m');
 
@@ -2279,7 +2466,7 @@ class timesheets extends AdminController
 		if (!timesheets_can_approve_attendance()) {
 			echo json_encode([
 				'success' => false,
-				'message' => 'Only Sahil, Sarabjeet, HR, or Super Admin can approve attendance.',
+				'message' => 'Only Sahil, Sarabjeet Singh, HR, or Super Admin can approve attendance.',
 			]);
 			die();
 		}
@@ -3455,7 +3642,7 @@ class timesheets extends AdminController
 			if (!timesheets_can_approve_leave('', $applicant_id)) {
 				$msg = timesheets_staff_is_hr_or_accounts($applicant_id)
 					? 'Only Super Admin (Harpreet) can approve leave for HR / Accounts staff.'
-					: 'Only Sarabjeet, HR, Admin, or Super Admin can approve leave.';
+					: 'Only Sarabjeet Singh, HR, Super HR, Admin, or Super Admin can approve leave.';
 				echo json_encode([
 					'success' => false,
 					'message' => $msg,
@@ -3469,7 +3656,7 @@ class timesheets extends AdminController
 			if (!timesheets_can_approve_attendance()) {
 				echo json_encode([
 					'success' => false,
-					'message' => 'Only Sahil, Sarabjeet, HR, or Super Admin can approve attendance.',
+					'message' => 'Only Sahil, Sarabjeet Singh, HR, or Super Admin can approve attendance.',
 				]);
 				die();
 			}
@@ -7588,6 +7775,57 @@ class timesheets extends AdminController
 
 
 				$where = [(($query != '') ? ' where ' . rtrim($query, ' and ') : '')];
+
+				// Search stores staff as comma-separated IDs, so name search must resolve to staff IDs.
+				$search_post = $this->input->post('search');
+				$search_value = '';
+				if (is_array($search_post) && isset($search_post['value'])) {
+					$search_value = trim((string) $search_post['value']);
+				}
+				if ($search_value !== '') {
+					$escaped = $this->db->escape_like_str($search_value);
+					$staff_sql = 'SELECT staffid FROM ' . db_prefix() . 'staff
+						WHERE CONCAT(firstname, \' \', lastname) LIKE \'%' . $escaped . '%\' ESCAPE \'!\'
+						   OR firstname LIKE \'%' . $escaped . '%\' ESCAPE \'!\'
+						   OR lastname LIKE \'%' . $escaped . '%\' ESCAPE \'!\'
+						   OR staff_identifi LIKE \'%' . $escaped . '%\' ESCAPE \'!\'
+						   OR email LIKE \'%' . $escaped . '%\' ESCAPE \'!\'
+						   OR CAST(staffid AS CHAR) = ' . $this->db->escape($search_value);
+					$staff_ids = array_map('intval', array_column($this->db->query($staff_sql)->result_array(), 'staffid'));
+					$staff_ids = array_values(array_filter(array_unique($staff_ids)));
+
+					$dept_ids = [];
+					$dept_rows = $this->db->query(
+						'SELECT departmentid FROM ' . db_prefix() . 'departments WHERE name LIKE \'%' . $escaped . '%\' ESCAPE \'!\''
+					)->result_array();
+					foreach ($dept_rows as $d) {
+						$dept_ids[] = (int) $d['departmentid'];
+					}
+
+					$role_ids = [];
+					$role_rows = $this->db->query(
+						'SELECT roleid FROM ' . db_prefix() . 'roles WHERE name LIKE \'%' . $escaped . '%\' ESCAPE \'!\''
+					)->result_array();
+					foreach ($role_rows as $r) {
+						$role_ids[] = (int) $r['roleid'];
+					}
+
+					$or_parts = [];
+					foreach ($staff_ids as $sid) {
+						$or_parts[] = 'FIND_IN_SET(' . $sid . ', ' . db_prefix() . 'work_shift.staff)';
+					}
+					foreach ($dept_ids as $did) {
+						$or_parts[] = 'FIND_IN_SET(' . $did . ', ' . db_prefix() . 'work_shift.department)';
+					}
+					foreach ($role_ids as $rid) {
+						$or_parts[] = 'FIND_IN_SET(' . $rid . ', ' . db_prefix() . 'work_shift.position)';
+					}
+
+					if (!empty($or_parts)) {
+						// Appended after DataTables LIKE clause so name search still finds rows.
+						$where[] = ' OR (' . implode(' OR ', $or_parts) . ')';
+					}
+				}
 
 
 
@@ -12109,19 +12347,16 @@ class timesheets extends AdminController
 
 		$month = (int) date('m');
 		$year = (int) date('Y');
-		$start_raw = $this->input->post('start_time');
-		if ($start_raw) {
-			$ts = strtotime(to_sql_date($start_raw) ?: $start_raw);
-			if ($ts) {
-				$month = (int) date('m', $ts);
-				$year = (int) date('Y', $ts);
-			}
-		}
+		// Always show *current* month balance on Leave Apply — even when From/To is previous month.
+		// (Previous-month leave still deducts from today's remaining balance.)
 
 		$synced = $this->timesheets_model->get_synced_leave_balance($id, $type_of_leave ?: 'earned-leave', $year, $month);
 		$balance = (float) $synced['balance'];
 		$carry = (float) $synced['carry_forward'];
-		$earned = (float) $synced['granted'];
+		$earned = (float) ($synced['monthly_earn'] ?? 0);
+		if ($earned <= 0 && ($synced['slug'] ?? '') !== 'earned-leave') {
+			$earned = (float) $synced['granted'];
+		}
 		$taken = (float) $synced['consumed'];
 
 		// Always resolve earned-leave balance for EL vs LOP enforcement on the apply form.
@@ -12134,7 +12369,7 @@ class timesheets extends AdminController
 		$html .= '<div><strong>Period:</strong> ' . $month_label . '</div>';
 		$html .= '<div style="margin-top:4px;"><strong>Carry forward:</strong> ' . $carry . '</div>';
 		$html .= '<div><strong>Leaves taken (this month):</strong> ' . $taken . '</div>';
-		$html .= '<div><strong>Earned leave (rate):</strong> ' . $earned . '</div>';
+		$html .= '<div><strong>Earned leave (rate):</strong> ' . ((float) ($synced['monthly_earn'] ?? $earned)) . '</div>';
 		$html .= '<div class="' . ($earned_balance <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
 		$html .= '<strong>Current earned leave balance: ' . $earned_balance . '</strong></div>';
 
@@ -12163,7 +12398,7 @@ class timesheets extends AdminController
 			'type_balance' => $balance,
 			'carry_forward' => (float) $earned_synced['carry_forward'],
 			'leave_taken' => (float) $earned_synced['consumed'],
-			'earned_leave' => (float) $earned_synced['granted'],
+			'earned_leave' => (float) ($earned_synced['monthly_earn'] ?? $earned_synced['granted']),
 			'number_day_off' => $allowed,
 			'can_use_earned_leave' => $earned_balance > 0,
 			'month' => $month_label,
@@ -12198,6 +12433,40 @@ class timesheets extends AdminController
 			'month' => $month,
 			'staff_id' => $staff_id,
 		]);
+		die;
+	}
+
+	/**
+	 * JSON: CC staff options for leave apply (same department + HR).
+	 */
+	public function get_leave_cc_staff($staff_id = 0)
+	{
+		$this->load->helper('timesheets/timesheets');
+		$staff_id = (int) $staff_id;
+		if ($staff_id <= 0) {
+			$staff_id = (int) get_staff_user_id();
+		}
+
+		if (!timesheets_can_view_staff($staff_id) && (int) get_staff_user_id() !== $staff_id) {
+			ajax_access_denied();
+		}
+
+		$staff = timesheets_get_leave_cc_staff_list($staff_id);
+		echo json_encode(['staff' => $staff]);
+		die;
+	}
+
+	/**
+	 * JSON: staff picker options (viewable team / all for HR).
+	 */
+	public function get_viewable_staff_json()
+	{
+		$this->load->helper('timesheets/timesheets');
+		if (!is_staff_logged_in()) {
+			ajax_access_denied();
+		}
+		$staff = timesheets_get_viewable_staff_list();
+		echo json_encode(['staff' => $staff]);
 		die;
 	}
 
@@ -13385,18 +13654,18 @@ class timesheets extends AdminController
 	public function check_employee_attendance()
 	{
 		try {
-			$staffs_under_manager = get_staff_user_id();
 			$data['month_year'] = date('Y-m');
 
 			$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
-			$managers_list = $is_full_access ? get_all_managers() : null;
 
+			// Only apply reporting-manager filter when explicitly selected (or forced for managers).
+			$reporting_person = (int) ($this->input->post('reporting_person') ?: 0);
 			$team_manage_filter = null;
-			if ($this->input->post('reporting_person')) {
-				$team_manage_filter = (int) $this->input->post('reporting_person');
-				$staffs_under_manager = $team_manage_filter;
+			if ($reporting_person > 0) {
+				$team_manage_filter = $reporting_person;
 			} elseif (!$is_full_access) {
 				$team_manage_filter = (int) get_staff_user_id();
+				$reporting_person = $team_manage_filter;
 			}
 
 			if ($this->input->post('month_year') && $this->input->post('month_year') !== '') {
@@ -13413,31 +13682,80 @@ class timesheets extends AdminController
 			$year = (int) ($month_year[0] ?? date('Y'));
 			$month = (int) ($month_year[1] ?? date('m'));
 
-			$data['staffs_under_manager'] = $staffs_under_manager;
-			$data['staffs_in_select_option'] = $is_full_access
-				? ($managers_list !== null ? $managers_list : get_all_managers())
-				: $this->staff_model->get('', ['team_manage' => get_staff_user_id(), 'active' => 1]);
+			$data['staffs_under_manager'] = $reporting_person > 0 ? $reporting_person : '';
+			$data['reporting_person'] = $reporting_person > 0 ? $reporting_person : '';
 
-			$currentPage = $this->input->post('page') ? (int) $this->input->post('page') : 1;
+			$this->load->model('departments_model');
+			$department_id = (int) ($this->input->post('department_id') ?: 0);
+			$data['departments'] = $this->departments_model->get();
+			$data['department_id'] = $department_id > 0 ? $department_id : '';
+
+			// Manager dropdown syncs to selected department (HR → HR-relevant managers only).
+			if ($is_full_access) {
+				$data['staffs_in_select_option'] = $this->check_employee_attendance_manager_list($department_id);
+				// Drop stale manager selection if not in filtered list.
+				if ($reporting_person > 0) {
+					$mgr_ids = array_map('intval', array_column($data['staffs_in_select_option'], 'staffid'));
+					if (!in_array($reporting_person, $mgr_ids, true)) {
+						$reporting_person = 0;
+						$team_manage_filter = null;
+						$data['reporting_person'] = '';
+						$data['staffs_under_manager'] = '';
+					}
+				}
+			} else {
+				$data['staffs_in_select_option'] = $this->staff_model->get('', ['team_manage' => get_staff_user_id(), 'active' => 1]);
+			}
+
+			$staff_id = (int) ($this->input->post('staff_id') ?: 0);
+			$data['staff_id'] = $staff_id > 0 ? $staff_id : '';
+
+			// Employee dropdown options match current department + manager filters.
+			$data['staff_options'] = $this->check_employee_attendance_staff_list($team_manage_filter, $department_id);
+			if ($staff_id > 0) {
+				$emp_ids = array_map('intval', array_column($data['staff_options'], 'staffid'));
+				if (!in_array($staff_id, $emp_ids, true)) {
+					$staff_id = 0;
+					$data['staff_id'] = '';
+				}
+			}
+
+			$calendarsPerPage = 9;
+
+			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id) {
+				$this->db->where('s.active', 1);
+				if ($team_manage_filter) {
+					$this->db->where('s.team_manage', $team_manage_filter);
+				}
+				if ($department_id > 0) {
+					$this->db->where(
+						's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+						null,
+						false
+					);
+				}
+				if ($staff_id > 0) {
+					$this->db->where('s.staffid', $staff_id);
+				}
+			};
+
+			$this->db->from(db_prefix() . 'staff s');
+			$apply_staff_scope();
+			$totalStaff = (int) $this->db->count_all_results();
+
+			$totalPages = $totalStaff > 0 ? (int) ceil($totalStaff / $calendarsPerPage) : 1;
+			$currentPage = (int) ($this->input->post('page') ?: 1);
 			if ($currentPage < 1) {
 				$currentPage = 1;
 			}
-			$calendarsPerPage = 6;
-			$startIndex = ($currentPage - 1) * $calendarsPerPage;
-
-			$this->db->from(db_prefix() . 'staff s');
-			$this->db->where('s.active', 1);
-			if ($team_manage_filter) {
-				$this->db->where('s.team_manage', $team_manage_filter);
+			if ($currentPage > $totalPages) {
+				$currentPage = $totalPages;
 			}
-			$totalStaff = (int) $this->db->count_all_results();
+			$startIndex = ($currentPage - 1) * $calendarsPerPage;
 
 			$this->db->select('s.staffid, CONCAT(s.firstname, " ", s.lastname) AS full_name, COALESCE(s.staff_identifi, "") AS staff_identifi', false);
 			$this->db->from(db_prefix() . 'staff s');
-			$this->db->where('s.active', 1);
-			if ($team_manage_filter) {
-				$this->db->where('s.team_manage', $team_manage_filter);
-			}
+			$apply_staff_scope();
 			$this->db->order_by('s.firstname', 'ASC');
 			$this->db->limit($calendarsPerPage, $startIndex);
 			$query = $this->db->get();
@@ -13448,17 +13766,19 @@ class timesheets extends AdminController
 				$staffToDisplay = $query->result_array();
 			}
 
-			$totalPages = $totalStaff > 0 ? (int) ceil($totalStaff / $calendarsPerPage) : 1;
-
 			foreach ($staffToDisplay as &$staff) {
 				$staff['attendance'] = $this->get_staff_attendance((int) $staff['staffid'], $month, $year);
 			}
 			unset($staff);
 
 			$data['selectedMonth'] = $selectedMonth;
+			$data['month_year'] = $selectedMonth;
 			$data['currentPage'] = $currentPage;
 			$data['totalPages'] = $totalPages;
+			$data['totalStaff'] = $totalStaff;
 			$data['staffToDisplay'] = $staffToDisplay;
+			$data['department_id'] = $department_id > 0 ? $department_id : '';
+			$data['staff_id'] = $staff_id > 0 ? $staff_id : '';
 
 			$this->load->view('check_employee_attendance', $data);
 		} catch (Throwable $e) {
@@ -13467,36 +13787,194 @@ class timesheets extends AdminController
 		}
 	}
 
+	/**
+	 * AJAX: cascaded manager + employee options for Check Emp Attendance.
+	 */
+	public function check_employee_attendance_filter_options()
+	{
+		if (!(has_permission('attendance_management', '', 'view') || is_admin() || is_HR() || is_super_hr() || attendance_permission() || get_staff_user_id() == 23)) {
+			header('Content-Type: application/json');
+			echo json_encode(['managers' => [], 'employees' => []]);
+			return;
+		}
+
+		$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
+		$department_id = (int) ($this->input->get_post('department_id') ?: 0);
+		$reporting_person = (int) ($this->input->get_post('reporting_person') ?: 0);
+
+		$managers = $is_full_access
+			? $this->check_employee_attendance_manager_list($department_id)
+			: [];
+
+		if ($reporting_person > 0 && $is_full_access) {
+			$mgr_ids = array_map('intval', array_column($managers, 'staffid'));
+			if (!in_array($reporting_person, $mgr_ids, true)) {
+				$reporting_person = 0;
+			}
+		}
+
+		$team_manage_filter = null;
+		if ($reporting_person > 0) {
+			$team_manage_filter = $reporting_person;
+		} elseif (!$is_full_access) {
+			$team_manage_filter = (int) get_staff_user_id();
+		}
+
+		header('Content-Type: application/json');
+		echo json_encode([
+			'managers' => $managers,
+			'employees' => $this->check_employee_attendance_staff_list($team_manage_filter, $department_id),
+			'reporting_person' => $reporting_person > 0 ? $reporting_person : '',
+		]);
+	}
+
+	/**
+	 * AJAX: employee options for Check Emp Attendance, filtered by department / manager.
+	 */
+	public function check_employee_attendance_staff_options()
+	{
+		$this->check_employee_attendance_filter_options();
+	}
+
+	/**
+	 * Managers relevant to a department = people who manage active staff in that department.
+	 * No department → all managers.
+	 */
+	private function check_employee_attendance_manager_list($department_id = 0)
+	{
+		$department_id = (int) $department_id;
+		$prefix = db_prefix();
+
+		if ($department_id <= 0) {
+			return get_all_managers();
+		}
+
+		// Avoid SELECT DISTINCT ... ORDER BY firstname (fails under ONLY_FULL_GROUP_BY).
+		$sql = "
+			SELECT m.staffid,
+				CONCAT(m.firstname, ' ', m.lastname) AS full_name
+			FROM {$prefix}staff m
+			WHERE m.active = 1
+			  AND m.staffid IN (
+					SELECT e.team_manage
+					FROM {$prefix}staff e
+					INNER JOIN {$prefix}staff_departments sd ON sd.staffid = e.staffid
+					WHERE e.active = 1
+					  AND e.team_manage IS NOT NULL
+					  AND e.team_manage <> 0
+					  AND sd.departmentid = {$department_id}
+			  )
+			ORDER BY m.firstname ASC, m.lastname ASC
+		";
+		$q = $this->db->query($sql);
+		if ($q === false) {
+			log_message('error', 'check_employee_attendance_manager_list failed: ' . json_encode($this->db->error()));
+			return [];
+		}
+		$rows = $q->result_array();
+
+		// Also include managers who themselves belong to the department (even if no reportees there).
+		$sql2 = "
+			SELECT m.staffid,
+				CONCAT(m.firstname, ' ', m.lastname) AS full_name
+			FROM {$prefix}staff m
+			INNER JOIN {$prefix}staff_departments sd ON sd.staffid = m.staffid
+			WHERE m.active = 1
+			  AND sd.departmentid = {$department_id}
+			  AND m.staffid IN (
+					SELECT team_manage FROM {$prefix}staff
+					WHERE active = 1 AND team_manage IS NOT NULL AND team_manage <> 0
+			  )
+			ORDER BY m.firstname ASC, m.lastname ASC
+		";
+		$q2 = $this->db->query($sql2);
+		if ($q2 !== false) {
+			$byId = [];
+			foreach ($rows as $r) {
+				$byId[(int) $r['staffid']] = $r;
+			}
+			foreach ($q2->result_array() as $r) {
+				$byId[(int) $r['staffid']] = $r;
+			}
+			$rows = array_values($byId);
+			usort($rows, function ($a, $b) {
+				return strcasecmp((string) ($a['full_name'] ?? ''), (string) ($b['full_name'] ?? ''));
+			});
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Active staff rows for the Check Emp Attendance employee dropdown.
+	 */
+	private function check_employee_attendance_staff_list($team_manage_filter = null, $department_id = 0)
+	{
+		$this->db->select(
+			's.staffid, CONCAT(s.firstname, " ", s.lastname, IFNULL(CONCAT(" - ", NULLIF(s.staff_identifi, "")), "")) AS full_name',
+			false
+		);
+		$this->db->from(db_prefix() . 'staff s');
+		$this->db->where('s.active', 1);
+		if ($team_manage_filter) {
+			$this->db->where('s.team_manage', (int) $team_manage_filter);
+		}
+		if ((int) $department_id > 0) {
+			$this->db->where(
+				's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+				null,
+				false
+			);
+		}
+		$this->db->order_by('s.firstname', 'ASC');
+		$q = $this->db->get();
+		return $q !== false ? $q->result_array() : [];
+	}
+
 	public function get_staff_attendance($staffid, $month, $year)
 	{
 		$staffid = (int) $staffid;
 		$month = (int) $month;
 		$year = (int) $year;
-		$from = sprintf('%04d-%02d-01', $year, $month);
-		$to = date('Y-m-t', strtotime($from));
 
-		$data = $this->db->query("SELECT 
-			t.staff_id,
-			t.date_work,
-			t.value,
-			t.type,
-			TIME(MIN(CASE WHEN cio.type_check = 1 THEN cio.date END)) AS check_in_time,
-			TIME(MAX(CASE WHEN cio.type_check = 2 THEN cio.date END)) AS check_out_time
-		FROM 
-			tbltimesheets_timesheet t
-		LEFT JOIN 
-			tblcheck_in_out cio
-			ON t.staff_id = cio.staff_id 
-			AND DATE(t.date_work) = DATE(cio.date)
-			
-		WHERE t.staff_id = {$staffid}
-			AND t.date_work BETWEEN '{$from}' AND '{$to}'
-		GROUP BY 
-			t.staff_id, t.date_work, t.value, t.type
-		ORDER BY 
-			t.staff_id, t.date_work;
-		")->result_array();
-		return $data;
+		// Same status engine as My Attendance — prevents manager/employee calendar mismatch.
+		$calendar = $this->timesheets_model->get_attendance_regularisation_calendar($staffid, $year, $month);
+		$events = [];
+		foreach (($calendar['days'] ?? []) as $day) {
+			$code = strtoupper(trim((string) ($day['code'] ?? '')));
+			$status = (string) ($day['status'] ?? '');
+			if ($code === '' || $code === 'O') {
+				continue;
+			}
+			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
+				$code = 'P';
+			} elseif ($status === 'absent' || $status === 'punch_missing' || $status === 'rejected') {
+				$code = 'AB';
+			} elseif ($status === 'short_hours' && $code === 'P') {
+				$code = 'HD';
+			} elseif ($code === 'A') {
+				$code = 'AB';
+			} elseif ($code === 'H' || $code === 'M') {
+				$code = 'HO';
+			}
+
+			$hours = $day['hours'] ?? null;
+			if ($hours === null || $hours === '') {
+				$hrs_raw = (string) ($day['actual_work_hrs'] ?? $day['total_work_hrs'] ?? '');
+				$hours = is_numeric(str_replace('h', '', $hrs_raw)) ? (float) str_replace('h', '', $hrs_raw) : '';
+			}
+
+			$events[] = [
+				'staff_id' => $staffid,
+				'date_work' => $day['date'],
+				'value' => $hours,
+				'type' => $code,
+				'check_in_time' => $day['first_in'] ?? ($day['check_in'] ?? ''),
+				'check_out_time' => $day['last_out'] ?? ($day['check_out'] ?? ''),
+			];
+		}
+
+		return $events;
 	}
 
 	/**
@@ -13650,11 +14128,15 @@ class timesheets extends AdminController
 		$data['month_year'] = $month_year;
 		$data['staff_name'] = get_staff_full_name($staff_id);
 		$data['can_pick_staff'] = timesheets_user_can_pick_staff();
+		// Defer full staff picker options to AJAX (keeps first paint light for HR).
+		$data['staff_list'] = [];
 		if ($data['can_pick_staff']) {
-			$data['staff_list'] = timesheets_get_viewable_staff_list();
+			$me = $this->db->select('staffid, firstname, lastname')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row_array();
+			$data['staff_list'] = $me ? [$me] : [];
 		}
 
-		$data['calendar'] = $this->timesheets_model->get_attendance_regularisation_calendar($staff_id, $year, $month);
+		// Fast open: calendar JSON loads via my_attendance_calendar AJAX after paint.
+		$data['calendar'] = ['days' => [], 'required_hours' => 9, 'month' => $month_year, 'staff_id' => $staff_id];
 		$staff_row = $this->db->select('staff_identifi')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row();
 		$data['staff_code'] = ($staff_row && trim((string) $staff_row->staff_identifi) !== '')
 			? trim((string) $staff_row->staff_identifi)
@@ -13683,8 +14165,10 @@ class timesheets extends AdminController
 		$data['staff_id'] = $staff_id;
 		$data['staff_name'] = get_staff_full_name($staff_id);
 		$data['can_pick_staff'] = timesheets_user_can_pick_staff();
+		$data['staff_list'] = [];
 		if ($data['can_pick_staff']) {
-			$data['staff_list'] = timesheets_get_viewable_staff_list();
+			$me = $this->db->select('staffid, firstname, lastname')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row_array();
+			$data['staff_list'] = $me ? [$me] : [];
 		}
 
 		$this->timesheets_model->ensure_additional_timesheet_rejection_column();
@@ -13711,7 +14195,8 @@ class timesheets extends AdminController
 		}
 		$parts = explode('-', $month_year);
 		$data['month_year'] = $month_year;
-		$data['calendar'] = $this->timesheets_model->get_attendance_regularisation_calendar($staff_id, (int) $parts[0], (int) $parts[1]);
+		// Fast open: calendar loads via AJAX after paint.
+		$data['calendar'] = ['days' => [], 'required_hours' => 9, 'month' => $month_year, 'staff_id' => $staff_id];
 		$staff_row = $this->db->select('staff_identifi')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row();
 		$data['staff_code'] = ($staff_row && trim((string) $staff_row->staff_identifi) !== '')
 			? trim((string) $staff_row->staff_identifi)

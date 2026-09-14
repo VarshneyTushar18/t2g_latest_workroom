@@ -24,56 +24,204 @@
         opacity: 1 !important;
     }
     
-    .leave_balance #applybtn{
-     float: left !important;
-    padding: 6px 20px;
+    /* Filter toolbar: month + year + Apply aligned */
+    .leave_balance .lb-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
     }
-	.leave_balance .col-md-5ths{
-		width:85% !important;
-	}
-	.leave_balance .bootstrap-select.bs3{
-		float:left;
-		padding: 0px 5px;
-	}
-  .leave-summary-section { margin-bottom: 18px; }
-  .leave-summary-section h5 { margin: 0 0 12px; font-weight: 700; color: #111; }
-  .leave-summary-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
-    margin-bottom: 8px;
-  }
-  .leave-summary-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 14px 12px;
-    text-align: center;
-    min-height: 88px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  .leave-summary-card .val {
-    font-size: 28px;
-    line-height: 1.1;
-    font-weight: 600;
-    color: #111827;
-  }
-  .leave-summary-card .val.danger { color: #dc2626; }
-  .leave-summary-card .val.success { color: #16a34a; }
-  .leave-summary-card .lbl {
-    font-size: 11px;
-    color: #6b7280;
-    margin-top: 4px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  .leave-balance-table-section h5 { margin: 0 0 10px; font-weight: 700; color: #111; }
-  .el-earned-input { width: 72px; display: inline-block; height: 28px; padding: 2px 6px; font-size: 12px; }
-  .el-earned-save { padding: 2px 8px; font-size: 11px; margin-left: 4px; }
-  .el-earned-override { color: #2563eb; font-size: 10px; display: block; }
+    .leave_balance .lb-filters form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        width: 100%;
+    }
+    .leave_balance .lb-filters .bootstrap-select {
+        float: none !important;
+        padding: 0 !important;
+        width: auto !important;
+        max-width: 100%;
+    }
+    .leave_balance .lb-filters .bootstrap-select > .dropdown-toggle {
+        min-width: 140px;
+        border-radius: 10px !important;
+        height: 38px;
+        padding-right: 36px !important;
+        position: relative;
+    }
+    /* Hide broken double caret on leave balance filters */
+    .leave_balance .lb-filters .bootstrap-select .caret,
+    .leave_balance .lb-filters .bootstrap-select .bs-caret {
+        display: none !important;
+        border: 0 !important;
+    }
+    .leave_balance .lb-filters .bootstrap-select > .dropdown-toggle::after {
+        content: "";
+        display: block;
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        width: 7px;
+        height: 7px;
+        margin-top: -5px;
+        border-right: 2px solid #64748b;
+        border-bottom: 2px solid #64748b;
+        transform: rotate(45deg);
+        pointer-events: none;
+    }
+    .leave_balance .lb-filters .bootstrap-select.open > .dropdown-toggle::after {
+        margin-top: -1px;
+        transform: rotate(225deg);
+    }
+    .leave_balance .lb-filters select#year + .bootstrap-select > .dropdown-toggle,
+    .leave_balance .lb-filters .bootstrap-select:nth-of-type(2) > .dropdown-toggle {
+        min-width: 110px;
+    }
+    .leave_balance #applybtn {
+        float: none !important;
+        margin: 0 !important;
+        padding: 8px 22px;
+        height: 38px;
+        line-height: 1.2;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+    .leave_balance .lb-staff-pick {
+        max-width: 420px;
+        width: 100%;
+    }
+    .leave_balance .lb-report-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .leave_balance .lb-report-head h5 {
+        margin: 0;
+        font-weight: 700;
+        color: #111;
+        flex: 1 1 auto;
+        min-width: 180px;
+    }
+    .leave_balance .lb-report-head .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .leave-summary-section { margin-bottom: 18px; }
+    .leave-summary-section h5 { margin: 0 0 12px; font-weight: 700; color: #111; }
+    .leave-summary-cards {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+    .leave-summary-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 14px 12px;
+        text-align: center;
+        min-height: 88px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .leave-summary-card .val {
+        font-size: 28px;
+        line-height: 1.1;
+        font-weight: 600;
+        color: #111827;
+    }
+    .leave-summary-card .val.danger { color: #dc2626; }
+    .leave-summary-card .val.success { color: #16a34a; }
+    .leave-summary-card .lbl {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+    .leave-balance-table-section h5 { margin: 0; font-weight: 700; color: #111; }
+    .leave_balance .lb-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .leave_balance .lb-table-wrap .table {
+        min-width: 780px;
+        margin-bottom: 0;
+    }
+    .el-earned-cell {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+    }
+    .el-earned-input {
+        width: 72px;
+        display: inline-block;
+        height: 28px;
+        padding: 2px 6px;
+        font-size: 12px;
+    }
+    .el-earned-save {
+        padding: 2px 8px;
+        font-size: 11px;
+        margin-left: 0;
+    }
+    .el-earned-override { color: #2563eb; font-size: 10px; display: block; width: 100%; }
+
+    @media (max-width: 991px) {
+        .leave-summary-cards {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .leave_balance .lb-filters form > .bootstrap-select {
+            flex: 1 1 140px;
+        }
+        .leave_balance .lb-filters .bootstrap-select,
+        .leave_balance .lb-filters .bootstrap-select > .dropdown-toggle {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+    }
+    @media (max-width: 575px) {
+        .leave-summary-cards {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .leave-summary-card { min-height: 76px; padding: 10px 8px; }
+        .leave-summary-card .val { font-size: 22px; }
+        .leave_balance .lb-filters form {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .leave_balance .lb-filters .bootstrap-select,
+        .leave_balance .lb-filters .bootstrap-select > .dropdown-toggle {
+            width: 100% !important;
+        }
+        .leave_balance #applybtn {
+            width: 100%;
+            height: 40px;
+        }
+        .leave_balance .lb-report-head {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .leave_balance .lb-report-head .btn {
+            width: 100%;
+            text-align: center;
+        }
+        .leave_balance .lb-staff-pick {
+            max-width: 100%;
+        }
+    }
 </style>
 
 <div id="wrapper" class="leave_balance">
@@ -84,101 +232,86 @@
                 <div class="panel_s">
                     <div class="panel-body">
 
-                        <div class="clearfix"></div>
-                        <div class="row">
-                            <div class="col-md-5ths">
-                                <div class="select-placeholder col-md-8">
-
-                                    <?= form_open('admin/staff/leave_balance') ?>
-                                    <?php if (!empty($userid)) { ?>
-                                    <input type="hidden" name="staff_id" value="<?php echo (int) $userid; ?>">
-                                    <?php } ?>
-
-
-                                    <select name="range" id="range" class="selectpicker">
-                                        <?php
-                                        $monthData = [
-                                            "All Months", "January", "February", "March", "April", "May", "June", "July",
-                                            "August", "September", "October", "November", "December"
-                                        ];
-
-                                        foreach ($monthData as $key => $value) {
-                                            $isSelected = ""; //added this line
-                                            if ($currentMonth == $key) {
-                                                $isSelected = "selected";
-                                            }
-                                            echo '<option value="' . $key . '"' . $isSelected . '>' . $value . '</option>';
-                                        }
-                                        ?>
-                                        <!-- Add options for all 12 months -->
-                                    </select>
-                                    <select name="year" id="year" class="selectpicker">
-                                        <?php
-                                        // Generate year options from the current year to a specific range
-                                        for ($year = $currentYear; $year >= ($currentYear - 10); $year--) {
-
-                                            $isSelected = ($year == $selectedYear) ? "selected" : '';
-
-                                            echo '<option value="' . $year . '"' . $isSelected . '>' . $year . '</option>';
-                                        }
-                                        ?>
-                                    </select>
-                                    <button type="submit" id = 'applybtn' class="btn btn-primary pull-left">Apply</button>
-
-
-                                    </form>
-
-                                </div>
-                                <div class="row mtop15">
-                                    <div class="col-md-12 period hide">
-                                        <?php //echo render_date_input('period-from');
-                                        echo render_date_input('period-from');
-                                        ?>
-                                    </div>
-                                    <div class="col-md-12 period hide">
-                                        <?php //echo render_date_input('period-to');
-                                        echo render_date_input('period-to');
-                                        ?>
-                                    </div>
-                                </div>
+                        <div class="lb-filters">
+                            <?= form_open('admin/staff/leave_balance') ?>
+                            <input type="hidden" name="staff_id" id="leave_balance_staff_id_hidden" value="<?php echo !empty($filter_one_staff) ? (int) $userid : ''; ?>">
+                            <input type="hidden" name="all" id="leave_balance_all_hidden" value="<?php echo !empty($want_all_report) ? '1' : ''; ?>">
+                            <select name="range" id="range" class="selectpicker" data-width="fit">
+                                <?php
+                                $monthData = [
+                                    "All Months", "January", "February", "March", "April", "May", "June", "July",
+                                    "August", "September", "October", "November", "December"
+                                ];
+                                foreach ($monthData as $key => $value) {
+                                    $isSelected = ((int) $currentMonth === (int) $key) ? ' selected' : '';
+                                    echo '<option value="' . $key . '"' . $isSelected . '>' . $value . '</option>';
+                                }
+                                ?>
+                            </select>
+                            <select name="year" id="year" class="selectpicker" data-width="fit">
+                                <?php
+                                for ($year = $currentYear; $year >= ($currentYear - 10); $year--) {
+                                    $isSelected = ($year == $selectedYear) ? ' selected' : '';
+                                    echo '<option value="' . $year . '"' . $isSelected . '>' . $year . '</option>';
+                                }
+                                ?>
+                            </select>
+                            <button type="submit" id="applybtn" class="btn btn-primary">Apply</button>
+                            </form>
+                        </div>
+                        <div class="row mtop15 hide">
+                            <div class="col-md-12 period hide">
+                                <?php echo render_date_input('period-from'); ?>
                             </div>
-
-
-                            <!-- <div class="col-md-5ths">
-                                <a href="#" id="apply_filters_timesheets" class="btn btn-primary pull-left"><?php echo _l('apply'); ?></a>
-                            </div> -->
-                            <div class="mtop10 hide relative pull-right" id="group_by_tasks_wrapper">
-                                <span><?php echo _l('group_by_task'); ?></span>
-                                <div class="onoffswitch">
-                                    <input type="checkbox" name="group_by_task" class="onoffswitch-checkbox"
-                                           id="group_by_task">
-                                    <label class="onoffswitch-label" for="group_by_task"></label>
-                                </div>
-                            </div>
-                            <div class="col-md-12">
-                                <hr class="no-mtop"/>
+                            <div class="col-md-12 period hide">
+                                <?php echo render_date_input('period-to'); ?>
                             </div>
                         </div>
-                        <div class="clearfix"></div>
+                        <hr class="no-mtop"/>
 
-                        <?php if (!empty($can_pick_staff) && !empty($staff_list)) { ?>
-                        <div class="row mbot15">
-                            <div class="col-md-5">
-                                <label class="control-label">View leave balance for</label>
-                                <select id="leave_balance_staff_pick" class="form-control">
-                                    <?php foreach ($staff_list as $s) {
-                                        $is_me = ((int) $s['staffid'] === (int) get_staff_user_id());
-                                        $is_sel = ((int) $s['staffid'] === (int) $userid);
-                                    ?>
-                                        <option value="<?php echo (int) $s['staffid']; ?>" <?php echo $is_sel ? 'selected' : ''; ?>>
-                                            <?php echo html_escape(trim($s['firstname'] . ' ' . $s['lastname'])); ?><?php echo $is_me ? ' (Me)' : ''; ?>
-                                        </option>
-                                    <?php } ?>
-                                </select>
-                                <?php if (!empty($is_team_manager) && empty($is_hr_viewer)) { ?>
-                                    <p class="text-muted" style="font-size:12px;margin-top:6px;">Managers see their own balance and direct team only.</p>
+                        <?php if (!empty($can_pick_staff)) { ?>
+                        <div class="mbot15 lb-staff-pick">
+                            <label class="control-label">View leave balance for</label>
+                            <select id="leave_balance_staff_pick" class="form-control">
+                                <?php if (!empty($is_hr_viewer)) { ?>
+                                <option value="" <?php echo !empty($want_all_report) ? 'selected' : ''; ?>>All employees (full report — slower)</option>
                                 <?php } ?>
-                            </div>
+                                <?php
+                                $pick_list = !empty($staff_list) ? $staff_list : [];
+                                $have_me = false;
+                                foreach ($pick_list as $s) {
+                                    if ((int) $s['staffid'] === (int) get_staff_user_id()) {
+                                        $have_me = true;
+                                        break;
+                                    }
+                                }
+                                if (!$have_me) {
+                                    array_unshift($pick_list, [
+                                        'staffid' => (int) get_staff_user_id(),
+                                        'firstname' => get_staff_full_name(get_staff_user_id()),
+                                        'lastname' => '',
+                                    ]);
+                                }
+                                foreach ($pick_list as $s) {
+                                    $sid = (int) $s['staffid'];
+                                    $is_me = ($sid === (int) get_staff_user_id());
+                                    $is_sel = empty($want_all_report) && ((int) $userid === $sid);
+                                    $label = trim(($s['firstname'] ?? '') . ' ' . ($s['lastname'] ?? ''));
+                                    if ($label === '') {
+                                        $label = get_staff_full_name($sid);
+                                    }
+                                ?>
+                                    <option value="<?php echo $sid; ?>" <?php echo $is_sel ? 'selected' : ''; ?>>
+                                        <?php echo html_escape($label); ?><?php echo $is_me ? ' (Me)' : ''; ?>
+                                    </option>
+                                <?php } ?>
+                            </select>
+                            <?php if (!empty($is_team_manager) && empty($is_hr_viewer)) { ?>
+                                <p class="text-muted" style="font-size:12px;margin-top:6px;">Managers see their own balance and direct team only.</p>
+                            <?php } ?>
+                            <?php if (!empty($want_all_report)) { ?>
+                                <p class="text-warning" style="font-size:12px;margin-top:6px;">Full company report recalculates leave for every employee — this can take a few seconds.</p>
+                            <?php } ?>
                         </div>
                         <?php } ?>
 
@@ -202,10 +335,6 @@
                                     <div class="val success"><?php echo html_escape($summary['leave_balance']); ?></div>
                                     <div class="lbl">Leave Balance</div>
                                 </div>
-                                <div class="leave-summary-card">
-                                    <div class="val danger"><?php echo html_escape($summary['absent']); ?></div>
-                                    <div class="lbl">Absent</div>
-                                </div>
                             </div>
                         </div>
                         <?php } ?>
@@ -219,29 +348,35 @@
                         } ?>
 
                         <div class="leave-balance-table-section">
-                            <div class="tw-flex tw-items-center tw-justify-between tw-mb-2">
-                              <h5 class="mbot0"><?php echo (!empty($is_team_manager) || !empty($is_hr_viewer)) ? 'Team leave balance report' : 'Leave balance report'; ?></h5>
+                            <div class="lb-report-head">
+                              <h5><?php
+                                if (!empty($filter_one_staff)) {
+                                    echo 'Leave balance report — ' . html_escape(get_staff_full_name($userid));
+                                } elseif (!empty($is_team_manager) || !empty($is_hr_viewer)) {
+                                    echo 'Team leave balance report';
+                                } else {
+                                    echo 'Leave balance report';
+                                }
+                              ?></h5>
                               <?php if (!empty($can_edit_earned_leave)) { ?>
                                 <a href="<?php echo admin_url('staff/manage_earned_leave'); ?>" class="btn btn-default btn-sm">
                                   <i class="fa fa-sliders"></i> Manage Earned Leave (bulk)
                                 </a>
                               <?php } ?>
                             </div>
-                            <?php if (!empty($can_edit_earned_leave)) { ?>
-                              <p class="text-muted" style="font-size:12px;margin-bottom:10px;">
+                            <p class="text-muted" style="font-size:12px;margin-bottom:10px;">
+                              <?php if (!empty($filter_one_staff)) { ?>
+                                Showing <strong>1 employee</strong> for the selected month/year. Choose <strong>All employees (full report)</strong> above to see the full team table.
+                              <?php } else { ?>
+                                Showing <strong><?php echo (int) ($report_row_count ?? 0); ?></strong> row(s) for the selected month/year.
+                              <?php } ?>
+                              <?php if (!empty($can_edit_earned_leave)) { ?>
                                 HR can edit <strong>Leaves Earned</strong> per row below, or use bulk manage for department-wise updates.
-                                Select a single month (not All Months) for easier editing.
-                              </p>
-                            <?php } ?>
+                              <?php } ?>
+                            </p>
                         </div>
 
-                        <?php
-                  //   echo '<pre>';
-                   // print_r($table_data);
-                   //     echo '</pre>';
-				   
-                        ?>
-
+                        <div class="lb-table-wrap">
                         <table class="table table-timesheets-report">
                             <thead>
                             <tr>
@@ -254,35 +389,31 @@
                                 <th><?php echo "Leaves Taken"; ?></th>
                                 <th><?php echo "Leaves Earned"; ?></th>
                                 <th><?php echo "Leave Balance"; ?></th>
-								<th><?php echo "Absent"; ?></th>
 
 
                             </tr>
                             </thead>
                             <tbody>
 							
-                            <?php foreach ($table_data as $month_number => $value) :
-							//print_R($table_data);
+                            <?php
+                            $lb_rows_rendered = 0;
+                            foreach ($table_data as $month_number => $value) :
+                                if (!is_array($value)) {
+                                    continue;
+                                }
                                 for ($i = 0; $i < count($value); $i++) {
-									
-								//	$res  = $this->db->query('SELECT count(number_of_leaving_day) as count_leave FROM tbltimesheets_requisition_leave left join tblleave_comment ON tbltimesheets_requisition_leave.id = tblleave_comment.leave_id where tbltimesheets_requisition_leave.staff_id = "'.$value[$i]['staffid'].'" AND tbltimesheets_requisition_leave.status=1 AND Month(start_time) ='.$month_number)->result_array();;
-									
-										//echo '<pre>';print_r($res);die;	
-								//		$leave_count =  (int)$res[0]['count_leave'];
-								//	echo $leave_count;
+                                    $lb_rows_rendered++;
                                     ?>
                                     <tr>
                                         <td><?php echo($value[$i]['empid'] ?? $value[$i]['staffid']) ?></td>
                                         <td><?php echo get_staff_full_name($value[$i]['staffid']); ?></td>
-                                        <td><?php echo $month_number; ?></td>
-                                        <td><?php echo cal_days_in_month(CAL_GREGORIAN, $month_number, $selectedYear) ?></td>
+                                        <td><?php echo (int) $month_number; ?></td>
+                                        <td><?php echo cal_days_in_month(CAL_GREGORIAN, (int) $month_number, (int) $selectedYear) ?></td>
                                         <td><?php echo $value[$i]['carry_forward'] ?></td>
-								
-									
-									<td><?php echo $value[$i]['leave_taken']; ?></td>
-								
+                                        <td><?php echo $value[$i]['leave_taken']; ?></td>
                                         <td>
                                           <?php if (!empty($can_edit_earned_leave)) { ?>
+                                            <div class="el-earned-cell">
                                             <input type="number" step="0.01" min="0" class="form-control el-earned-input"
                                               value="<?php echo html_escape($value[$i]['earned_leave']); ?>"
                                               data-staff-id="<?php echo (int) $value[$i]['staffid']; ?>"
@@ -292,29 +423,32 @@
                                             <?php if (!empty($value[$i]['earned_leave_is_override'])) { ?>
                                               <span class="el-earned-override">Manual</span>
                                             <?php } ?>
+                                            </div>
                                           <?php } else { ?>
                                             <?php echo $value[$i]['earned_leave']; ?>
                                           <?php } ?>
                                         </td>
-										<?php // ?>
                                         <td class="el-balance-cell"
                                           data-carry="<?php echo (float) $value[$i]['carry_forward']; ?>"
                                           data-taken="<?php echo (float) $value[$i]['leave_taken']; ?>">
                                           <?php echo $value[$i]['leave_balance']; ?>
                                         </td>
-										
-										 <td> <?php echo $value[$i]['status']; ?></td>
-		
                                     </tr>
-
                                     <?php
-								
                                 }
-                            endforeach; ?>
+                            endforeach;
+                            if ($lb_rows_rendered === 0) { ?>
+                              <tr>
+                                <td colspan="8" class="text-center text-muted">
+                                  No leave balance rows for this selection. Pick a month and employee, then click Apply.
+                                </td>
+                              </tr>
+                            <?php } ?>
                             </tbody>
 
 
                         </table>
+                        </div>
 
 
                     </div>
@@ -328,14 +462,59 @@
     var staff_member_select = $('select[name="staff_id"]');
     $(function () {
     $('#leave_balance_staff_pick').on('change', function() {
-      var staffId = $(this).val();
-      var params = new URLSearchParams(window.location.search);
-      params.set('staff_id', staffId);
+      var staffId = $(this).val() || '';
+      $('#leave_balance_staff_id_hidden').val(staffId);
+      var params = new URLSearchParams();
+      if (staffId) {
+        params.set('staff_id', staffId);
+      } else {
+        params.set('all', '1');
+      }
       var range = $('#range').val();
       var year = $('#year').val();
-      if (range) { params.set('range', range); }
+      if (range !== null && range !== undefined && range !== '') { params.set('range', range); }
       if (year) { params.set('year', year); }
       window.location.href = admin_url + 'staff/leave_balance?' + params.toString();
+    });
+
+    // Fill staff picker after paint (HR/managers).
+    (function loadLeaveBalanceStaffPicker() {
+      var $sel = $('#leave_balance_staff_pick');
+      if (!$sel.length) return;
+      var cur = String($sel.val() || '');
+      var wantAll = <?php echo !empty($want_all_report) ? 'true' : 'false'; ?>;
+      $.getJSON(admin_url + 'timesheets/get_viewable_staff_json').done(function(res) {
+        var staff = res.staff || [];
+        if (!staff.length) return;
+        var meId = '<?php echo (int) get_staff_user_id(); ?>';
+        var html = '';
+        <?php if (!empty($is_hr_viewer)) { ?>
+        html += '<option value="">All employees (full report — slower)</option>';
+        <?php } ?>
+        for (var i = 0; i < staff.length; i++) {
+          var s = staff[i];
+          var id = String(s.staffid);
+          var name = $.trim((s.firstname || '') + ' ' + (s.lastname || ''));
+          if (id === meId) name += ' (Me)';
+          html += '<option value="' + id + '">' + $('<div>').text(name).html() + '</option>';
+        }
+        $sel.html(html);
+        if (wantAll) {
+          $sel.val('');
+        } else if (cur && $sel.find('option[value="' + cur + '"]').length) {
+          $sel.val(cur);
+        } else {
+          $sel.val(meId);
+        }
+      });
+    })();
+
+    $('form').has('#applybtn').on('submit', function() {
+      if ($('#leave_balance_staff_pick').length) {
+        var v = $('#leave_balance_staff_pick').val() || '';
+        $('#leave_balance_staff_id_hidden').val(v);
+        $('#leave_balance_all_hidden').val(v ? '' : '1');
+      }
     });
 
     $(document).on('click', '.el-earned-save', function() {

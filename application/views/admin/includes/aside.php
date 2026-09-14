@@ -21,75 +21,119 @@
         padding: 0 10px 16px;
         border-right: 1px solid var(--wr-hairline);
         box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18);
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh !important;
+        z-index: 100;
+        overflow: hidden;
     }
 
-    /* Content offset to match wider rail */
+    /* Setup panel must sit ABOVE the main rail (core z-index is 9). */
+    #setup-menu-wrapper {
+        width: var(--wr-side-w) !important;
+        z-index: 120 !important;
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh !important;
+        background: linear-gradient(180deg, var(--wr-rail) 0%, var(--wr-rail-mid) 55%, #162032 100%);
+        border-right: 1px solid var(--wr-hairline);
+        box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18);
+        padding: 0 10px 16px;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+
+    #setup-menu-wrapper #setup-menu {
+        background: transparent;
+        padding-bottom: 24px;
+    }
+
+    #setup-menu-wrapper #setup-menu > li > a {
+        color: var(--wr-text) !important;
+    }
+
+    #setup-menu-wrapper #setup-menu > li > a:hover,
+    #setup-menu-wrapper #setup-menu > li.active > a {
+        color: var(--wr-text-strong) !important;
+    }
+
+    #setup-menu-wrapper .customizer-heading {
+        color: var(--wr-text-strong) !important;
+    }
+
+    /* Content offset to match wider rail (override core 230px) */
     body.admin #wrapper {
-        margin-left: var(--wr-side-w);
+        margin-left: var(--wr-side-w) !important;
     }
 
     body.admin #header {
-        margin-left: var(--wr-side-w);
+        margin-left: var(--wr-side-w) !important;
     }
 
     body.admin .btn-bottom-toolbar {
-        margin-left: var(--wr-side-w);
-        width: calc(100% - var(--wr-side-w));
+        margin-left: var(--wr-side-w) !important;
+        width: calc(100% - var(--wr-side-w)) !important;
     }
 
     body.hide-sidebar:not(.show-sidebar) #menu.sidebar--saas {
-        margin-left: calc(var(--wr-side-w) * -1);
+        margin-left: calc(var(--wr-side-w) * -1) !important;
     }
 
     body.hide-sidebar:not(.show-sidebar) #wrapper {
-        margin-left: 0;
+        margin-left: 0 !important;
     }
 
     body.hide-sidebar:not(.show-sidebar) #header,
     body.hide-sidebar:not(.show-sidebar) .btn-bottom-toolbar {
-        margin-left: 0;
-        width: 100%;
+        margin-left: 0 !important;
+        width: 100% !important;
     }
 
     body.page-small #menu.sidebar--saas {
-        margin-left: calc(var(--wr-side-w) * -1);
+        margin-left: calc(var(--wr-side-w) * -1) !important;
     }
 
     body.page-small #wrapper {
-        margin-left: 0;
+        margin-left: 0 !important;
     }
 
     body.page-small #header,
     body.page-small .btn-bottom-toolbar {
-        margin-left: 0;
-        width: 100%;
+        margin-left: 0 !important;
+        width: 100% !important;
     }
 
     body.page-small.show-sidebar #menu.sidebar--saas {
-        margin-left: 0;
+        margin-left: 0 !important;
     }
 
     body.page-small.show-sidebar #wrapper {
-        margin-left: var(--wr-side-w);
+        margin-left: var(--wr-side-w) !important;
     }
 
     body.page-small.show-sidebar #header {
-        margin-left: var(--wr-side-w);
+        margin-left: var(--wr-side-w) !important;
     }
 
     body.page-small.show-sidebar .btn-bottom-toolbar {
-        margin-left: var(--wr-side-w);
-        width: calc(100% - var(--wr-side-w));
+        margin-left: var(--wr-side-w) !important;
+        width: calc(100% - var(--wr-side-w)) !important;
     }
 
     .sidebar.sidebar--saas #side-menu {
         background: transparent;
-        height: 100%;
-        overflow-y: auto;
-        overflow-x: hidden;
+        height: 100% !important;
+        max-height: 100vh;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
         padding-bottom: 24px;
         scrollbar-width: thin;
         scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+        -webkit-overflow-scrolling: touch;
     }
 
     .sidebar.sidebar--saas #side-menu::-webkit-scrollbar {
@@ -206,28 +250,10 @@
         color: var(--wr-accent);
     }
 
-    /* Chevrons */
+    /* Chevrons — hide broken FA squares (glyph tofu). Expand still works by click. */
     .sidebar.sidebar--saas #side-menu .arrow,
     .sidebar.sidebar--saas #side-menu .fa.arrow {
-        float: none;
-        margin-left: auto;
-        padding-top: 0;
-        color: #64748b !important;
-        font-size: 12px;
-        transition: transform var(--wr-ease), color var(--wr-ease);
-    }
-
-    .sidebar.sidebar--saas #side-menu .fa.arrow:before {
-        content: "\f105";
-    }
-
-    .sidebar.sidebar--saas #side-menu .active > a > .fa.arrow:before,
-    .sidebar.sidebar--saas #side-menu li.active > a > .fa.arrow:before {
-        content: "\f107";
-    }
-
-    .sidebar.sidebar--saas #side-menu > li.active > a .arrow {
-        color: var(--wr-accent) !important;
+        display: none !important;
     }
 
     /* Nested levels — quiet rail, no bent-arrow clutter */
@@ -357,6 +383,120 @@
         border-top: 1px solid var(--wr-hairline);
         border-radius: 0 0 10px 10px;
         padding-top: 14px;
+    }
+
+    /* ── HRMS section (modern card-nav, hide ↳ clutter) ── */
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets > a {
+        border-radius: 12px;
+        margin-top: 6px;
+        margin-bottom: 4px;
+        font-weight: 650;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets.active > a {
+        background: var(--wr-accent-soft-strong) !important;
+    }
+
+    /* Kill orange-theme bent arrow under HRMS */
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level li a::before,
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-third-level li a::before,
+    body .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level li a::before {
+        content: none !important;
+        display: none !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets > .nav-second-level {
+        margin: 4px 0 10px 6px !important;
+        padding: 6px 4px 8px 8px !important;
+        border-left: 0 !important;
+        background: rgba(15, 23, 42, 0.28) !important;
+        border-radius: 14px;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a {
+        padding: 9px 12px !important;
+        margin: 2px 0 !important;
+        border-radius: 10px !important;
+        font-size: 13px !important;
+        font-weight: 550 !important;
+        gap: 2px;
+        display: flex !important;
+        align-items: center;
+    }
+
+    /* No expand squares on Attendance / Leave / Reports (broken FA glyph) */
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .fa.arrow,
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .arrow {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .menu-icon {
+        width: 28px !important;
+        height: 28px;
+        margin-right: 10px !important;
+        border-radius: 999px;
+        background: rgba(20, 184, 166, 0.14);
+        color: var(--wr-accent) !important;
+        opacity: 1 !important;
+        font-size: 13px !important;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        float: none !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li.active > a,
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li.active > a:hover {
+        background: rgba(20, 184, 166, 0.22) !important;
+        color: #f8fafc !important;
+        border-radius: 10px !important;
+        margin: 2px 0 !important;
+        padding: 9px 12px !important;
+        display: flex !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li.active > a .menu-icon {
+        background: rgba(20, 184, 166, 0.28);
+        color: #5eead4 !important;
+    }
+
+    /* Nested leaves under Attendance / Leave / Shift */
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-third-level {
+        margin: 2px 0 6px 12px !important;
+        padding: 4px 0 4px 8px !important;
+        border-left: 1px solid var(--wr-hairline) !important;
+        background: transparent !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-third-level > li > a {
+        padding: 7px 10px !important;
+        margin: 1px 0 !important;
+        border-radius: 8px !important;
+        font-size: 12px !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-third-level > li > a .menu-icon {
+        width: 22px !important;
+        height: 22px;
+        margin-right: 8px !important;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.12);
+        color: #94a3b8 !important;
+        opacity: 1 !important;
+        font-size: 11px !important;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        float: none !important;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-third-level > li.active > a {
+        background: rgba(20, 184, 166, 0.18) !important;
+        color: #f8fafc !important;
+        margin: 1px 0 !important;
+        padding: 7px 10px !important;
+        display: flex !important;
     }
 </style>
 <aside id="menu" class="sidebar sidebar--saas">
@@ -493,38 +633,25 @@
         } ?>
 
         <?php if ($this->app->show_setup_menu() == true && (is_staff_member() || is_admin())) { ?>
-
             <li<?php if (get_option('show_setup_menu_item_only_on_hover') == 1) {
-
                     echo ' style="display:none;"';
                 } ?> id="setup-menu-item">
-
                 <a href="#" class="open-customizer"><i class="fa fa-cog menu-icon"></i>
-
                     <span class="menu-text">
-
                         <?php echo _l('setting_bar_heading'); ?>
-
                         <?php
-
                         if ($modulesNeedsUpgrade = $this->app_modules->number_of_modules_that_require_database_upgrade()) {
-
                             echo '<span class="badge menu-badge !tw-bg-warning-600">' . $modulesNeedsUpgrade . '</span>';
                         }
-
                         ?>
-
                     </span>
-
                 </a>
-
-            <?php } ?>
-
             </li>
+        <?php } ?>
 
-            <?php hooks()->do_action('after_render_aside_menu'); ?>
+        <?php hooks()->do_action('after_render_aside_menu'); ?>
 
-            <?php $this->load->view('admin/projects/pinned'); ?>
+        <?php $this->load->view('admin/projects/pinned'); ?>
 
     </ul>
 

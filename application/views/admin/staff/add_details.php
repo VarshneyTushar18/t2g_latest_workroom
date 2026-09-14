@@ -161,6 +161,7 @@ error_reporting(E_ALL);
                                     <select name="employment_category" id="employment_category" class="selectpicker" data-width="100%">
                                         <option value="fte">Full-Time Employee (FTE) — 1.25 / 1.75 after 2 years</option>
                                         <option value="intern">Intern — 1 leave / month</option>
+                                        <option value="contractual">Contractual — 1 leave / month</option>
                                         <option value="wfh">WFH Employee — 1 leave / month (max carry 5)</option>
                                     </select>
                                 </div>
