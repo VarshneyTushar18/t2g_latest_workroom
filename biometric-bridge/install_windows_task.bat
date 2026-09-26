@@ -1,7 +1,7 @@
 @echo off
 REM Creates a Windows Scheduled Task to keep the bridge running at logon.
 cd /d "%~dp0"
-set TASK_NAME=T2G_Biomax_Bridge
+set TASK_NAME=T2G_Biometric_Bridge
 set PYTHON=
 for %%I in (python.exe) do set PYTHON=%%~$PATH:I
 if "%PYTHON%"=="" (

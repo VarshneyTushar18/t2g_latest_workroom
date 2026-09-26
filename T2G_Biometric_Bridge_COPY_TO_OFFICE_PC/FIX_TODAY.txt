@@ -1,4 +1,4 @@
-T2G Biomax Bridge — FIX TODAY (do this on office PC)
+T2G Biometric Bridge — FIX TODAY (do this on office PC)
 ====================================================
 
 PROBLEM
@@ -7,7 +7,7 @@ Workroom is syncing old days (3–9 Sep) but TODAY (10-Sep) is empty.
 DNS must work, then update/restart bridge.
 
 
-ON THE OFFICE PC (Biomax / SmartOffice PC)
+ON THE OFFICE PC (Biometric / SmartOffice PC)
 -----------------------------------------
 
 1) DNS (if internet sites fail)
@@ -25,13 +25,13 @@ ON THE OFFICE PC (Biomax / SmartOffice PC)
 
    It will:
    - test Workroom
-   - pull Biomax for today
+   - pull Biometric for today
    - push to Workroom
    - start live sync
 
 5) Read the messages:
    - "TODAY ... has N employee row(s)" = good
-   - "Biomax returned ZERO" = open SmartOffice and download
+   - "Biometric returned ZERO" = open SmartOffice and download
      device logs for today, then run FIX_TODAY.bat again
    - "Cannot reach Workroom" = DNS/internet still broken
 
@@ -42,9 +42,9 @@ https://t2gworkroom.com/admin/biometric
 Filter date = today — you should see rows.
 
 
-Quick Biomax test in browser on office PC
+Quick Biometric test in browser on office PC
 -----------------------------------------
 http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs?APIKey=490813092603&FromDate=2026-09-10&ToDate=2026-09-12
 
-If that JSON has no punches → Biomax has no today data yet
+If that JSON has no punches → Biometric has no today data yet
 (fix device sync in SmartOffice first).

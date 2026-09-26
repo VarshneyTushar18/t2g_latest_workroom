@@ -45,19 +45,32 @@ $check = $this->input->get('check'); ?>
 			  <a href="#" onclick="approve_leave(); return false;" class="btn mright5 btn-danger pull-right display-block" data-toggle="sidebar-right" data-target=".approve_leave_ap">
 
 			  <?php echo _l('Reject'); ?></a>
-			  
+			  <?php if (!empty($can_final_approve_leave)) { ?>
 			 <a href="#" onclick="reject_leave(); return false;" class="btn mright5 btn-success pull-right display-block" data-toggle="sidebar-right" data-target=".reject_leave_rj">
 
                   <?php echo _l('Approve'); ?>
 
                 </a>
+			  <?php } elseif (!empty($can_hod_forward_leave) && empty($hod_forwarded)) { ?>
+			 <a href="#" onclick="forward_leave(); return false;" class="btn mright5 btn-info pull-right display-block">
+
+                  Forward to Super HR
+
+                </a>
+			  <?php } elseif (!empty($can_hod_forward_leave) && !empty($hod_forwarded)) { ?>
+			<span class="btn mright5 btn-info pull-right display-block disabled">Forwarded to Super HR</span>
+			  <?php } ?>
 			 <?php } elseif($manager_comm_status == 1) {?>
 			<span class="btn mright5 btn-success pull-right display-block disabled">Already Approved</span>
 			 <?php  }  elseif($manager_comm_status == 2) {?>
 			 <span class="btn mright5 btn-danger pull-right display-block disabled">Already Rejected</span>
 			 <?php  }?>
             </div>
-			<?php  } ?>
+			<?php  } elseif (!empty($hod_forwarded) && (int)$manager_comm_status === 0) { ?>
+              <div class="col-md-12 ">
+			<span class="btn mright5 btn-info pull-right display-block disabled">Forwarded to Super HR</span>
+              </div>
+			<?php } ?>
 			</div>
 			
 			</div>
@@ -547,6 +560,43 @@ $check = $this->input->get('check'); ?>
 </div><!-- /.modal -->
 
 <!-- end -->
+
+<!-- Forward to Super HR -->
+<div class="modal fade" id="forward_leave_fw" tabindex="-1" role="dialog">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+		<h4 class="modal-title">
+         <span class="add-title">Forward Leave to Super HR</span>
+       </h4>
+     </div>
+     <?php echo form_open_multipart(admin_url('timesheets/forward_leave_comment'),array('id'=>'forward-leave-form'));?>
+     <div class="modal-body">
+      <div class="form">
+        <div class="row">
+          <div class="col-md-12">
+			 <input name="staff_id" type="hidden" value="<?php echo get_staff_user_id(); ?>" />
+			 <input type="hidden" name="userid" value="<?php echo $request_leave->staff_id; ?>">
+			 <input type="hidden" name="leave_id" value="<?php echo html_entity_decode($request_leave->id); ?>">
+			 <p class="text-muted">This will keep the leave pending and notify Super HR for final approval.</p>
+			 <?php echo render_textarea('forward_comment', "Manager's Comment (optional)") ?>
+          </div>
+        </div>
+      </div>
+     </div>
+     <div class="modal-footer">
+       <button type="button" class="btn btn-default" data-dismiss="modal"><?php echo _l('close'); ?></button>
+       <button type="submit" class="btn btn-info btn-submit">Forward to Super HR</button>
+     </div>
+     <?php echo form_close(); ?>
+    </div>
+  </div>
+</div>
+
+<!-- The Modal -->
+
+<!-- start -->
 
 <div class="modal fade" id="convert_expense" tabindex="-1" role="dialog">
  <div class="modal-dialog">

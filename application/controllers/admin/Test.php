@@ -265,8 +265,8 @@ class Test extends AdminController
                             $minutes_diff = $interval->format('%i');
 
                             $time_diff = sprintf('%02d:%02d', $hours_diff, $minutes_diff);
-                            $check_in_time = $formatted_date1->format('h:i:s A');
-                            $check_out_time = $formatted_date2->format('h:i:s A');
+                            $check_in_time = $formatted_date1->format('H:i:s');
+                            $check_out_time = $formatted_date2->format('H:i:s');
 
                             $staff_data[$team_staffid][$date]['check_in'] = $check_in_time;
                             $staff_data[$team_staffid][$date]['check_out'] = $check_out_time;
@@ -276,13 +276,13 @@ class Test extends AdminController
                             if (!$formatted_date1) {
                                 $staff_data[$team_staffid][$date]['check_in'] = '';
                             } else {
-                                $check_in_time = $formatted_date1->format('h:i:s A');
+                                $check_in_time = $formatted_date1->format('H:i:s');
                                 $staff_data[$team_staffid][$date]['check_in'] = $check_in_time;
                             }
                             if (!$formatted_date2) {
                                 $staff_data[$team_staffid][$date]['check_out'] = '';
                             } else {
-                                $check_out_time = $formatted_date2->format('h:i:s A');
+                                $check_out_time = $formatted_date2->format('H:i:s');
                                 $staff_data[$team_staffid][$date]['check_out'] = $check_out_time;
                             }
                             $staff_data[$team_staffid][$date]['working_hrs'] = '';

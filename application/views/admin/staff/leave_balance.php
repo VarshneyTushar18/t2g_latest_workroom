@@ -318,6 +318,12 @@
                         <?php if (!empty($summary)) { ?>
                         <div class="leave-summary-section">
                             <h5>My leave summary — <?php echo html_escape($summary['month_name']); ?> <?php echo (int) $selectedYear; ?></h5>
+                            <?php if ((int) ($summary['month'] ?? -1) === 0) { ?>
+                            <p class="text-muted" style="font-size:12px;margin:-4px 0 12px;">
+                              Carry Forward and Leave Balance below are your <strong>current</strong> figures.
+                              Leave applied for any month (including a previous month) adjusts this same running balance.
+                            </p>
+                            <?php } ?>
                             <div class="leave-summary-cards">
                                 <div class="leave-summary-card">
                                     <div class="val"><?php echo html_escape($summary['carry_forward']); ?></div>
@@ -325,11 +331,11 @@
                                 </div>
                                 <div class="leave-summary-card">
                                     <div class="val"><?php echo html_escape($summary['leave_taken']); ?></div>
-                                    <div class="lbl">Leaves Taken</div>
+                                    <div class="lbl"><?php echo ((int) ($summary['month'] ?? -1) === 0) ? 'Leaves Taken (YTD)' : 'Leaves Taken'; ?></div>
                                 </div>
                                 <div class="leave-summary-card">
                                     <div class="val success"><?php echo html_escape($summary['earned_leave']); ?></div>
-                                    <div class="lbl">Leaves Earned</div>
+                                    <div class="lbl"><?php echo ((int) ($summary['month'] ?? -1) === 0) ? 'Leaves Earned (YTD)' : 'Leaves Earned'; ?></div>
                                 </div>
                                 <div class="leave-summary-card">
                                     <div class="val success"><?php echo html_escape($summary['leave_balance']); ?></div>
@@ -406,7 +412,10 @@
                                     ?>
                                     <tr>
                                         <td><?php echo($value[$i]['empid'] ?? $value[$i]['staffid']) ?></td>
-                                        <td><?php echo get_staff_full_name($value[$i]['staffid']); ?></td>
+                                        <td><?php
+                                            $nm = trim(($value[$i]['firstname'] ?? '') . ' ' . ($value[$i]['lastname'] ?? ''));
+                                            echo $nm !== '' ? html_escape($nm) : get_staff_full_name($value[$i]['staffid']);
+                                        ?></td>
                                         <td><?php echo (int) $month_number; ?></td>
                                         <td><?php echo cal_days_in_month(CAL_GREGORIAN, (int) $month_number, (int) $selectedYear) ?></td>
                                         <td><?php echo $value[$i]['carry_forward'] ?></td>

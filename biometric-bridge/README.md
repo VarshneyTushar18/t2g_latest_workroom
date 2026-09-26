@@ -1,4 +1,4 @@
-# T2G Biomax Live Sync Bridge — GO LIVE
+# T2G Biometric Live Sync Bridge — GO LIVE
 
 ## Status
 
@@ -7,7 +7,7 @@
 | Workroom sync API | **LIVE** (`/biometric_sync/health` + `/attendance`) |
 | CSRF allow for sync | **LIVE** |
 | Bridge code + config | Ready in this folder |
-| Biomax API `192.168.1.9:82` | Must run from **office LAN PC** |
+| Biometric API `192.168.1.9:82` | Must run from **office LAN PC** |
 
 ## On the office PC (must open 192.168.1.9)
 
@@ -18,7 +18,7 @@
    ```
 3. Install Python 3.11+ (tick **Add to PATH**).
 4. Double-click **`test_once.bat`**  
-   - Fetches Biomax once and pushes to Workroom  
+   - Fetches Biometric once and pushes to Workroom  
    - Check `logs/bridge.log`
 5. If OK, double-click **`start_bridge.bat`** (keeps running every 2 minutes)  
    **or** run **`install_windows_task.bat` as Administrator** for auto-start at login.
@@ -26,11 +26,11 @@
 ## Files
 
 - `bridge.py` — sync loop
-- `config.json` — already filled with your Biomax URL/key + Workroom token
+- `config.json` — already filled with your Biometric URL/key + Workroom token
 - `test_once.bat` — one-shot test
 - `start_bridge.bat` — continuous
 - `install_windows_task.bat` — Windows Task Scheduler
 
 ## Mapping note
 
-`EmployeeCode` from Biomax must match Workroom staff Emp ID (`staff_identifi`).
+`EmployeeCode` from Biometric must match Workroom staff Emp ID (`staff_identifi`).

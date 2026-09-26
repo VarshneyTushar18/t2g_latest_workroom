@@ -4,7 +4,7 @@ cd /d "%~dp0"
 color 0A
 echo.
 echo ============================================
-echo   T2G Biomax Bridge — FIX TODAY
+echo   T2G Biometric Bridge — FIX TODAY
 echo ============================================
 echo.
 echo Step 1: DNS / internet check...
@@ -28,7 +28,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Step 3: Testing Biomax + pushing TODAY to Workroom...
+echo Step 3: Testing Biometric + pushing TODAY to Workroom...
 echo (Leave this window open — read the messages)
 echo.
 python bridge.py --fix-today

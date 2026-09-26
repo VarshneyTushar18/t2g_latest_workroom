@@ -2,6 +2,7 @@
 
 defined('BASEPATH') or exit('No direct script access allowed');
 $this->ci->load->model('timesheets_model');
+$this->ci->timesheets_model->ensure_leave_hod_forward_columns();
 $user_id = get_staff_user_id();
 $add_query = ' IF(' . db_prefix() . 'timesheets_requisition_leave.type_of_leave = 8,"Leave",IF(' . db_prefix() . 'timesheets_requisition_leave.type_of_leave = 2,"maternity_leave",IF(' . db_prefix() . 'timesheets_requisition_leave.type_of_leave = 4,"private_work_without_pay",IF(' . db_prefix() . 'timesheets_requisition_leave.type_of_leave = 1,"sick_leave", IF(' . db_prefix() . 'timesheets_requisition_leave.type_of_leave = 0,' . db_prefix() . 'timesheets_requisition_leave.type_of_leave_text,"")))))';
 
@@ -92,7 +93,7 @@ if ($this->ci->input->post('chose')) {
 	}
 }
 
-$result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, [db_prefix() . 'timesheets_requisition_leave.start_time', db_prefix() . 'timesheets_requisition_leave.type_of_leave', db_prefix() . 'timesheets_requisition_leave.subject', 'b.firstname','b.staff_identifi', db_prefix() . 'timesheets_requisition_leave.followers_id', db_prefix() . 'timesheets_requisition_leave.status as status', db_prefix() . 'timesheets_requisition_leave.datecreated', 'type_of_leave_text']);
+$result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, [db_prefix() . 'timesheets_requisition_leave.start_time', db_prefix() . 'timesheets_requisition_leave.type_of_leave', db_prefix() . 'timesheets_requisition_leave.subject', 'b.firstname','b.staff_identifi', db_prefix() . 'timesheets_requisition_leave.followers_id', db_prefix() . 'timesheets_requisition_leave.status as status', db_prefix() . 'timesheets_requisition_leave.datecreated', 'type_of_leave_text', db_prefix() . 'timesheets_requisition_leave.staff_id as leave_staff_id', db_prefix() . 'timesheets_requisition_leave.hod_forwarded as hod_forwarded']);
 
 $output = $result['output'];
 $rResult = $result['rResult'];
@@ -173,7 +174,11 @@ $row[] = '<p>' . $aRow['type_of_leave_text'] . '</p>';
 
 
 	if ($aRow['status'] == 0) {
-		$row[] = '<span class="label label-primary  mr-1 mb-1 mt-1">' . _l('Pending') . '</span>';
+		if (!empty($aRow['hod_forwarded'])) {
+			$row[] = '<span class="label label-info  mr-1 mb-1 mt-1">Forwarded to Super HR</span>';
+		} else {
+			$row[] = '<span class="label label-primary  mr-1 mb-1 mt-1">' . _l('Pending') . '</span>';
+		}
 	} else if ($aRow['status'] == 1) {
 		$row[] = '<span class="label label-success  mr-1 mb-1 mt-1">' . _l('approved') . '</span>';
 	} else if ($aRow['status'] == 2) {
@@ -185,16 +190,17 @@ $row[] = '<p>' . $aRow['type_of_leave_text'] . '</p>';
 
 	$row[] = _d(date('Y-m-d', strtotime($aRow[db_prefix() . 'timesheets_requisition_leave.datecreated'])));
 
+	$leave_applicant_id = (int) ($aRow['leave_staff_id'] ?? $aRow[db_prefix() . 'timesheets_requisition_leave.staff_id'] ?? 0);
 	$action_option = '<div class="row">';
-	if (in_array($user_id, $list_member_approve)) {
-		$data_check_approve_status = $this->ci->timesheets_model->check_approval_details(($aRow[db_prefix() . 'timesheets_requisition_leave.id']), $rel_type);
-		if (isset($data_check_approve_status['staffid'])) {
-			if ($data_check_approve_status['staffid']) {
-				if (in_array($user_id, $data_check_approve_status['staffid']) && timesheets_can_approve_leave($user_id, (int) $aRow[db_prefix() . 'timesheets_requisition_leave.staff_id'])) {
-					$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('approve') . '" onclick="approve_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-success btn-icon mright5"><i class="fa fa-check"></i></span>';
-					$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-primary btn-icon"><i class="fa fa-ban"></i></span>';
-				}
+	if ((int) $aRow['status'] === 0) {
+		if (timesheets_can_final_approve_leave($user_id, $leave_applicant_id)) {
+			$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('approve') . '" onclick="approve_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-success btn-icon mright5"><i class="fa fa-check"></i></span>';
+			$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-primary btn-icon mright5"><i class="fa fa-ban"></i></span>';
+		} elseif (timesheets_can_hod_forward_leave($leave_applicant_id, $user_id)) {
+			if (empty($aRow['hod_forwarded'])) {
+				$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="Forward to Super HR" onclick="forward_leave_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-info btn-icon mright5"><i class="fa fa-share"></i></span>';
 			}
+			$action_option .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . ($aRow[db_prefix() . 'timesheets_requisition_leave.id']) . ',\'' . $rel_type . '\');" class="btn btn-primary btn-icon mright5"><i class="fa fa-ban"></i></span>';
 		}
 	}
 

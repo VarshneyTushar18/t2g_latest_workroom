@@ -32,7 +32,7 @@ class Biometric_model extends App_Model
             $row['employee_code'] = trim((string) $row['employee_code']);
             $row['created_at'] = date('Y-m-d H:i:s');
 
-            // Prefer staff full name when Biomax sends an empty name.
+            // Prefer staff full name when Biometric sends an empty name.
             if (trim((string) ($row['employee_name'] ?? '')) === '') {
                 $staff_name = $this->resolve_staff_name_by_code($row['employee_code']);
                 if ($staff_name !== '') {
@@ -47,10 +47,37 @@ class Biometric_model extends App_Model
 
             $this->db->where('employee_code', $row['employee_code']);
             $this->db->where('attendance_date', $formatted_date);
-            $existing = $this->db->get(db_prefix() . 'biometric_report')->row();
+            $this->db->order_by('id', 'ASC');
+            $existing_rows = $this->db->get(db_prefix() . 'biometric_report')->result();
 
-            if ($existing) {
-                $this->db->where('id', $existing->id);
+            if (!empty($existing_rows)) {
+                // Keep one row per employee/day; delete accidental duplicates.
+                $keeper = $existing_rows[0];
+                $best_score = $this->biometric_row_completeness_score((array) $keeper);
+                foreach ($existing_rows as $cand) {
+                    $score = $this->biometric_row_completeness_score((array) $cand);
+                    if ($score > $best_score) {
+                        $keeper = $cand;
+                        $best_score = $score;
+                    }
+                }
+                foreach ($existing_rows as $cand) {
+                    if ((int) $cand->id === (int) $keeper->id) {
+                        continue;
+                    }
+                    $this->db->where('id', (int) $cand->id)->delete(db_prefix() . 'biometric_report');
+                }
+
+                // Never replace a richer punch day with a thinner sync payload.
+                $incoming_score = $this->biometric_row_completeness_score($row);
+                $keeper_score = $this->biometric_row_completeness_score((array) $keeper);
+                if ($incoming_score < $keeper_score) {
+                    $skipped++;
+                    continue;
+                }
+
+                unset($row['created_at']);
+                $this->db->where('id', (int) $keeper->id);
                 $this->db->update(db_prefix() . 'biometric_report', $row);
                 $updated++;
             } else {
@@ -68,7 +95,7 @@ class Biometric_model extends App_Model
 
         if ($inserted > 0 || $updated > 0) {
             $this->record_sync_run([
-                'source'   => 'biomax_api',
+                'source'   => 'biometric_api',
                 'received' => count($data),
                 'inserted' => $inserted,
                 'updated'  => $updated,
@@ -77,6 +104,61 @@ class Biometric_model extends App_Model
         }
 
         return $result;
+    }
+
+    /**
+     * Rank a biometric day row by how complete its punch data is.
+     * Used to keep the best row when duplicates exist for the same employee/date.
+     *
+     * @param array $row
+     * @return int
+     */
+    public function biometric_row_completeness_score(array $row)
+    {
+        $records = trim((string) ($row['punch_records'] ?? ''));
+        $score = 0;
+        if ($records !== '') {
+            $score += 1000 + strlen($records);
+            $score += substr_count($records, ',') * 10;
+            if (preg_match_all('/\b(in|out)\b/i', $records, $m)) {
+                $score += count($m[0]) * 5;
+            }
+        }
+        if (trim((string) ($row['a_in_time'] ?? '')) !== '') {
+            $score += 20;
+        }
+        if (trim((string) ($row['a_out_time'] ?? '')) !== '' && trim((string) ($row['a_out_time'] ?? '')) !== '00:00') {
+            $score += 30;
+        }
+        if (trim((string) ($row['work_duration'] ?? $row['t_duration'] ?? '')) !== '') {
+            $score += 10;
+        }
+
+        return $score;
+    }
+
+    /**
+     * Prefer the biometric day row with the richest punch data.
+     *
+     * @param array<int, array> $rows
+     * @return array|null
+     */
+    public function pick_best_biometric_row(array $rows)
+    {
+        $best = null;
+        $best_score = -1;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $score = $this->biometric_row_completeness_score($row);
+            if ($score > $best_score) {
+                $best = $row;
+                $best_score = $score;
+            }
+        }
+
+        return $best;
     }
 
     /**
@@ -100,7 +182,7 @@ class Biometric_model extends App_Model
     }
 
     /**
-     * Dashboard status for live Biomax sync (target: every 2 minutes).
+     * Dashboard status for live Biometric sync (target: every 2 minutes).
      */
     public function get_sync_status()
     {
@@ -133,7 +215,7 @@ class Biometric_model extends App_Model
 
         return [
             'mode'              => 'auto',
-            'source'            => 'Biomax',
+            'source'            => 'Biometric',
             'target_interval_s' => $target_interval,
             'last_sync_at'      => $last_at,
             'last_sync_age_s'   => $age_seconds,
@@ -381,6 +463,20 @@ class Biometric_model extends App_Model
             return [];
         }
         $rows = $query->result_array();
+        // Collapse duplicate employee/date rows — keep the richest punch_records.
+        $best_by_key = [];
+        foreach ($rows as $row) {
+            $key = trim((string) ($row['employee_code'] ?? '')) . '|' . trim((string) ($row['attendance_date'] ?? ''));
+            if ($key === '|') {
+                continue;
+            }
+            if (!isset($best_by_key[$key])
+                || $this->biometric_row_completeness_score($row) > $this->biometric_row_completeness_score($best_by_key[$key])) {
+                $best_by_key[$key] = $row;
+            }
+        }
+        $rows = array_values($best_by_key);
+
         $swipes = [];
         $from_ts = strtotime($from_dt->format('Y-m-d'));
         $to_ts = strtotime($to_dt->format('Y-m-d'));
@@ -460,7 +556,7 @@ class Biometric_model extends App_Model
         $department = $filters['department'] ?? '';
         $staff_id = $filters['staff'] ?? '';
 
-        // Always join staff (TRIM) so names resolve even when Biomax left employee_name blank.
+        // Always join staff (TRIM) so names resolve even when Biometric left employee_name blank.
         $this->db->join(
             $staff,
             'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code)',
@@ -541,7 +637,7 @@ class Biometric_model extends App_Model
     }
 
     /**
-     * Today's Biomax sheet row for a staff member (navbar Check in pill).
+     * Today's Biometric sheet row for a staff member (navbar Check in pill).
      * Daily only: matches tblbiometric_report.attendance_date for today (d-M-Y).
      * No punch for today → null (pill hidden until the office bridge syncs today's row).
      *
@@ -595,27 +691,25 @@ class Biometric_model extends App_Model
         $table = db_prefix() . 'biometric_report';
         $placeholders = implode(',', array_fill(0, count($employee_codes), '?'));
         $params = array_merge([$today], $employee_codes);
-        $row = $this->db->query(
+        $rows = $this->db->query(
             'SELECT * FROM ' . $table . '
              WHERE attendance_date = ?
-               AND TRIM(employee_code) IN (' . $placeholders . ')
-             ORDER BY id DESC
-             LIMIT 1',
+               AND TRIM(employee_code) IN (' . $placeholders . ')',
             $params
-        )->row_array();
+        )->result_array();
 
         // Soft fallback: case-insensitive day match if format casing differs (Sep vs SEP).
-        if (!$row) {
+        if (empty($rows)) {
             $params2 = array_merge([$today], $employee_codes);
-            $row = $this->db->query(
+            $rows = $this->db->query(
                 'SELECT * FROM ' . $table . '
                  WHERE LOWER(attendance_date) = LOWER(?)
-                   AND TRIM(employee_code) IN (' . $placeholders . ')
-                 ORDER BY id DESC
-                 LIMIT 1',
+                   AND TRIM(employee_code) IN (' . $placeholders . ')',
                 $params2
-            )->row_array();
+            )->result_array();
         }
+
+        $row = $this->pick_best_biometric_row($rows);
 
         if ($row) {
             $has_punch = !empty(trim((string) ($row['a_in_time'] ?? '')))
@@ -630,7 +724,182 @@ class Biometric_model extends App_Model
     }
 
     /**
-     * Get summary of Biomax punches for today:
+     * Biometric row for navbar / Workroom fallback.
+     * Workroom check-in is only for staff without an active biometric session.
+     *
+     * Navbar rules (today's sheet only — never yesterday's row):
+     * - Uses attendance_date = today only (night shift must sync today's row).
+     * - Last swipe must be within $carryover_hours (13h).
+     * - Check-in label = first IN on today's biometric sheet.
+     *
+     * @param int $staff_id
+     * @param float $night_carryover_hours
+     * @return array|null
+     */
+    public function get_staff_active_punch($staff_id, $night_carryover_hours = 13)
+    {
+        $staff_id = (int) $staff_id;
+        $night_carryover_hours = (float) $night_carryover_hours;
+        if ($staff_id <= 0) {
+            return null;
+        }
+
+        return $this->pick_navbar_active_punch_row(
+            $this->get_staff_today_punch($staff_id),
+            $night_carryover_hours
+        );
+    }
+
+    /**
+     * Whether a biometric row should drive the navbar (current session only).
+     */
+    public function biometric_row_is_navbar_active($row)
+    {
+        if (!is_array($row) || empty($row)) {
+            return false;
+        }
+
+        $sum = $this->get_biometric_punch_summary($row);
+        if (!$sum || empty($sum['last_ts'])) {
+            return false;
+        }
+
+        $last_type = strtolower((string) ($sum['last_type'] ?? ''));
+        if ($last_type === 'in') {
+            return true;
+        }
+
+        if ($last_type === 'out') {
+            $break = $this->get_biometric_break_summary($row);
+
+            return is_array($break) && !empty($break['on_break']);
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array|null $row
+     * @param float $carryover_hours
+     * @return array|null
+     */
+    protected function pick_navbar_active_punch_row($row, $carryover_hours)
+    {
+        if (!is_array($row) || empty($row)) {
+            return null;
+        }
+
+        $this->ensure_app_timezone();
+
+        $sum = $this->get_biometric_punch_summary($row);
+        if (!$sum || empty($sum['last_ts'])) {
+            return null;
+        }
+
+        $elapsed_hours = (time() - (int) $sum['last_ts']) / 3600;
+        if ($elapsed_hours < 0 || $elapsed_hours >= (float) $carryover_hours) {
+            return null;
+        }
+
+        $has_punch = !empty(trim((string) ($row['punch_records'] ?? '')))
+            || !empty(trim((string) ($row['a_in_time'] ?? '')))
+            || !empty(trim((string) ($row['a_out_time'] ?? '')));
+        if (!$has_punch) {
+            return null;
+        }
+
+        return $row;
+    }
+
+    /**
+     * True when office biometric punches are available — Workroom web punch must stay hidden.
+     */
+    public function staff_biometric_available($staff_id, $night_carryover_hours = 13)
+    {
+        if (function_exists('timesheets_is_staff_wfh_on_date')
+            && timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'))) {
+            return false;
+        }
+
+        return $this->get_staff_active_punch($staff_id, $night_carryover_hours) !== null;
+    }
+
+    /**
+     * Biometric sheet row for one staff on a specific attendance_date (d-M-Y).
+     *
+     * @return array|null
+     */
+    public function get_staff_punch_for_date($staff_id, $attendance_date)
+    {
+        $staff_id = (int) $staff_id;
+        $attendance_date = trim((string) $attendance_date);
+        if ($staff_id <= 0 || $attendance_date === '') {
+            return null;
+        }
+
+        $staff = db_prefix() . 'staff';
+        $info = db_prefix() . 'staff_info';
+        $codes = $this->db->query(
+            'SELECT TRIM(COALESCE(s.staff_identifi, \'\')) AS identifi,
+                    TRIM(COALESCE(i.empid, \'\')) AS empid
+             FROM ' . $staff . ' s
+             LEFT JOIN ' . $info . ' i ON i.staffid = s.staffid
+             WHERE s.staffid = ?
+             LIMIT 1',
+            [$staff_id]
+        )->row_array();
+
+        if (!$codes) {
+            return null;
+        }
+
+        $employee_codes = [];
+        foreach (['identifi', 'empid'] as $k) {
+            $c = trim((string) ($codes[$k] ?? ''));
+            if ($c !== '' && !in_array($c, $employee_codes, true)) {
+                $employee_codes[] = $c;
+            }
+        }
+        if (empty($employee_codes)) {
+            return null;
+        }
+
+        $table = db_prefix() . 'biometric_report';
+        $placeholders = implode(',', array_fill(0, count($employee_codes), '?'));
+        $params = array_merge([$attendance_date], $employee_codes);
+        $rows = $this->db->query(
+            'SELECT * FROM ' . $table . '
+             WHERE attendance_date = ?
+               AND TRIM(employee_code) IN (' . $placeholders . ')',
+            $params
+        )->result_array();
+
+        if (empty($rows)) {
+            $params2 = array_merge([$attendance_date], $employee_codes);
+            $rows = $this->db->query(
+                'SELECT * FROM ' . $table . '
+                 WHERE LOWER(attendance_date) = LOWER(?)
+                   AND TRIM(employee_code) IN (' . $placeholders . ')',
+                $params2
+            )->result_array();
+        }
+
+        $row = $this->pick_best_biometric_row($rows);
+
+        if ($row) {
+            $has_punch = !empty(trim((string) ($row['a_in_time'] ?? '')))
+                || !empty(trim((string) ($row['a_out_time'] ?? '')))
+                || !empty(trim((string) ($row['punch_records'] ?? '')));
+            if (!$has_punch) {
+                return null;
+            }
+        }
+
+        return $row ?: null;
+    }
+
+    /**
+     * Get summary of Biometric punches for today:
      * - first_time_formatted: original arrival punch (e.g. '10:49:00 AM')
      * - first_ts: unix timestamp of first punch
      * - last_time_formatted: latest punch (e.g. '02:28:00 PM')
@@ -641,7 +910,7 @@ class Biometric_model extends App_Model
      * @param array|null $row
      * @return array{first_time_formatted:string,first_ts:int,last_time_formatted:string,last_ts:int,last_type:string,is_checked_out:bool}|null
      */
-    public function get_biomax_punch_summary($row)
+    public function get_biometric_punch_summary($row)
     {
         if (!is_array($row) || empty($row)) {
             return null;
@@ -703,23 +972,330 @@ class Biometric_model extends App_Model
             }
         }
 
+        $first_formatted = $this->format_punch_time_display($first_time);
+        if ($first_formatted === '' && $first_ts > 0) {
+            // Midnight punches (00:00) are valid for night shift but format_punch_time_display skips bare 00:00.
+            $first_formatted = date('H:i:s', $first_ts);
+        }
+
+        $last_formatted = $this->format_punch_time_display($last_time);
+        if ($last_formatted === '' && $last_ts > 0) {
+            $last_formatted = date('H:i:s', $last_ts);
+        }
+
         return [
-            'first_time_formatted' => $this->format_punch_time_display($first_time),
+            'first_time_formatted' => $first_formatted,
             'first_ts'             => $first_ts,
-            'last_time_formatted'  => $this->format_punch_time_display($last_time),
+            'last_time_formatted'  => $last_formatted,
             'last_ts'              => $last_ts,
             'last_type'            => $last_type,
             'is_checked_out'       => $is_checked_out,
         ];
     }
 
+    /** @deprecated Use get_biometric_punch_summary() */
+    public function get_biomax_punch_summary($row)
+    {
+        return $this->get_biometric_punch_summary($row);
+    }
+
     /**
-     * Check if a Biomax row has a recorded out punch or the last swipe was OUT.
+     * Navbar label: first IN punch from today's biometric sheet (punch_records).
+     *
+     * @param array|null $row
+     */
+    public function get_navbar_first_checkin_display($row)
+    {
+        if (!is_array($row) || empty($row)) {
+            return '';
+        }
+
+        $date_str = trim((string) ($row['attendance_date'] ?? ''));
+        $events = $this->parse_biometric_punch_events($row, $date_str);
+        foreach ($events as $ev) {
+            if (($ev['type'] ?? '') === 'IN' && !empty($ev['ts'])) {
+                return date('H:i:s', (int) $ev['ts']);
+            }
+        }
+
+        $sum = $this->get_biometric_punch_summary($row);
+        if (!empty($sum['first_ts'])) {
+            return date('H:i:s', (int) $sum['first_ts']);
+        }
+
+        $a_in = trim((string) ($row['a_in_time'] ?? ''));
+        if ($a_in !== '' && strtolower($a_in) !== 'nil') {
+            $formatted = $this->format_punch_time_display($a_in);
+            if ($formatted !== '') {
+                return $formatted;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Break periods from biometric sheet IN/OUT swipes (OUT → next IN).
+     * Navbar total = completed breaks today + live gap when last punch is OUT.
+     *
+     * @param array|null $row biometric_report row
+     * @return array{
+     *   breaks: array<int, array{out_time:string,in_time:string,duration_secs:int,duration_label:string}>,
+     *   completed_secs:int,
+     *   current_break_secs:int,
+     *   total_secs:int,
+     *   on_break:bool,
+     *   current_out_ts:int,
+     *   tooltip:string,
+     *   total_label:string,
+     *   current_label:string
+     * }|null
+     */
+    public function get_biometric_break_summary($row)
+    {
+        if (!is_array($row) || empty($row)) {
+            return null;
+        }
+
+        $this->ensure_app_timezone();
+
+        $date_str = trim((string) ($row['attendance_date'] ?? ''));
+        if ($date_str === '') {
+            return null;
+        }
+
+        $events = $this->parse_biometric_punch_events($row, $date_str);
+        if (empty($events)) {
+            return null;
+        }
+
+        $on_break = false;
+        $break_start_ts = 0;
+        $breaks = [];
+        $away_gaps = [];
+        $completed_secs = 0;
+        $min_break_secs = 60;
+        // Short tea/rest breaks only; longer OUT→IN gaps are lunch/away time.
+        $max_break_secs = 3600;
+
+        foreach ($events as $ev) {
+            $type = $ev['type'];
+            $ts = (int) $ev['ts'];
+
+            if ($type === 'OUT') {
+                if (!$on_break) {
+                    $on_break = true;
+                    $break_start_ts = $ts;
+                }
+                continue;
+            }
+
+            if ($type === 'IN' && $on_break && $break_start_ts > 0) {
+                $dur = max(0, $ts - $break_start_ts);
+                $gap = [
+                    'out_time'        => date('H:i', $break_start_ts),
+                    'in_time'         => date('H:i', $ts),
+                    'duration_secs'   => $dur,
+                    'duration_label'  => $this->format_break_duration($dur),
+                ];
+                if ($dur >= $min_break_secs && $dur <= $max_break_secs) {
+                    $breaks[] = $gap;
+                    $completed_secs += $dur;
+                } elseif ($dur > $max_break_secs) {
+                    $away_gaps[] = $gap;
+                }
+                $on_break = false;
+                $break_start_ts = 0;
+            }
+        }
+
+        $current_break_secs = 0;
+        $current_out_ts = 0;
+        $last_event = !empty($events) ? $events[count($events) - 1] : null;
+        $last_is_out = is_array($last_event) && ($last_event['type'] ?? '') === 'OUT';
+
+        // Last punch OUT → live break from that OUT until now (navbar ticks every second).
+        if ($last_is_out) {
+            $trailing_out_ts = (int) ($last_event['ts'] ?? 0);
+            if ($trailing_out_ts > 0) {
+                $on_break = true;
+                $break_start_ts = $trailing_out_ts;
+                $current_out_ts = $trailing_out_ts;
+                $current_break_secs = max(0, time() - $trailing_out_ts);
+            }
+        } elseif (is_array($last_event) && ($last_event['type'] ?? '') === 'IN') {
+            $on_break = false;
+            $break_start_ts = 0;
+            $current_out_ts = 0;
+            $current_break_secs = 0;
+        }
+
+        // Align with get_biometric_punch_summary() when punch_records parsing differs.
+        if (!$on_break) {
+            $sum = $this->get_biometric_punch_summary($row);
+            if (is_array($sum) && !empty($sum['is_checked_out']) && !empty($sum['last_ts'])) {
+                $on_break = true;
+                $current_out_ts = (int) $sum['last_ts'];
+                $break_start_ts = $current_out_ts;
+                $current_break_secs = max(0, time() - $current_out_ts);
+            }
+        }
+
+        $total_secs = $completed_secs + $current_break_secs;
+
+        $tooltip_lines = [];
+        foreach ($breaks as $i => $b) {
+            $tooltip_lines[] = 'Break ' . ($i + 1) . ': ' . $b['out_time'] . '–' . $b['in_time'] . ' (' . $b['duration_label'] . ')';
+        }
+        if ($on_break && $break_start_ts > 0) {
+            $tooltip_lines[] = 'Current: ' . date('H:i', $break_start_ts) . '–now (' . $this->format_break_duration($current_break_secs) . ')';
+        }
+        foreach ($away_gaps as $i => $g) {
+            $tooltip_lines[] = 'Away ' . ($i + 1) . ': ' . $g['out_time'] . '–' . $g['in_time'] . ' (' . $g['duration_label'] . ', not counted)';
+        }
+
+        return [
+            'breaks'              => $breaks,
+            'completed_secs'      => $completed_secs,
+            'current_break_secs'  => $current_break_secs,
+            'total_secs'          => $total_secs,
+            'on_break'            => $on_break,
+            'current_out_ts'      => $current_out_ts,
+            'tooltip'             => $tooltip_lines ? implode("\n", $tooltip_lines) : 'No breaks recorded yet',
+            'total_label'         => $this->format_break_duration($total_secs),
+            'completed_label'     => $this->format_break_duration($completed_secs),
+            'current_label'       => $this->format_break_duration($current_break_secs),
+        ];
+    }
+
+    /**
+     * @return array<int, array{type:string,time:string,ts:int}>
+     */
+    protected function parse_biometric_punch_events($row, $date_str)
+    {
+        $this->ensure_app_timezone();
+
+        $events = [];
+        $records = trim((string) ($row['punch_records'] ?? ''));
+        if ($records !== '') {
+            if (preg_match_all('/(\d{1,2}:\d{2}(?::\d{2})?)\s*\(?\s*(in|out)\s*\)?/i', $records, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $time = trim(preg_replace('/\s*\(.*$/', '', $m[1]));
+                    $dir = strtoupper($m[2]);
+                    $ts = strtotime($date_str . ' ' . $time);
+                    if ($ts === false) {
+                        continue;
+                    }
+                    $events[] = [
+                        'type' => $dir === 'OUT' ? 'OUT' : 'IN',
+                        'time' => date('H:i:s', $ts),
+                        'ts'   => $ts,
+                    ];
+                }
+            } else {
+                $parts = preg_split('/\s*,\s*/', $records);
+                foreach ($parts as $punch) {
+                    $punch = trim($punch);
+                    if ($punch === '') {
+                        continue;
+                    }
+                    if (!preg_match('/(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:\()?[\s\-]*(in|out)(?:\))?/i', $punch, $m)
+                        && !preg_match('/\b(in|out)\b\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?)/i', $punch, $m2)) {
+                        continue;
+                    }
+                    if (!empty($m)) {
+                        $time = $m[1];
+                        $dir = strtoupper($m[2]);
+                    } else {
+                        $dir = strtoupper($m2[1]);
+                        $time = $m2[2];
+                    }
+                    $ts = strtotime($date_str . ' ' . trim(preg_replace('/\s*\(.*$/', '', $time)));
+                    if ($ts === false) {
+                        continue;
+                    }
+                    $events[] = [
+                        'type' => $dir === 'OUT' ? 'OUT' : 'IN',
+                        'time' => date('H:i:s', $ts),
+                        'ts'   => $ts,
+                    ];
+                }
+            }
+        }
+
+        if (empty($events)) {
+            $in = trim((string) ($row['a_in_time'] ?? ''));
+            $out = trim((string) ($row['a_out_time'] ?? ''));
+            if ($in !== '') {
+                $ts = strtotime($date_str . ' ' . preg_replace('/\s*\(.*$/', '', $in));
+                if ($ts !== false) {
+                    $events[] = ['type' => 'IN', 'time' => date('H:i:s', $ts), 'ts' => $ts];
+                }
+            }
+            if ($out !== '' && $out !== '00:00' && $out !== '00:00:00' && strtolower($out) !== 'nil') {
+                $ts = strtotime($date_str . ' ' . preg_replace('/\s*\(.*$/', '', $out));
+                if ($ts !== false) {
+                    $events[] = ['type' => 'OUT', 'time' => date('H:i:s', $ts), 'ts' => $ts];
+                }
+            }
+        }
+
+        usort($events, function ($a, $b) {
+            return $a['ts'] <=> $b['ts'];
+        });
+
+        $deduped = [];
+        foreach ($events as $ev) {
+            if (!empty($deduped)) {
+                $prev = $deduped[count($deduped) - 1];
+                if ($prev['type'] === $ev['type'] && abs($ev['ts'] - $prev['ts']) <= 120) {
+                    continue;
+                }
+            }
+            $deduped[] = $ev;
+        }
+
+        return $deduped;
+    }
+
+    /**
+     * @param int $seconds
+     * @return string
+     */
+    protected function ensure_app_timezone()
+    {
+        if (!function_exists('get_option')) {
+            return;
+        }
+        $tz = (string) get_option('default_timezone');
+        if ($tz !== '' && date_default_timezone_get() !== $tz) {
+            date_default_timezone_set($tz);
+        }
+    }
+
+    public function format_break_duration($seconds)
+    {
+        $seconds = max(0, (int) $seconds);
+        if ($seconds < 60) {
+            return $seconds . 's';
+        }
+        $mins = (int) floor($seconds / 60);
+        if ($mins < 60) {
+            return $mins . 'm';
+        }
+        $h = (int) floor($mins / 60);
+        $m = $mins % 60;
+
+        return $m > 0 ? ($h . 'h ' . $m . 'm') : ($h . 'h');
+    }
+
+    /**
+     * Check if a Biometric row has a recorded out punch or the last swipe was OUT.
      *
      * @param array|null $row
      * @return bool
      */
-    public function is_biomax_checked_out($row)
+    public function is_biometric_checked_out($row)
     {
         if (!is_array($row) || empty($row)) {
             return false;
@@ -745,8 +1321,14 @@ class Biometric_model extends App_Model
         return false;
     }
 
+    /** @deprecated Use is_biometric_checked_out() */
+    public function is_biomax_checked_out($row)
+    {
+        return $this->is_biometric_checked_out($row);
+    }
+
     /**
-     * Format Biomax sheet time (HH:MM / HH:MM:SS) as h:i:s A for navbar.
+     * Format Biometric sheet time (HH:MM / HH:MM:SS / 12h) as 24-hour H:i:s for display.
      */
     public function format_punch_time_display($time)
     {
@@ -765,14 +1347,14 @@ class Biometric_model extends App_Model
             if ($dt instanceof DateTime) {
                 $errors = DateTime::getLastErrors();
                 if (empty($errors['warning_count']) && empty($errors['error_count'])) {
-                    return $dt->format('h:i:s A');
+                    return $dt->format('H:i:s');
                 }
             }
         }
 
         $ts = strtotime($time);
         if ($ts !== false) {
-            return date('h:i:s A', $ts);
+            return date('H:i:s', $ts);
         }
 
         return $time;

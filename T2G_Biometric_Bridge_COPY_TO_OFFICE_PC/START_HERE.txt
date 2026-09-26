@@ -1,19 +1,19 @@
-T2G Biomax Bridge — GET ALL HISTORY + LIVE CURRENT
+T2G Biometric Bridge — GET ALL HISTORY + LIVE CURRENT
 ==================================================
 
-Copy this WHOLE folder to the office PC (the one where Biomax
+Copy this WHOLE folder to the office PC (the one where Biometric
 Main.aspx works at http://localhost:82).
 
 
-STEP A — Confirm Biomax has TODAY's punches
+STEP A — Confirm Biometric has TODAY's punches
 -------------------------------------------
 Open in browser on that PC:
 
 http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs?APIKey=490813092603&FromDate=2026-09-08&ToDate=2026-09-08
 
-- If EMPTY / only old dates → fix Biomax first:
+- If EMPTY / only old dates → fix Biometric first:
   In SmartOffice, download / sync device logs so TODAY appears.
-  Workroom cannot invent punches Biomax does not have.
+  Workroom cannot invent punches Biometric does not have.
 
 
 STEP B — Pull ALL history into Workroom (one time)
@@ -48,7 +48,7 @@ You should see dates through TODAY after Step A+B succeed.
 
 Already configured
 ------------------
-Biomax:         http://127.0.0.1:82
+Biometric:         http://127.0.0.1:82
 API key:        490813092603
 Workroom:       https://t2gworkroom.com
 Live interval:  120 seconds

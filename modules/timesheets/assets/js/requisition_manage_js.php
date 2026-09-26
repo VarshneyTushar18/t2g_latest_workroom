@@ -59,7 +59,11 @@
       "department_ats": "[name='department_ats[]']",
     };
 
-    initDataTable(table_additional_timesheets,admin_url + 'timesheets/table_additional_timesheets', [0], [0],addtimesheetServerParams, [3, 'desc']); 
+    // Latest submitted regularization first (request id desc, not attendance date).
+    initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [0], [10], addtimesheetServerParams, [0, 'desc']);
+    if ($.fn.DataTable.isDataTable(table_additional_timesheets)) {
+      table_additional_timesheets.DataTable().columns([0]).visible(false, false);
+    }
     $.each(addtimesheetServerParams, function() {
       $('#status_filter_ats').on('change', function() {
         table_additional_timesheets.DataTable().ajax.reload()
@@ -1066,6 +1070,22 @@
       return;
     }
     change_request_approval_status(id,2,rel_type);
+  }
+
+  function forward_leave_request(id, rel_type){
+    "use strict";
+    if (!confirm('Forward this leave to Super HR for final approval?')) {
+      return;
+    }
+    change_request_approval_status(id, 3, rel_type);
+  }
+
+  function forward_regularisation_request(id){
+    "use strict";
+    if (!confirm('Forward this regularization to Super HR for final approval?')) {
+      return;
+    }
+    change_request_approval_status(id, 3, 'additional_timesheets');
   }
 
   $(document).on('click', '#reg_reject_submit_btn', function(){

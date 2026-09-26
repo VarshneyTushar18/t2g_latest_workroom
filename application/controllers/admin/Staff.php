@@ -584,6 +584,8 @@ class Staff extends AdminController
         // Slim staff list only — leave totals are computed in enrich_leave_balance_month.
         $sqlStaff = "SELECT
             tblstaff.staffid,
+            tblstaff.firstname,
+            tblstaff.lastname,
             tblstaff_info.empid,
             tblstaff_info.doj
         FROM tblstaff
@@ -595,18 +597,19 @@ class Staff extends AdminController
             $staff_rows = [];
         }
 
+        // All Months: only through current month for the current year (skip future months).
+        $through_month = 12;
+        if ((int) $selectedYear === (int) date('Y')) {
+            $through_month = max(1, (int) date('n'));
+        }
+
         if ($selectedMonth == 0) {
-            for ($month_in_number = 1; $month_in_number <= 12; $month_in_number++) {
-                $month_rows = [];
-                foreach ($staff_rows as $row) {
-                    $month_rows[] = $row;
-                }
-                $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
-                    $month_rows,
-                    $month_in_number,
-                    $selectedYear
-                );
-            }
+            // One year pass instead of 12× full carry rebuilds.
+            $data['table_data'] = $this->staff_model->enrich_leave_balance_year(
+                $staff_rows,
+                $selectedYear,
+                $through_month
+            );
         } else {
             $month_in_number = (int) $selectedMonth;
             $data['table_data'][$month_in_number] = $this->staff_model->enrich_leave_balance_month(
@@ -622,6 +625,34 @@ class Staff extends AdminController
         $data['report_row_count'] = 0;
         foreach ($data['table_data'] as $monthRows) {
             $data['report_row_count'] += is_array($monthRows) ? count($monthRows) : 0;
+        }
+
+        $data['leave_balance_cards'] = [];
+        $data['leave_balance_year'] = (int) $selectedYear;
+        $data['userid'] = $view_staff_id;
+        $data['can_pick_staff'] = timesheets_user_can_pick_staff();
+        // Slim picker seed; full list loads via AJAX after paint.
+        $data['staff_list'] = [];
+        if ($data['can_pick_staff']) {
+            $me = $this->db->select('staffid, firstname, lastname')->where('staffid', $view_staff_id)->get(db_prefix() . 'staff')->row_array();
+            $data['staff_list'] = $me ? [$me] : [];
+        }
+        $data['is_team_manager'] = timesheets_is_team_manager();
+        $data['is_hr_viewer'] = $is_hr;
+        $data['want_all_report'] = $want_all;
+        $data['can_edit_earned_leave'] = $data['is_hr_viewer'];
+        $data['filter_one_staff'] = $filter_one_staff;
+
+        // Cards first — All Months summary uses current EL CF/balance from here.
+        $card_month = ((int) $selectedMonth > 0) ? (int) $selectedMonth : $through_month;
+        $data['leave_balance_month'] = (int) $card_month;
+        if (is_dir(module_dir_path('timesheets'))) {
+            $this->load->model('timesheets/timesheets_model');
+            $data['leave_balance_cards'] = $this->timesheets_model->get_staff_leave_balance_cards(
+                $view_staff_id,
+                (int) $selectedYear,
+                $card_month
+            );
         }
 
         $data['summary'] = null;
@@ -640,33 +671,52 @@ class Staff extends AdminController
                 ];
                 break;
             }
-        }
-
-        $data['leave_balance_cards'] = [];
-        $data['leave_balance_year'] = (int) $selectedYear;
-        $data['userid'] = $view_staff_id;
-        $data['can_pick_staff'] = timesheets_user_can_pick_staff();
-        // Slim picker seed; full list loads via AJAX after paint.
-        $data['staff_list'] = [];
-        if ($data['can_pick_staff']) {
-            $me = $this->db->select('staffid, firstname, lastname')->where('staffid', $view_staff_id)->get(db_prefix() . 'staff')->row_array();
-            $data['staff_list'] = $me ? [$me] : [];
-        }
-        $data['is_team_manager'] = timesheets_is_team_manager();
-        $data['is_hr_viewer'] = $is_hr;
-        $data['want_all_report'] = $want_all;
-        $data['can_edit_earned_leave'] = $data['is_hr_viewer'];
-        $data['filter_one_staff'] = $filter_one_staff;
-        if (is_dir(module_dir_path('timesheets'))) {
-            $this->load->model('timesheets/timesheets_model');
-            $card_month = ((int) $selectedMonth > 0) ? (int) $selectedMonth : null;
-            $data['leave_balance_month'] = $card_month ? (int) $card_month : 0;
-            // Cards for the one viewed employee only (already scoped).
-            $data['leave_balance_cards'] = $this->timesheets_model->get_staff_leave_balance_cards(
-                $view_staff_id,
-                (int) $selectedYear,
-                $card_month
-            );
+        } elseif ($selectedMonth == 0) {
+            // All Months: always show CURRENT carry forward + leave balance.
+            // Leave taken in any month (incl. previous) adjusts this same running balance.
+            $taken_ytd = 0.0;
+            $earned_ytd = 0.0;
+            $cf = null;
+            $bal = null;
+            foreach ($data['table_data'] as $m => $month_rows) {
+                if (!is_array($month_rows)) {
+                    continue;
+                }
+                foreach ($month_rows as $row) {
+                    if ((int) $row['staffid'] !== $view_staff_id) {
+                        continue;
+                    }
+                    $taken_ytd += (float) ($row['leave_taken'] ?? 0);
+                    $earned_ytd += (float) ($row['earned_leave'] ?? 0);
+                    if ((int) $m === (int) $through_month) {
+                        $cf = $row['carry_forward'];
+                        $bal = $row['leave_balance'];
+                    }
+                }
+            }
+            foreach ($data['leave_balance_cards'] as $card) {
+                if (($card['slug'] ?? '') !== 'earned-leave') {
+                    continue;
+                }
+                // Prefer live card values so CF/Balance never "disappear" on All Months.
+                $cf = $card['carry_forward'] ?? $cf;
+                $bal = $card['balance'] ?? $bal;
+                break;
+            }
+            if ($cf === null) {
+                $cf = 0;
+            }
+            if ($bal === null) {
+                $bal = 0;
+            }
+            $data['summary'] = [
+                'carry_forward' => $cf,
+                'leave_taken' => round($taken_ytd, 2),
+                'earned_leave' => round($earned_ytd, 2),
+                'leave_balance' => $bal,
+                'month' => 0,
+                'month_name' => 'All months (current)',
+            ];
         }
 
         $this->load->view('admin/staff/leave_balance', $data);

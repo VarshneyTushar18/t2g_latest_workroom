@@ -179,7 +179,10 @@
       "department_ats": "[name='department_ats[]']",
     };
 
-    initDataTable(table_additional_timesheets,admin_url + 'timesheets/table_additional_timesheets', [0], [0],addtimesheetServerParams, [1, 'desc']);
+    initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [0], [10], addtimesheetServerParams, [0, 'desc']);
+    if ($.fn.DataTable.isDataTable(table_additional_timesheets)) {
+      table_additional_timesheets.DataTable().columns([0]).visible(false, false);
+    }
     $.each(addtimesheetServerParams, function() {
       $('#status_filter_ats').on('change', function() {
         table_additional_timesheets.DataTable().ajax.reload()

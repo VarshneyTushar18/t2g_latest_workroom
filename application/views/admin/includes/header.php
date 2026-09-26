@@ -102,7 +102,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
     $today_ymd = date('Y-m-d');
     $data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
-    $latest_wr_date = !empty($data_check_in_out[0]['date']) ? date('Y-m-d', strtotime($data_check_in_out[0]['date'])) : '';
 
     $html_list = '';
     $time_from_checkin = 999;
@@ -114,11 +113,12 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         $last_ts = strtotime($last_date);
 
         if ($last_type === 1) {
+            // Open check-in: window = THIS person's check-in + 13 hours (not calendar midnight).
             $hours = (time() - $last_ts) / 3600;
-            if ($hours < $cooldown_hours && $latest_wr_date === $today_ymd) {
+            if ($hours >= 0 && $hours < $cooldown_hours) {
                 $type_check_in_out = 1;
                 $time_from_checkin = $hours;
-                $html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('h:i:s A', $last_ts) . '</span>';
+                $html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('H:i:s', $last_ts) . '</span>';
             } else {
                 $type_check_in_out = 2;
                 $time_from_checkin = 999;
@@ -127,18 +127,18 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         } elseif ($last_type === 2) {
             $in_date = !empty($data_check_in_out[1]['date']) ? $data_check_in_out[1]['date'] : $last_date;
             $in_ts = strtotime($in_date);
+            // Still show session pills until 13h from THAT person's check-in (not midnight for everyone).
             $hours = (time() - $in_ts) / 3600;
 
-            if ($hours < $cooldown_hours && $latest_wr_date === $today_ymd) {
+            if ($hours >= 0 && $hours < $cooldown_hours) {
                 $type_check_in_out = 2;
                 $time_from_checkin = $hours;
                 $html_list = '';
-                if (!empty($data_check_in_out[1]['date']) && date('Y-m-d', $in_ts) === $today_ymd) {
-                    $html_list .= '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('h:i:s A', $in_ts) . '</span> ';
+                if (!empty($data_check_in_out[1]['date'])) {
+                    $html_list .= '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('H:i:s', $in_ts) . '</span> ';
                 }
-                $html_list .= '<span class="header-workroom-pill header-workroom-pill-out header-source-pill" title="Workroom web check-out"><span class="header-source-tag">Workroom</span> Check out : ' . Date('h:i:s A', $last_ts) . '</span>';
+                $html_list .= '<span class="header-workroom-pill header-workroom-pill-out header-source-pill" title="Workroom web check-out"><span class="header-source-tag">Workroom</span> Check out : ' . Date('H:i:s', $last_ts) . '</span>';
             } else {
-                // 13 hours cooldown passed or older day: disappear pills and start next day!
                 $type_check_in_out = 2;
                 $time_from_checkin = 999;
                 $html_list = '';
@@ -146,40 +146,54 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         }
     }
 
-    // Navbar Biomax pill: auto from today's biometric sheet (STRICTLY today only).
-    $biomax_checkin_label = '';
-    $biomax_is_checked_out = false;
-    $biomax_last_out_ts = 0;
+    // Navbar Biometric pill when sheet has punches and last swipe is within 13h.
+    // First check-in = first IN on sheet; break = sum of OUT→IN gaps from sheet (not Workroom).
+    $biometric_navbar_active = false;
+    $biometric_checkin_label = '';
+    $biometric_is_checked_out = false;
+    $biometric_last_out_ts = 0;
+    $biometric_break_summary = null;
 
     try {
+        if (!function_exists('timesheets_is_staff_wfh_on_date')) {
+            $CI->load->helper('timesheets/timesheets');
+        }
+        $on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
+            && timesheets_is_staff_wfh_on_date((int) get_staff_user_id(), date('Y-m-d'));
+
         $CI->load->model('biometric_model');
-        $biomax_today = $CI->biometric_model->get_staff_today_punch((int) get_staff_user_id());
-        if (is_array($biomax_today)) {
-            // Strict date verification: attendance_date MUST equal today (e.g. 12-Sep-2026).
-            $today_dmy = date('d-M-Y');
-            $row_date = trim((string) ($biomax_today['attendance_date'] ?? ''));
-            if (strcasecmp($today_dmy, $row_date) === 0) {
-                $bio_summary = $CI->biometric_model->get_biomax_punch_summary($biomax_today);
-                if ($bio_summary && !empty($bio_summary['first_time_formatted'])) {
-                    // Check 13-hour cooldown from first punch
-                    $bio_hours_elapsed = (time() - $bio_summary['first_ts']) / 3600;
-                    if ($bio_hours_elapsed < $cooldown_hours) {
-                        $biomax_checkin_label = $bio_summary['first_time_formatted'];
-                        $biomax_is_checked_out = $bio_summary['is_checked_out'];
-                        $biomax_last_out_ts = $bio_summary['last_ts'];
-                    }
+        $biometric_row = null;
+        if (!$on_wfh_today && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
+            $biometric_row = $CI->biometric_model->get_staff_active_punch((int) get_staff_user_id(), $cooldown_hours);
+        } elseif (!$on_wfh_today) {
+            $biometric_row = $CI->biometric_model->get_staff_today_punch((int) get_staff_user_id());
+        }
+        if (is_array($biometric_row)) {
+            $bio_summary = $CI->biometric_model->get_biometric_punch_summary($biometric_row);
+            if ($bio_summary) {
+                $biometric_navbar_active = true;
+                if (method_exists($CI->biometric_model, 'get_navbar_first_checkin_display')) {
+                    $biometric_checkin_label = (string) $CI->biometric_model->get_navbar_first_checkin_display($biometric_row);
+                } else {
+                    $biometric_checkin_label = (string) ($bio_summary['first_time_formatted'] ?? '');
+                }
+                if ($biometric_checkin_label === '' && !empty($bio_summary['first_ts'])) {
+                    $biometric_checkin_label = date('H:i:s', (int) $bio_summary['first_ts']);
+                }
+                $biometric_is_checked_out = $bio_summary['is_checked_out'];
+                $biometric_last_out_ts = $bio_summary['last_ts'];
+                if (method_exists($CI->biometric_model, 'get_biometric_break_summary')) {
+                    $biometric_break_summary = $CI->biometric_model->get_biometric_break_summary($biometric_row);
                 }
             }
         }
     } catch (Throwable $e) {
-        $biomax_checkin_label = '';
+        $biometric_navbar_active = false;
+        $biometric_checkin_label = '';
+        $biometric_break_summary = null;
     }
 
-    // If today's biometric report is synced:
-    // Show only [BIOMAX] Check in : hh:mm:ss AM, and hide all Workroom buttons (checkout & checkin).
-    // If today's biometric report is not yet synced (or WFH employee):
-    // Show Workroom [Check in]. As soon as biometric report comes alive, it takes the first punch and hides checkout.
-    // If no report arrives within 13 hours, Workroom auto-cooldown applies and resets for next day.
+    // Biometric available → show Biometric pill only. No biometric today → Workroom check in/out.
     ?>
 
     <nav>
@@ -317,12 +331,21 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         <a href="/admin/company_policies">Company Policies</a>
                     </li>
 
-                    <!-- Left: actions + status (Biomax punch when synced, else Workroom check in/out) -->
+                    <!-- Left: actions + status (Biometric punch when synced, else Workroom check in/out) -->
                     <li id="headerActionButtons" class="header-action-buttons check-time-btn">
-                        <?php if ($biomax_checkin_label !== '') { ?>
-                            <span class="header-biomax-pill" title="Office Biomax device punch (from sheet)">
-                                <span class="header-source-tag">Biomax</span> Check in : <?php echo html_escape($biomax_checkin_label); ?>
+                        <?php if ($biometric_navbar_active) { ?>
+                            <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
+                                <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
                             </span>
+                            <?php if (is_array($biometric_break_summary)) { ?>
+                            <span class="header-biometric-break-pill header-break-pill"
+                                title="<?php echo html_escape($biometric_break_summary['tooltip'] ?? ''); ?>"
+                                data-break-completed-secs="<?php echo (int) ($biometric_break_summary['completed_secs'] ?? 0); ?>"
+                                data-break-out-ts="<?php echo !empty($biometric_break_summary['on_break']) ? (int) ($biometric_break_summary['current_out_ts'] ?? 0) : 0; ?>">
+                                <span class="header-source-tag">Break</span>
+                                Total : <span class="header-break-live"><?php echo html_escape($biometric_break_summary['total_label']); ?></span>
+                            </span>
+                            <?php } ?>
                         <?php } else { ?>
                             <?php
                             if ($type_check_in_out != 1 && ($time_from_checkin >= 13 || $allows_updating_check_in_time == 1)) {
@@ -402,7 +425,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             text-transform: uppercase;
                             line-height: 1.35;
                         }
-                        .header-biomax-pill,
+                        .header-biometric-pill,
                         .header-workroom-pill {
                             display: inline-flex;
                             align-items: center;
@@ -426,12 +449,35 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             margin: 0 !important;
                             height: 24px;
                         }
-                        .header-biomax-pill {
+                        .header-biometric-pill {
                             background-color: #0a1140 !important;
                         }
-                        .header-biomax-pill .header-source-tag {
+                        .header-biometric-pill .header-source-tag {
                             background: rgba(96, 165, 250, 0.25);
                             color: #93c5fd;
+                        }
+                        .header-biometric-break-pill {
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 4px;
+                            padding: 3px 8px;
+                            border-radius: 5px;
+                            color: #fff !important;
+                            font-size: 11px;
+                            font-weight: 600;
+                            line-height: 1.2;
+                            white-space: nowrap;
+                            font-variant-numeric: tabular-nums;
+                            cursor: help;
+                            user-select: none;
+                            margin: 0 !important;
+                            height: 24px;
+                            background-color: #b45309 !important;
+                        }
+                        .header-biometric-break-pill .header-source-tag {
+                            background: rgba(0, 0, 0, 0.18);
+                            color: #fde68a;
                         }
                         .header-workroom-pill {
                             background-color: #ca8a04 !important;
@@ -446,6 +492,41 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             }
                         }
                     </style>
+                    <script>
+                    (function () {
+                        function formatBreak(secs) {
+                            secs = Math.max(0, parseInt(secs, 10) || 0);
+                            if (secs < 60) {
+                                return secs + 's';
+                            }
+                            var mins = Math.floor(secs / 60);
+                            if (mins < 60) {
+                                return mins + 'm';
+                            }
+                            var h = Math.floor(mins / 60);
+                            var m = mins % 60;
+                            return m > 0 ? (h + 'h ' + m + 'm') : (h + 'h');
+                        }
+                        document.querySelectorAll('.header-break-pill').forEach(function (pill) {
+                            var live = pill.querySelector('.header-break-live');
+                            if (!live) {
+                                return;
+                            }
+                            var completedSecs = parseInt(pill.getAttribute('data-break-completed-secs') || '0', 10);
+                            var outTs = parseInt(pill.getAttribute('data-break-out-ts') || '0', 10);
+                            function tick() {
+                                var currentSecs = outTs > 0
+                                    ? Math.max(0, Math.floor(Date.now() / 1000) - outTs)
+                                    : 0;
+                                live.textContent = formatBreak(completedSecs + currentSecs);
+                            }
+                            tick();
+                            if (outTs > 0) {
+                                setInterval(tick, 1000);
+                            }
+                        });
+                    })();
+                    </script>
                 </ul>
 
             </div>
@@ -626,9 +707,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         <li class="header-my-profile"><a href="<?php echo admin_url('profile'); ?>"><?php echo _l('nav_my_profile'); ?></a></li>
 
                         <li class="header-suggestion-box">
-                            <a href="#" id="openStaffSuggestionModal" class="open-staff-suggestion" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;">
-                                <i class="fa fa-lightbulb-o" style="margin-right: 6px;"></i> <?php echo _l('suggestion_box'); ?> Box
-                            </a>
+                            <a href="#" id="openStaffSuggestionModal" class="open-staff-suggestion" onclick="return window.openStaffSuggestionModal ? window.openStaffSuggestionModal(event) : false;"><?php echo _l('suggestion_box'); ?> Box</a>
                         </li>
 
                         <!-- <li class="header-my-timesheets"><a href="<?php echo admin_url('staff/timesheets'); ?>"><?php echo _l('my_timesheets'); ?></a>
@@ -769,6 +848,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     </div>
 </div>
 <style>
+/* Keep profile dropdown items left-aligned like My Profile / Logout */
+.header-user-profile > .dropdown-menu > li > a,
+.header-user-profile > .dropdown-menu > li.header-suggestion-box > a.open-staff-suggestion {
+    text-align: left !important;
+    display: block !important;
+    justify-content: flex-start !important;
+}
 #staffSuggestionModal {
     position: fixed !important;
     top: 0 !important;

@@ -339,7 +339,7 @@ class Biometric extends AdminController
     {
         set_alert(
             'warning',
-            'Manual Excel import is disabled. Attendance syncs automatically from Biomax every 2 minutes.'
+            'Manual Excel import is disabled. Attendance syncs automatically from Biometric every 2 minutes.'
         );
         redirect(admin_url('biometric/index'));
         return;

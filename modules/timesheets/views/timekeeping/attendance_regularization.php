@@ -127,13 +127,22 @@
                   </div>
                   <div class="t2g-reg-form" id="reg_apply_form" style="display:none;">
                     <h5>Apply for <span id="reg_form_date"></span></h5>
+                    <div id="apply_suggest_box" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:12px;color:#1e3a8a;">
+                      <div id="apply_recorded_summary" style="margin-bottom:6px;"></div>
+                      <div id="apply_suggest_text" style="margin-bottom:8px;"></div>
+                      <div id="apply_leave_deduct_text" style="margin-bottom:8px;font-weight:600;color:#9a3412;"></div>
+                      <button type="button" class="btn btn-default btn-xs" id="apply_suggest_btn">Suggest times for 9h</button>
+                      <span class="text-muted" style="margin-left:8px;">You can still edit times manually.</span>
+                    </div>
                     <div class="form-group">
                       <label>Time in <span class="text-danger">*</span></label>
-                      <input type="time" class="form-control" id="apply_time_in" required>
+                      <input type="time" class="form-control" id="apply_time_in" step="60" required>
                     </div>
                     <div class="form-group">
                       <label>Time out <span class="text-danger">*</span></label>
-                      <input type="time" class="form-control" id="apply_time_out" required>
+                      <input type="time" class="form-control" id="apply_time_out" step="60" required>
+                      <p class="text-muted" style="margin:6px 0 0;font-size:12px;">Minutes are allowed (e.g. 09:15–09:45 = 30 minutes).</p>
+                      <p class="text-info" style="margin:4px 0 0;font-size:12px;" id="apply_hours_preview"></p>
                     </div>
                     <div class="form-group">
                       <label>Reason <span class="text-danger">*</span></label>
@@ -307,6 +316,121 @@
     updateGapCount();
   }
 
+  function toMins(hhmm) {
+    if (!hhmm || hhmm === '—' || hhmm === '-') return null;
+    var p = String(hhmm).substring(0, 5).split(':');
+    if (p.length < 2) return null;
+    var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return (h * 60) + m;
+  }
+  function fromMins(mins) {
+    mins = Math.max(0, Math.min((23 * 60) + 59, Math.round(mins)));
+    return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60);
+  }
+  function lunchOverlapMins(inM, outM) {
+    // Match backend default lunch window used in regularisation hours.
+    var ls = 12 * 60, le = (12 * 60) + 30;
+    return Math.max(0, Math.min(outM, le) - Math.max(inM, ls));
+  }
+  function workMinsFromRange(inM, outM) {
+    if (inM === null || outM === null || outM <= inM) return 0;
+    return Math.max(0, outM - inM - lunchOverlapMins(inM, outM));
+  }
+  function fmtHm(mins) {
+    var h = Math.floor(mins / 60), m = Math.round(mins % 60);
+    if (m === 60) { h++; m = 0; }
+    return (h > 0 ? h + 'h ' : '') + m + 'm';
+  }
+  function parseHrsText(val) {
+    if (val === null || val === undefined || val === '' || val === '—') return null;
+    if (typeof val === 'number') return isNaN(val) ? null : val;
+    var n = parseFloat(String(val).replace('h', ''));
+    return isNaN(n) ? null : n;
+  }
+  function suggestTimesFor9h(day) {
+    var required = parseFloat(day.required_hours);
+    if (isNaN(required) || required <= 0) required = 9;
+    var requiredMins = Math.round(required * 60);
+    var recordedIn = toMins(day.first_in || day.check_in);
+    var recordedOut = toMins(day.last_out || day.check_out);
+    var shiftIn = toMins(day.shift_start);
+    if (shiftIn === null) shiftIn = (9 * 60) + 30;
+    var sugIn, sugOut, note;
+
+    function outForIn(inM) {
+      // Start with required + typical lunch, then correct using exact overlap.
+      var outM = inM + requiredMins + 30;
+      outM = inM + requiredMins + lunchOverlapMins(inM, outM);
+      if (outM > (23 * 60) + 59) outM = (23 * 60) + 59;
+      return outM;
+    }
+    function inForOut(outM) {
+      var inM = outM - requiredMins - 30;
+      if (inM < 0) inM = 0;
+      inM = outM - requiredMins - lunchOverlapMins(inM, outM);
+      if (inM < 0) inM = 0;
+      return inM;
+    }
+
+    if (recordedIn !== null) {
+      sugIn = recordedIn;
+      sugOut = outForIn(sugIn);
+      note = 'Kept your first punch and calculated time out to complete ' + required + 'h.';
+    } else if (recordedOut !== null) {
+      sugOut = recordedOut;
+      sugIn = inForOut(sugOut);
+      note = 'Kept your last punch and calculated time in to complete ' + required + 'h.';
+    } else {
+      sugIn = shiftIn;
+      sugOut = outForIn(sugIn);
+      note = 'No punches found — suggested window to complete ' + required + 'h.';
+    }
+
+    return {
+      required: required,
+      time_in: fromMins(sugIn),
+      time_out: fromMins(sugOut),
+      note: note,
+      recorded_in: recordedIn !== null ? fromMins(recordedIn) : null,
+      recorded_out: recordedOut !== null ? fromMins(recordedOut) : null,
+      recorded_hours: parseHrsText(day.actual_work_hrs) !== null
+        ? parseHrsText(day.actual_work_hrs)
+        : (typeof day.hours === 'number' ? day.hours : parseHrsText(day.total_work_hrs))
+    };
+  }
+
+  function applySuggestion(day, fillTimes) {
+    var s = suggestTimesFor9h(day);
+    var recBits = [];
+    if (s.recorded_in || s.recorded_out) {
+      recBits.push('Recorded: ' + (s.recorded_in || '—') + ' – ' + (s.recorded_out || '—'));
+    } else {
+      recBits.push('Recorded: no punches');
+    }
+    if (s.recorded_hours !== null && s.recorded_hours !== undefined) {
+      recBits.push(Number(s.recorded_hours).toFixed(2) + 'h');
+    }
+    $('#apply_recorded_summary').text(recBits.join(' · '));
+    $('#apply_suggest_text').text(
+      'To complete ' + s.required + 'h, suggested: ' + s.time_in + ' – ' + s.time_out + '. ' + s.note
+    );
+    var leaveDays = parseFloat(day.leave_days_current);
+    if (isNaN(leaveDays)) leaveDays = parseFloat(day.leave_days_if_regularised);
+    if (isNaN(leaveDays)) leaveDays = 0;
+    var leaveNow = leaveDays === 0.5 ? 'Half day (0.5 leave)' : (leaveDays >= 1 ? 'Absent (1 leave)' : 'Present (0 leave)');
+    $('#apply_leave_deduct_text').text(
+      'Current day: ' + leaveNow + '. On approval, leave balance will be adjusted to match corrected hours (Absent=1, Half day=0.5, Present=0).'
+    );
+    $('#apply_suggest_btn').data('day', day.date);
+    if (fillTimes) {
+      $('#apply_time_in').val(s.time_in);
+      $('#apply_time_out').val(s.time_out);
+      previewApplyHours();
+    }
+    return s;
+  }
+
   function showApplyForm(day) {
     if (!day) {
       $('#reg_empty_state').show();
@@ -316,9 +440,8 @@
     $('#reg_empty_state').hide();
     $('#reg_apply_form').show();
     $('#reg_form_date').text(day.date);
-    $('#apply_time_in').val(day.shift_start || '09:30');
-    $('#apply_time_out').val(day.shift_end || '18:30');
     $('#apply_reason').val('');
+    applySuggestion(day, true);
   }
 
   function shiftMonth(delta) {
@@ -413,6 +536,35 @@
     selectedDate = '';
     renderRegCalendar();
     showApplyForm(null);
+  });
+
+  function previewApplyHours() {
+    var tin = $('#apply_time_in').val();
+    var tout = $('#apply_time_out').val();
+    var $p = $('#apply_hours_preview');
+    if (!tin || !tout) { $p.text(''); return; }
+    var inM = toMins(tin), outM = toMins(tout);
+    if (inM === null || outM === null || outM <= inM) {
+      $p.text('Time out must be after time in.');
+      return;
+    }
+    var lunch = lunchOverlapMins(inM, outM);
+    var work = workMinsFromRange(inM, outM);
+    var target = 9 * 60;
+    var day = dayMap[selectedDate];
+    if (day && parseFloat(day.required_hours) > 0) target = Math.round(parseFloat(day.required_hours) * 60);
+    var msg = 'Work duration: ' + fmtHm(work) + ' (' + (work / 60).toFixed(2) + 'h)';
+    if (lunch > 0) msg += ' after ' + lunch + 'm lunch';
+    if (work + 0.5 >= target) msg += ' · meets ' + (target / 60) + 'h target';
+    else msg += ' · short by ' + fmtHm(target - work) + ' (need ' + (target / 60) + 'h)';
+    $p.text(msg);
+  }
+  $('#apply_time_in, #apply_time_out').on('change input', previewApplyHours);
+
+  $('#apply_suggest_btn').on('click', function() {
+    var day = dayMap[selectedDate];
+    if (!day) return;
+    applySuggestion(day, true);
   });
 
   $('#apply_submit_btn').on('click', function() {

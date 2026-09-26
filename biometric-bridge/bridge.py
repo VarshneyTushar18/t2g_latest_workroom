@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-T2G Workroom ↔ Biomax live sync bridge.
+T2G Workroom ↔ Biometric live sync bridge.
 
-Runs on an office PC that can reach the Biomax LAN API (e.g. 192.168.1.9:82).
+Runs on an office PC that can reach the Biometric LAN API (e.g. 192.168.1.9:82).
 Polls GetDeviceLogs, aggregates punches per employee/day, pushes to Workroom.
 """
 
@@ -135,7 +135,7 @@ def duration_hhmm(start: datetime, end: datetime) -> str:
 
 def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Biomax GetDeviceLogs returns punch rows.
+    Biometric GetDeviceLogs returns punch rows.
     Workroom expects one attendance row per employee per day.
     """
     buckets: dict[tuple[str, str], list[tuple[datetime, str, dict]]] = defaultdict(list)
@@ -252,7 +252,7 @@ def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "punch_records": ", ".join(punch_bits),
                 "status": "Present" if punches else "",
                 "location": str(punches[0][2].get("Location") or ""),
-                "remark": "biomax-bridge",
+                "remark": "biometric-bridge",
                 "last_punch_time": last.isoformat(sep=" "),
             }
         )
@@ -266,12 +266,13 @@ def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return records
 
 
-def fetch_biomax_logs_range(cfg: dict, from_date, to_date) -> list[dict[str, Any]]:
-    """One Biomax GetDeviceLogs call for an inclusive date range."""
-    api_url = (cfg.get("biomax_api_url") or "").strip().rstrip("?")
-    api_key = (cfg.get("biomax_api_key") or "").strip()
+def fetch_biometric_logs_range(cfg: dict, from_date, to_date) -> list[dict[str, Any]]:
+    """One Biometric GetDeviceLogs call for an inclusive date range."""
+    # Prefer biometric_* keys; fall back to legacy biomax_* if present.
+    api_url = (cfg.get("biometric_api_url") or cfg.get("biomax_api_url") or "").strip().rstrip("?")
+    api_key = (cfg.get("biometric_api_key") or cfg.get("biomax_api_key") or "").strip()
     if not api_url or not api_key:
-        logging.info("Biomax API URL/key not configured — skipping fetch")
+        logging.info("Biometric API URL/key not configured — skipping fetch")
         return []
 
     params = {
@@ -279,21 +280,22 @@ def fetch_biomax_logs_range(cfg: dict, from_date, to_date) -> list[dict[str, Any
         "FromDate": from_date.isoformat() if hasattr(from_date, "isoformat") else str(from_date),
         "ToDate": to_date.isoformat() if hasattr(to_date, "isoformat") else str(to_date),
     }
-    if cfg.get("biomax_serial_number"):
-        params["SerialNumber"] = cfg["biomax_serial_number"]
+    serial = cfg.get("biometric_serial_number") or cfg.get("biomax_serial_number")
+    if serial:
+        params["SerialNumber"] = serial
 
-    logging.info("Fetching Biomax logs %s → %s", params["FromDate"], params["ToDate"])
+    logging.info("Fetching Biometric logs %s → %s", params["FromDate"], params["ToDate"])
     resp = requests.get(api_url, params=params, timeout=120)
     resp.raise_for_status()
 
     try:
         payload = resp.json()
     except Exception:
-        logging.error("Biomax response is not JSON: %s", resp.text[:500])
+        logging.error("Biometric response is not JSON: %s", resp.text[:500])
         return []
 
     if isinstance(payload, dict) and payload.get("status") is False:
-        logging.error("Biomax API error: %s", payload.get("message") or payload)
+        logging.error("Biometric API error: %s", payload.get("message") or payload)
         return []
 
     if isinstance(payload, dict):
@@ -308,14 +310,14 @@ def fetch_biomax_logs_range(cfg: dict, from_date, to_date) -> list[dict[str, Any
         logs = payload
 
     if not isinstance(logs, list):
-        logging.error("Unexpected Biomax payload type: %s", type(payload))
+        logging.error("Unexpected Biometric payload type: %s", type(payload))
         return []
 
-    logging.info("Biomax returned %s punch log(s)", len(logs))
+    logging.info("Biometric returned %s punch log(s)", len(logs))
     return logs
 
 
-def fetch_biomax_records(cfg: dict, checkpoint: dict, *, force_from=None, force_to=None) -> list[dict[str, Any]]:
+def fetch_biometric_records(cfg: dict, checkpoint: dict, *, force_from=None, force_to=None) -> list[dict[str, Any]]:
     lookback_days = max(1, int(cfg.get("lookback_days") or 2))
     chunk_days = max(1, int(cfg.get("chunk_days") or 7))
     # Office is IST — do not use UTC midnight for "today".
@@ -335,7 +337,7 @@ def fetch_biomax_records(cfg: dict, checkpoint: dict, *, force_from=None, force_
     if force_to is not None:
         to_date = force_to if hasattr(force_to, "year") else datetime.strptime(str(force_to)[:10], "%Y-%m-%d").date()
     else:
-        # Biomax GetDeviceLogs often treats ToDate as end-exclusive / incomplete for
+        # Biometric GetDeviceLogs often treats ToDate as end-exclusive / incomplete for
         # the current day. Fetch through today+2 so today's punches always return.
         to_date = today + timedelta(days=2)
 
@@ -352,12 +354,12 @@ def fetch_biomax_records(cfg: dict, checkpoint: dict, *, force_from=None, force_
     if from_date > to_date:
         from_date, to_date = to_date, from_date
 
-    # Chunk long ranges — Biomax often truncates large windows
+    # Chunk long ranges — Biometric often truncates large windows
     all_logs: list[dict[str, Any]] = []
     cursor = from_date
     while cursor <= to_date:
         chunk_end = min(cursor + timedelta(days=chunk_days - 1), to_date)
-        chunk_logs = fetch_biomax_logs_range(cfg, cursor, chunk_end)
+        chunk_logs = fetch_biometric_logs_range(cfg, cursor, chunk_end)
         all_logs.extend(chunk_logs)
         cursor = chunk_end + timedelta(days=1)
         if cursor <= to_date:
@@ -429,7 +431,7 @@ def run_fix_today(cfg: dict) -> None:
 
     logging.info("=== FIX TODAY ===")
     logging.info("PC thinks today (IST) = %s", today.isoformat())
-    logging.info("Will fetch Biomax %s → %s", from_date.isoformat(), to_date.isoformat())
+    logging.info("Will fetch Biometric %s → %s", from_date.isoformat(), to_date.isoformat())
 
     # 1) Workroom reachable?
     health_url = (cfg.get("workroom_health_url") or "").strip()
@@ -446,10 +448,10 @@ def run_fix_today(cfg: dict) -> None:
     else:
         logging.warning("No workroom_health_url in config")
 
-    # 2) Biomax raw for today window
+    # 2) Biometric raw for today window
     try:
-        raw = fetch_biomax_logs_range(cfg, from_date, to_date)
-        logging.info("Biomax raw punches in window: %s", len(raw))
+        raw = fetch_biometric_logs_range(cfg, from_date, to_date)
+        logging.info("Biometric raw punches in window: %s", len(raw))
         if raw:
             sample = raw[0] if isinstance(raw[0], dict) else {}
             logging.info(
@@ -460,14 +462,14 @@ def run_fix_today(cfg: dict) -> None:
             )
         else:
             logging.error(
-                "Biomax returned ZERO punches for %s→%s. "
+                "Biometric returned ZERO punches for %s→%s. "
                 "Open SmartOffice and sync device logs for TODAY, then run fix_today.bat again.",
                 from_date,
                 to_date,
             )
             return
     except Exception as exc:
-        logging.exception("Biomax fetch failed: %s", exc)
+        logging.exception("Biometric fetch failed: %s", exc)
         logging.error("Is SmartOffice running at http://127.0.0.1:82 ?")
         return
 
@@ -484,7 +486,7 @@ def run_fix_today(cfg: dict) -> None:
     today_key = format_workroom_date(datetime(today.year, today.month, today.day))
     if today_key not in by_day:
         logging.error(
-            "NO ROWS FOR TODAY (%s). Biomax has punches but none dated today. "
+            "NO ROWS FOR TODAY (%s). Biometric has punches but none dated today. "
             "Check office PC date/time and SmartOffice device download.",
             today_key,
         )
@@ -505,7 +507,7 @@ def run_fix_today(cfg: dict) -> None:
     print("")
     print("Done. Check https://t2gworkroom.com/admin/biometric for", today_key)
     if today_key not in by_day:
-        print("WARNING: Biomax had no punches dated", today_key)
+        print("WARNING: Biometric had no punches dated", today_key)
         print("Fix SmartOffice device sync first, then run fix_today.bat again.")
 
 
@@ -515,9 +517,9 @@ def run_once(cfg: dict) -> None:
     # Live mode ignores one-shot backfill_from_date unless explicitly left set
     live_cfg = dict(cfg)
     live_cfg.pop("backfill_from_date", None)
-    records = fetch_biomax_records(live_cfg, checkpoint)
+    records = fetch_biometric_records(live_cfg, checkpoint)
     if not records:
-        logging.info("No Biomax attendance rows to sync")
+        logging.info("No Biometric attendance rows to sync")
         return
 
     result = push_to_workroom(cfg, records)
@@ -545,10 +547,10 @@ def run_backfill(cfg: dict, from_date_str: str | None = None) -> None:
     to_date = datetime.now().date()
     logging.info("BACKFILL starting %s → %s (chunked)", from_date, to_date)
 
-    records = fetch_biomax_records(cfg, {}, force_from=from_date, force_to=to_date)
+    records = fetch_biometric_records(cfg, {}, force_from=from_date, force_to=to_date)
     if not records:
         logging.warning(
-            "Backfill got 0 rows. Open Biomax API in browser for this range — "
+            "Backfill got 0 rows. Open Biometric API in browser for this range — "
             "if empty, devices are not downloading into SmartOffice."
         )
         return
@@ -612,7 +614,7 @@ def main() -> None:
     interval = max(60, int(cfg.get("poll_interval_seconds") or 120))
 
     logging.info("T2G biometric bridge started — interval %ss", interval)
-    logging.info("Biomax API: %s", cfg.get("biomax_api_url"))
+    logging.info("Biometric API: %s", cfg.get("biometric_api_url") or cfg.get("biomax_api_url"))
 
     while True:
         try:
