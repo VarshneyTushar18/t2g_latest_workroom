@@ -2,7 +2,10 @@
 
 defined('BASEPATH') or exit('No direct script access allowed');
 
-require_once 'google-client/vendor/autoload.php';
+$google_autoload = FCPATH . 'google-client/vendor/autoload.php';
+if (file_exists($google_autoload)) {
+    require_once $google_autoload;
+}
 
 class Assets extends AdminController
 {
@@ -14,10 +17,15 @@ class Assets extends AdminController
         parent::__construct();
         $this->load->model('assets_model');
 
-        $this->client = new Google_Client();
-        $this->client->setAuthConfig('google-client/hr-recruit-cv-429106-f3626e643c56.json');
-        $this->client->addScope(Google_Service_Drive::DRIVE);
-        $this->service = new Google_Service_Drive($this->client);
+        if (class_exists('Google_Client')) {
+            $this->client = new Google_Client();
+            $authConfig = FCPATH . 'google-client/hr-recruit-cv-429106-f3626e643c56.json';
+            if (is_file($authConfig)) {
+                $this->client->setAuthConfig($authConfig);
+            }
+            $this->client->addScope(Google_Service_Drive::DRIVE);
+            $this->service = new Google_Service_Drive($this->client);
+        }
 
     }
 
@@ -212,15 +220,14 @@ class Assets extends AdminController
 
     public function manage_assets($asset_id = '')
     {
-        if (!has_permission('assets', '', 'view') && !is_admin()) {
+        if (!has_permission('assets', '', 'view') && !is_admin() && !(function_exists('is_IT') && is_IT()) && !(function_exists('is_super_admin') && is_super_admin())) {
             access_denied('requests');
         }
-        $this->load->model('departments_model');
         $data['title'] = _l('assets');
         $data['unit'] = $this->assets_model->get_asset_unit();
         $data['group'] = $this->assets_model->get_asset_group();
         $data['location'] = $this->assets_model->get_asset_location();
-        $data['departments'] = $this->departments_model->get();
+        $data['departments'] = $this->assets_model->get_staff_departments();
         $data['asset_id'] = $asset_id;
         $this->load->view('manage_assets', $data);
     }
@@ -242,6 +249,104 @@ class Assets extends AdminController
         } elseif ('broken' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 6]);
         }
+    }
+
+    public function update_asset_status()
+    {
+        if (!has_permission('assets', '', 'edit') && !is_admin()) {
+            access_denied('assets');
+        }
+
+        $asset_id = (int) $this->input->post('asset_id');
+        $status = (int) $this->input->post('status');
+        $allowed_statuses = [1, 2, 3, 4, 5, 6, 7];
+
+        if (!$asset_id || !in_array($status, $allowed_statuses, true)) {
+            $this->output
+                ->set_status_header(400)
+                ->set_content_type('application/json')
+                ->set_output(json_encode(['success' => false, 'message' => 'Invalid asset status.']));
+            return;
+        }
+
+        $success = $this->assets_model->update_asset_status($asset_id, $status);
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode([
+                'success' => $success,
+                'message' => $success ? 'Asset status updated.' : 'Asset status was not updated.',
+            ]));
+    }
+
+    public function get_asset_sale_context($asset_id)
+    {
+        if (!has_permission('assets', '', 'edit') && !is_admin()) {
+            access_denied('assets');
+        }
+
+        $context = $this->assets_model->get_asset_sale_context((int) $asset_id);
+        $this->output->set_content_type('application/json')->set_output(json_encode([
+            'success' => (bool) $context,
+            'asset' => $context,
+        ]));
+    }
+
+    public function sell_asset()
+    {
+        if (!has_permission('assets', '', 'edit') && !is_admin()) {
+            access_denied('assets');
+        }
+
+        $data = $this->input->post();
+        $required = ['asset_id', 'quantity', 'sale_date', 'selling_price', 'buyer_name', 'handler_name', 'payment_method'];
+        foreach ($required as $field) {
+            if (empty($data[$field])) {
+                $this->output->set_status_header(400)->set_content_type('application/json')->set_output(json_encode([
+                    'success' => false,
+                    'message' => 'Please complete all required sale fields.',
+                ]));
+                return;
+            }
+        }
+
+        $sale_id = $this->assets_model->sell_asset($data);
+        if ($sale_id && !empty($_FILES['sale_attachments']['name'][0])) {
+            $this->load->model('misc_model');
+            $files = $_FILES['sale_attachments'];
+            $upload_path = ASSETS_UPLOAD_FOLDER . '/sales/' . $sale_id . '/';
+            _maybe_create_upload_path($upload_path);
+            $this->load->library('upload');
+            foreach ($files['name'] as $index => $name) {
+                if (empty($name)) {
+                    continue;
+                }
+                $_FILES['sale_attachment'] = [
+                    'name' => $files['name'][$index],
+                    'type' => $files['type'][$index],
+                    'tmp_name' => $files['tmp_name'][$index],
+                    'error' => $files['error'][$index],
+                    'size' => $files['size'][$index],
+                ];
+                $this->upload->initialize([
+                    'upload_path' => $upload_path,
+                    'allowed_types' => 'pdf|jpg|jpeg|png|gif|doc|docx|xls|xlsx|txt',
+                    'encrypt_name' => true,
+                ]);
+                if ($this->upload->do_upload('sale_attachment')) {
+                    $upload = $this->upload->data();
+                    $this->misc_model->add_attachment_to_database($sale_id, 'asset_sales', [[
+                        'file_name' => $upload['file_name'],
+                        'filetype' => $upload['file_type'],
+                    ]]);
+                }
+                $this->upload->reset_upload_config();
+            }
+            unset($_FILES['sale_attachment']);
+        }
+        $this->output->set_content_type('application/json')->set_output(json_encode([
+            'success' => (bool) $sale_id,
+            'message' => $sale_id ? 'Asset sale saved and asset marked as Sold.' : 'Asset cannot be sold. It may be allocated, already sold, or the quantity is invalid.',
+        ]));
     }
 
     public function asset()
@@ -389,14 +494,21 @@ class Assets extends AdminController
     {
         if ($this->input->post()) {
             $data = $this->input->post();
+            if (empty($data['acction_from'])) {
+                $data['acction_from'] = get_staff_user_id();
+            }
+            $redirect_to = !empty($data['redirect_to']) ? $data['redirect_to'] : '';
+            unset($data['redirect_to']);
+
             $allocation_data = $this->handle_allocation_image_upload();
             $data['images'] = $allocation_data['images'];
-            // echo '<pre>';
-            // print_r($allocation_data); die;
             $id = $this->assets_model->allocation_asset($data);
             if ($id) {
                 $message = _l('allocation_asset') . ' ' . _l('successfully');
                 set_alert('success', $message);
+                if ($redirect_to === 'allocation') {
+                    redirect(admin_url('assets/allocation'));
+                }
                 redirect(admin_url('assets/manage_assets#' . $data['assets']));
             }
         }
@@ -455,10 +567,19 @@ class Assets extends AdminController
     {
         if ($this->input->post()) {
             $data = $this->input->post();
+            if (empty($data['acction_from'])) {
+                $data['acction_from'] = get_staff_user_id();
+            }
+            $redirect_to = !empty($data['redirect_to']) ? $data['redirect_to'] : '';
+            unset($data['redirect_to']);
+
             $id = $this->assets_model->revoke_asset($data);
             if ($id) {
                 $message = _l('recalled_asset') . ' ' . _l('successfully');
                 set_alert('success', $message);
+                if ($redirect_to === 'eviction') {
+                    redirect(admin_url('assets/eviction'));
+                }
                 redirect(admin_url('assets/manage_assets#' . $data['assets']));
             }
         }
@@ -550,13 +671,33 @@ class Assets extends AdminController
 
     public function allocation()
     {
-        $data['title'] = _l('allocation');
+        $this->load->model('staff_model');
+        $data['title']  = _l('allocation');
+        $data['staffs'] = $this->staff_model->get('', ['active' => 1]);
+
+        // Assets that still have quantity available to allocate
+        $this->db->select('id, assets_code, assets_name, amount, total_allocation, asset_location');
+        $this->db->where('(amount - IFNULL(total_allocation, 0)) > 0', null, false);
+        $this->db->where('IFNULL(status, 1) !=', 3);
+        $this->db->order_by('assets_name', 'ASC');
+        $data['allocatable_assets'] = $this->db->get(db_prefix() . 'assets')->result_array();
+
         $this->load->view('allocation', $data);
     }
 
     public function eviction()
     {
-        $data['title'] = _l('eviction');
+        $this->load->model('staff_model');
+        $data['title']  = _l('eviction');
+        $data['staffs'] = $this->staff_model->get('', ['active' => 1]);
+
+        // Assets that currently have allocations to revoke
+        $this->db->select('id, assets_code, assets_name, amount, total_allocation, asset_location');
+        $this->db->where('IFNULL(total_allocation, 0) > 0', null, false);
+        $this->db->where('IFNULL(status, 1) !=', 3);
+        $this->db->order_by('assets_name', 'ASC');
+        $data['revokable_assets'] = $this->db->get(db_prefix() . 'assets')->result_array();
+
         $this->load->view('eviction', $data);
     }
 
@@ -720,9 +861,91 @@ class Assets extends AdminController
     }
 	public function assets_dashboard()
 	{
-		$data['result'] = $this->assets_model->get_staff_departments();
-		//echo"<pre>"; print_r($data);die;
-		 $this->load->view('assets_dashboard', $data);
+		if (!has_permission('assets', '', 'view') && !is_admin() && !(function_exists('is_IT') && is_IT()) && !(function_exists('is_super_admin') && is_super_admin())) {
+			access_denied('assets');
+		}
+
+		$stats = $this->assets_model->get_dashboard_stats();
+		$data['total_assets']         = $stats['total'];
+		$data['assigned_assets']      = $stats['assigned'];
+		$data['available_assets']     = $stats['available'];
+		$data['damaged_assets']       = $stats['damaged'];
+		$data['out_of_warranty']      = $stats['out_of_warranty'];
+		$data['not_available_assets'] = $stats['not_available'];
+		$data['asset_types']          = $stats['types'];
+		$data['assets_by_department'] = $this->assets_model->get_assets_by_department();
+        $data['asset_lookup_staff']   = $this->assets_model->get_asset_lookup_staff();
+		$data['title']                = 'IT Assets Dashboard';
+
+		$this->load->view('assets_dashboard', $data);
+	}
+
+	public function search_assets()
+	{
+		if (!has_permission('assets', '', 'view') && !is_admin() && !(function_exists('is_IT') && is_IT()) && !(function_exists('is_super_admin') && is_super_admin())) {
+			ajax_access_denied();
+		}
+
+		$term = $this->input->get('q');
+		$rows = $this->assets_model->search_assets($term, 15);
+		$out  = [];
+		foreach ($rows as $row) {
+			$out[] = [
+				'id'         => (int) $row['id'],
+				'code'       => $row['assets_code'],
+				'name'       => $row['assets_name'],
+				'group'      => $row['group_name'] ?: 'Uncategorized',
+				'assigned'   => ((int) $row['total_allocation'] > 0),
+				'url'        => admin_url('assets/manage_assets/' . (int) $row['id']),
+			];
+		}
+
+		header('Content-Type: application/json');
+		echo json_encode($out);
+	}
+
+	public function get_asset_history()
+	{
+		if (!has_permission('assets', '', 'view') && !is_admin() && !(function_exists('is_IT') && is_IT()) && !(function_exists('is_super_admin') && is_super_admin())) {
+			ajax_access_denied();
+		}
+
+		$asset_id = (int) $this->input->get('asset_id');
+		$asset    = $this->assets_model->get($asset_id);
+		if (!$asset) {
+			header('Content-Type: application/json');
+			echo json_encode(['success' => false, 'message' => 'Asset not found', 'history' => []]);
+			return;
+		}
+
+		$rows = $this->assets_model->get_asset_action_history($asset_id);
+		$history = [];
+		foreach ($rows as $row) {
+			$history[] = [
+				'id'               => (int) $row['id'],
+				'code'             => $row['acction_code'],
+				'type'             => $row['type'],
+				'type_label'       => _l($row['type']),
+				'amount'           => (int) $row['amount'],
+				'time'             => _dt($row['time_acction']),
+				'location'         => $row['acction_location'],
+				'reason'           => $row['acction_reason'],
+				'employee'         => trim(($row['to_firstname'] ?? '') . ' ' . ($row['to_lastname'] ?? '')),
+				'employee_id'      => $row['to_empid'] ?? '',
+				'action_by'        => trim(($row['from_firstname'] ?? '') . ' ' . ($row['from_lastname'] ?? '')),
+			];
+		}
+
+		header('Content-Type: application/json');
+		echo json_encode([
+			'success' => true,
+			'asset'   => [
+				'id'   => (int) $asset->id,
+				'code' => $asset->assets_code,
+				'name' => $asset->assets_name,
+			],
+			'history' => $history,
+		]);
 	}
 	
 	public function getDepartmentStaff()
@@ -735,9 +958,8 @@ class Assets extends AdminController
 	
 	public function getFilterData()
 	{
-		$dept = $_POST['department'];
 		$empid = $_POST['employee'];
-		$data['emp'] = $this->assets_model->getDataFilter($dept,$empid);
+        $data['emp'] = $this->assets_model->getDataFilter($empid);
 		//echo"<pre>"; print_r($data);die;
 		echo json_encode($data['emp']);
 	}

@@ -8,6 +8,7 @@ $aColumns = [
     'assets_code',
     'assets_name',
     'asset_group',
+    'total_damages',
     'date_buy',
     'total_allocation',
     'amount',
@@ -40,10 +41,12 @@ if (isset($status)) {
         array_push($where, 'AND total_lost > 0');
     } elseif (6 == $status) {
         array_push($where, 'AND total_damages > 0');
+    } elseif (7 == $status) {
+        array_push($where, 'AND status = 3 AND status_override = 1');
     }
 }
 // $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['id', 'description', 'warranty_period', 'asset_location', 'depreciation', 'series', 'supplier_name', 'supplier_address', 'supplier_phone', 'unit_name', 'group_name', db_prefix() . 'departments.name as dpm_name', 'visible_to_client', 'company'], ' GROUP BY ' . db_prefix() . 'assets.id');
-$result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['id', 'description', 'warranty_period', 'asset_location', 'depreciation', 'series', 'supplier_name', 'supplier_address', 'supplier_phone', 'unit_name', 'group_name', db_prefix() . 'departments.name as dpm_name', 'visible_to_client', 'company'], ' GROUP BY tblassets.id, file_id, asset_image, assets_code, assets_name, asset_group, date_buy, total_allocation, amount, unit_price, unit, department, belongs_to, description, warranty_period, asset_location, depreciation, series, supplier_name, supplier_address, supplier_phone, unit_name, group_name, tbldepartments.name, visible_to_client, company');
+ $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['id', 'description', 'warranty_period', 'asset_location', 'depreciation', 'series', 'supplier_name', 'supplier_address', 'supplier_phone', 'unit_name', 'group_name', db_prefix() . 'departments.name as dpm_name', 'visible_to_client', 'company', 'total_lost', 'total_liquidation', 'total_warranty', 'status', 'status_override'], ' GROUP BY tblassets.id, file_id, asset_image, assets_code, assets_name, asset_group, date_buy, total_allocation, amount, total_damages, unit_price, unit, department, belongs_to, description, warranty_period, asset_location, depreciation, series, supplier_name, supplier_address, supplier_phone, unit_name, group_name, tbldepartments.name, visible_to_client, company, total_lost, total_liquidation, total_warranty, status, status_override');
 
 
 $output  = $result['output'];
@@ -68,6 +71,29 @@ foreach ($rResult as $aRow) {
             $_data = $aRow['dpm_name'];
         } elseif ('amount' == $aColumns[$i]) {
             $_data = $aRow['amount'] - $aRow['total_allocation'];
+        } elseif ('total_damages' == $aColumns[$i]) {
+            $status_labels = [
+                1 => ['Available', '#dcfce7', '#22c55e', '#166534'],
+                2 => ['Allocate', '#dbeafe', '#3b82f6', '#1d4ed8'],
+                3 => ['Sold', '#f3e8ff', '#a855f7', '#7e22ce'],
+                4 => ['Liquidated', '#fef3c7', '#f59e0b', '#92400e'],
+                5 => ['Lost', '#fee2e2', '#ef4444', '#b91c1c'],
+                6 => ['Broken', '#ffedd5', '#f97316', '#c2410c'],
+                7 => ['Under repair', '#cffafe', '#06b6d4', '#0e7490'],
+            ];
+            $current_status = (int) $aRow['status'];
+            if (!(int) $aRow['status_override']) {
+                $current_status = (int) $aRow['total_damages'] > 0 ? 6 : ((int) $aRow['total_allocation'] > 0 ? 2 : 1);
+            }
+            $status_labels[2][0] = (int) $aRow['total_allocation'] > 0 ? 'Allocated' : 'Allocate';
+            $status_options = '';
+            foreach ($status_labels as $status_value => $status_label) {
+                $selected = $current_status === $status_value ? ' selected' : '';
+                $status_options .= '<option value="' . $status_value . '"' . $selected . '>' . $status_label[0] . '</option>';
+            }
+            $current_colors = $status_labels[$current_status];
+            $status_style = 'background-color:' . $current_colors[1] . ' !important;border-color:' . $current_colors[2] . ' !important;color:' . $current_colors[3] . ' !important;';
+            $_data = '<select style="' . $status_style . '" class="form-control input-sm asset-status-select asset-status-' . $current_status . '" data-asset-id="' . (int) $aRow['id'] . '" data-previous-value="' . $current_status . '"' . (has_permission('assets', '', 'edit') || is_admin() ? '' : ' disabled') . '>' . $status_options . '</select>';
         } elseif ('assets_name' == $aColumns[$i]) {
             $name = '<a href="' . admin_url('assets/manage_assets/' . $aRow['id']) . '" onclick="init_asset(' . $aRow['id'] . '); return false;">' . $aRow['assets_name'] . '</a>';
 
@@ -95,7 +121,7 @@ foreach ($rResult as $aRow) {
 
             $name .= '</div>';
 
-            $_data = $name;
+            $_data = '<div class="asset-name-cell">' . $name . '</div>';
         } elseif ('assets_code' == $aColumns[$i]) {
             $_data = '<a href="' . admin_url('assets/manage_assets/' . $aRow['id']) . '" onclick="init_asset(' . $aRow['id'] . '); return false;">' . $aRow['assets_code'] . '</a>';
         } elseif ('asset_image' == $aColumns[$i]) {

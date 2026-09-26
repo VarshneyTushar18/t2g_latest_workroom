@@ -77,8 +77,14 @@
                     <div class="col-md-12">
                         <div class="attachment">
                             <div class="form-group">
-                                <label for="attachment" class="control-label"><small class="req text-danger">* </small><?php echo 'Upload Documents' ?></label>
-                                <input type="file" extension="gif,png,jpg,jpeg,pdf" filesize="<?php echo file_upload_max_size(); ?>" class="form-control" name="images[]" id="images" multiple required>
+                                <label class="control-label"><small class="req text-danger">* </small><?php echo 'Upload Documents' ?></label>
+                                <div>
+                                    <label for="allocation_images" class="btn btn-default">
+                                        <i class="fa fa-paperclip"></i> Attach files
+                                    </label>
+                                    <input type="file" extension="gif,jpg,jpeg,pdf" filesize="<?php echo file_upload_max_size(); ?>" name="images[]" id="allocation_images" multiple required style="display: none;" accept=".gif,.jpg,.jpeg,.pdf">
+                                    <span id="allocation_attachment_count" class="text-muted mleft10">No files selected</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -130,6 +136,11 @@
         }
     });
     $('.selectpicker').selectpicker({});
+
+    $('#allocation_images').on('change', function() {
+        var count = this.files ? this.files.length : 0;
+        $('#allocation_attachment_count').text(count ? count + ' file' + (count === 1 ? '' : 's') + ' selected' : 'No files selected');
+    });
 
 
     // function will put the manager ud

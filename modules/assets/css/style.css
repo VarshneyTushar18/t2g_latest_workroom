@@ -44,3 +44,26 @@
 .zoom:hover {
   transform: scale(1.4); 
 }
+
+.asset-status-select {
+	border-width: 2px;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 700;
+	min-width: 118px;
+	transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.asset-status-select option {
+	background: #fff;
+	color: #1f2937;
+	font-weight: 600;
+}
+
+.asset-status-1 { background: #dcfce7; border-color: #22c55e; color: #166534; }
+.asset-status-2 { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
+.asset-status-3 { background: #f3e8ff; border-color: #a855f7; color: #7e22ce; }
+.asset-status-4 { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+.asset-status-5 { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+.asset-status-6 { background: #ffedd5; border-color: #f97316; color: #c2410c; }
+.asset-status-7 { background: #cffafe; border-color: #06b6d4; color: #0e7490; }
