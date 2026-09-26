@@ -17,7 +17,23 @@ defined('BASEPATH') or exit('No direct script access allowed');
 * environments.
 *
 */
-define('APP_BASE_URL', 'https://t2gworkroom.com/');
+$app_is_local = isset($_SERVER['HTTP_HOST'])
+    && (stripos($_SERVER['HTTP_HOST'], 'localhost') !== false || stripos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false);
+
+if ($app_is_local) {
+    $app_scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $app_host   = $_SERVER['HTTP_HOST'];
+    $app_path   = '';
+    if (!empty($_SERVER['SCRIPT_NAME'])) {
+        $app_path = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+    }
+    if ($app_path === '/' || $app_path === '.') {
+        $app_path = '';
+    }
+    define('APP_BASE_URL', rtrim($app_scheme . '://' . $app_host . $app_path, '/') . '/');
+} else {
+    define('APP_BASE_URL', 'https://t2gworkroom.com/');
+}
 
 /*
 * --------------------------------------------------------------------------
@@ -48,7 +64,7 @@ define('APP_DB_USERNAME', 'root');
 /**
  * The password used to connect to the database
  */
-define('APP_DB_PASSWORD', 'Testpassword@123');
+define('APP_DB_PASSWORD', $app_is_local ? '' : 'Testpassword@123');
 
 /**
  * The name of the database you want to connect to

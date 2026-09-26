@@ -22,6 +22,9 @@ class timesheets_model extends app_model
 	/** @var array|null null = not preloaded */
 	protected $att_day_off_rows = null;
 
+	/** Hours from first check-in during which all punches belong to the same attendance session. */
+	protected const ATTENDANCE_SESSION_WINDOW_HOURS = 13;
+
 	public function __construct()
 	{
 
@@ -19216,6 +19219,18 @@ public function add_requisition_ajax($data)
 
 		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $from, $to);
 
+		$range_from = date('Y-m-d', strtotime($from . ' -1 day'));
+		$range_to = date('Y-m-d', strtotime($to . ' +1 day'));
+		$timeline_events = $this->collect_attendance_timeline_events($staff_id, $range_from, $range_to, $wfh_dates);
+		$attendance_sessions = $this->build_attendance_sessions($timeline_events, self::ATTENDANCE_SESSION_WINDOW_HOURS);
+		$sessions_by_start = $this->index_attendance_sessions_by_start_date($attendance_sessions);
+		$session_event_at = [];
+		foreach ($attendance_sessions as $att_session) {
+			foreach ($att_session['events'] as $ev) {
+				$session_event_at[(int) ($ev['at'] ?? 0)] = true;
+			}
+		}
+
 		$days = [];
 		for ($d = 1; $d <= $days_in_month; $d++) {
 			$date = sprintf('%04d-%02d-%02d', $year, $month, $d);
@@ -19229,26 +19244,46 @@ public function add_requisition_ajax($data)
 			$weekend_blocks_reg = false;
 			$reg = $reg_by_date[$date] ?? null;
 
-			$day_bio = $this->build_calendar_biometric_events_for_date($date, $bio_by_date, $bio_daily_by_date);
 			$cio_for_day = $cio_by_date[$date] ?? [];
 			$is_wfh_day = !empty($wfh_dates[$date]);
 			$attendance_source = 'none';
+			$session = $sessions_by_start[$date] ?? null;
 
 			if ($is_wfh_day) {
-				$day_bio = [];
 				$attendance_source = 'wfh';
-			} elseif (!empty($day_bio)) {
-				$cio_for_day = [];
-				$attendance_source = 'biometric';
-			} elseif (!empty($cio_for_day)) {
-				$attendance_source = 'workroom';
+				$punch = $this->analyze_day_punches($cio_for_day, [], 'WFH');
+			} elseif ($session && !empty($session['events'])) {
+				$has_bio = false;
+				foreach ($session['events'] as $ev) {
+					if (($ev['source'] ?? '') === 'Biometric') {
+						$has_bio = true;
+						break;
+					}
+				}
+				$attendance_source = $has_bio ? 'biometric' : 'workroom';
+				$punch = $this->analyze_session_punches($session['events']);
+			} else {
+				$cio_for_day = array_values(array_filter($cio_for_day, function ($row) use ($session_event_at) {
+					$at = strtotime($row['date'] ?? '');
+					return $at && empty($session_event_at[$at]);
+				}));
+				$day_bio = $this->build_calendar_biometric_events_for_date($date, $bio_by_date, $bio_daily_by_date);
+				$day_bio = array_values(array_filter($day_bio, function ($row) use ($date, $session_event_at) {
+					$at = strtotime($date . ' ' . substr($row['time'] ?? '00:00:00', 0, 8));
+					return $at && empty($session_event_at[$at]);
+				}));
+				if (!empty($day_bio)) {
+					$cio_for_day = [];
+					$attendance_source = 'biometric';
+				} elseif (!empty($cio_for_day)) {
+					$attendance_source = 'workroom';
+				}
+				$punch = $this->analyze_day_punches(
+					$cio_for_day,
+					$day_bio,
+					'Workroom'
+				);
 			}
-
-			$punch = $this->analyze_day_punches(
-				$cio_for_day,
-				$day_bio,
-				$is_wfh_day ? 'WFH' : 'Workroom'
-			);
 			$day_swipes = $punch['swipes'];
 			$hours = $punch['hours'];
 			if ($hours <= 0 && $ts && is_numeric($ts['value'])) {
@@ -19682,6 +19717,388 @@ public function add_requisition_ajax($data)
 		return $dates;
 	}
 
+	/**
+	 * Merge workroom + biometric punches into a single timeline (full datetime).
+	 *
+	 * @param array<string, true> $wfh_dates
+	 * @return array<int, array{at:int,time:string,type:string,source:string,door:string}>
+	 */
+	protected function collect_attendance_timeline_events($staff_id, $range_from, $range_to, array $wfh_dates)
+	{
+		$staff_id = (int) $staff_id;
+		$events = [];
+
+		if (file_exists(APPPATH . 'models/Biometric_model.php')) {
+			$this->load->model('biometric_model');
+			$bio_swipe_count_by_date = [];
+			$swipes = $this->biometric_model->get_swipes([
+				'from' => $range_from,
+				'to' => $range_to,
+				'staff' => $staff_id,
+			]);
+			foreach ($swipes as $sw) {
+				if (empty($sw['swipe_sort'])) {
+					continue;
+				}
+				$at = strtotime($sw['swipe_sort']);
+				if (!$at) {
+					continue;
+				}
+				$d = date('Y-m-d', $at);
+				if (!empty($wfh_dates[$d])) {
+					continue;
+				}
+				$type = strtoupper((string) ($sw['in_out'] ?? ''));
+				if ($type !== 'IN' && $type !== 'OUT') {
+					continue;
+				}
+				$events[] = [
+					'at' => $at,
+					'time' => date('H:i:s', $at),
+					'type' => $type,
+					'source' => 'Biometric',
+					'door' => $sw['door'] ?? 'Biometrics swipe',
+				];
+				$bio_swipe_count_by_date[$d] = ($bio_swipe_count_by_date[$d] ?? 0) + 1;
+			}
+
+			$staff_code_row = $this->db->query(
+				'SELECT s.staff_identifi, i.empid
+				 FROM ' . db_prefix() . 'staff s
+				 LEFT JOIN ' . db_prefix() . 'staff_info i ON i.staffid = s.staffid
+				 WHERE s.staffid = ?
+				 LIMIT 1',
+				[$staff_id]
+			)->row();
+			$codes = [];
+			if ($staff_code_row) {
+				foreach (['staff_identifi', 'empid'] as $field) {
+					$code = trim((string) ($staff_code_row->{$field} ?? ''));
+					if ($code !== '') {
+						$codes[$code] = true;
+					}
+				}
+			}
+			$codes = array_keys($codes);
+			if (!empty($codes)) {
+				$month_keys = [];
+				$cursor = strtotime($range_from);
+				$end = strtotime($range_to);
+				while ($cursor && $end && $cursor <= $end) {
+					$month_keys[date('M-Y', $cursor)] = true;
+					$cursor = strtotime('+1 month', strtotime(date('Y-m-01', $cursor)));
+				}
+				$placeholders = implode(',', array_fill(0, count($codes), '?'));
+				foreach (array_keys($month_keys) as $month_suffix) {
+					$params = $codes;
+					$params[] = '%-' . $month_suffix;
+					$bio_daily_rows = $this->db->query(
+						'SELECT attendance_date, a_in_time, a_out_time, punch_records
+						FROM ' . db_prefix() . 'biometric_report
+						WHERE TRIM(employee_code) IN (' . $placeholders . ') AND attendance_date LIKE ?',
+						$params
+					)->result_array();
+					foreach ($bio_daily_rows as $row) {
+						if (!$this->biometric_report_row_has_punches($row)) {
+							continue;
+						}
+						$att_dt = DateTime::createFromFormat('d-M-Y', $row['attendance_date']);
+						if (!$att_dt) {
+							continue;
+						}
+						$ymd = $att_dt->format('Y-m-d');
+						if ($ymd < $range_from || $ymd > $range_to || !empty($wfh_dates[$ymd])) {
+							continue;
+						}
+						$punch_rows = $this->parse_biometric_punch_records((string) ($row['punch_records'] ?? ''));
+						$daily_count = count($punch_rows);
+						if ($daily_count === 0) {
+							$daily_count = (!empty($row['a_in_time']) ? 1 : 0) + (!empty($row['a_out_time']) ? 1 : 0);
+						}
+						$swipe_count = (int) ($bio_swipe_count_by_date[$ymd] ?? 0);
+						if ($swipe_count > 0 && $swipe_count >= $daily_count && $daily_count > 0) {
+							continue;
+						}
+						if (empty($punch_rows)) {
+							$in_time = $this->normalize_bio_time($row['a_in_time'] ?? '');
+							$out_time = $this->normalize_bio_time($row['a_out_time'] ?? '');
+							if ($in_time !== '') {
+								$punch_rows[] = ['time' => $in_time, 'type' => 'IN', 'source' => 'Biometric', 'door' => 'Biometrics summary'];
+							}
+							if ($out_time !== '') {
+								$punch_rows[] = ['time' => $out_time, 'type' => 'OUT', 'source' => 'Biometric', 'door' => 'Biometrics summary'];
+							}
+						}
+						foreach ($punch_rows as $pr) {
+							$type = strtoupper((string) ($pr['type'] ?? ''));
+							if ($type !== 'IN' && $type !== 'OUT') {
+								continue;
+							}
+							$at = strtotime($ymd . ' ' . substr($pr['time'], 0, 8));
+							if (!$at) {
+								continue;
+							}
+							$events[] = [
+								'at' => $at,
+								'time' => date('H:i:s', $at),
+								'type' => $type,
+								'source' => 'Biometric',
+								'door' => $pr['door'] ?? 'Biometrics swipe',
+							];
+						}
+					}
+				}
+			}
+		}
+
+		$bio_calendar_dates = [];
+		foreach ($events as $ev) {
+			$bio_calendar_dates[date('Y-m-d', $ev['at'])] = true;
+		}
+
+		$cio_rows = $this->db->query(
+			'SELECT date, type_check
+			FROM ' . db_prefix() . 'check_in_out
+			WHERE staff_id = ? AND DATE(date) BETWEEN ? AND ?
+			ORDER BY date ASC',
+			[$staff_id, $range_from, $range_to]
+		)->result_array();
+		foreach ($cio_rows as $row) {
+			$at = strtotime($row['date']);
+			if (!$at) {
+				continue;
+			}
+			$d = date('Y-m-d', $at);
+			if (!empty($wfh_dates[$d]) || !empty($bio_calendar_dates[$d])) {
+				continue;
+			}
+			$events[] = [
+				'at' => $at,
+				'time' => date('H:i:s', $at),
+				'type' => ((int) $row['type_check'] === 2) ? 'OUT' : 'IN',
+				'source' => 'Workroom',
+				'door' => 'Workroom check-in/out',
+			];
+		}
+
+		usort($events, function ($a, $b) {
+			return ($a['at'] ?? 0) <=> ($b['at'] ?? 0);
+		});
+
+		$deduped = [];
+		foreach ($events as $ev) {
+			$type = $ev['type'] ?? '';
+			if ($type !== 'IN' && $type !== 'OUT') {
+				$deduped[] = $ev;
+				continue;
+			}
+			$keep = true;
+			if (!empty($deduped)) {
+				$prev = $deduped[count($deduped) - 1];
+				if (($prev['type'] ?? '') === $type && abs(($ev['at'] ?? 0) - ($prev['at'] ?? 0)) <= 120) {
+					if (($ev['source'] ?? '') === 'Biometric' && ($prev['source'] ?? '') === 'Workroom') {
+						$deduped[count($deduped) - 1] = $ev;
+						$keep = false;
+					} else {
+						$keep = false;
+					}
+				}
+			}
+			if ($keep) {
+				$deduped[] = $ev;
+			}
+		}
+
+		return $deduped;
+	}
+
+	/**
+	 * @param array<int, array{at:int,time:string,type:string,source:string,door:string}> $events
+	 * @return array<int, array{start_at:int,start_date:string,end_at:int,events:array}>
+	 */
+	protected function build_attendance_sessions(array $events, $window_hours)
+	{
+		$window_sec = max(1, (float) $window_hours) * 3600;
+		$sessions = [];
+		$n = count($events);
+		$i = 0;
+
+		while ($i < $n) {
+			while ($i < $n && ($events[$i]['type'] ?? '') !== 'IN') {
+				$i++;
+			}
+			if ($i >= $n) {
+				break;
+			}
+
+			$start_at = (int) $events[$i]['at'];
+			$end_at = $start_at + (int) $window_sec;
+			$session_events = [];
+
+			while ($i < $n && (int) $events[$i]['at'] <= $end_at) {
+				$session_events[] = $events[$i];
+				$i++;
+			}
+
+			if (!empty($session_events)) {
+				$sessions[] = [
+					'start_at' => $start_at,
+					'start_date' => date('Y-m-d', $start_at),
+					'end_at' => $end_at,
+					'events' => $session_events,
+				];
+			}
+		}
+
+		return $sessions;
+	}
+
+	/**
+	 * @param array<int, array{start_at:int,start_date:string,end_at:int,events:array}> $sessions
+	 * @return array<string, array{start_at:int,start_date:string,end_at:int,events:array}>
+	 */
+	protected function index_attendance_sessions_by_start_date(array $sessions)
+	{
+		$by = [];
+		foreach ($sessions as $session) {
+			$d = $session['start_date'] ?? '';
+			if ($d === '') {
+				continue;
+			}
+			if (!isset($by[$d]) || count($session['events']) > count($by[$d]['events'])) {
+				$by[$d] = $session;
+			}
+		}
+
+		return $by;
+	}
+
+	/**
+	 * Hours/break from a 13h attendance session (first IN anchor, break = OUT→IN gaps).
+	 *
+	 * @param array<int, array{at:int,time:string,type:string,source:string,door:string}> $events
+	 */
+	protected function analyze_session_punches(array $events)
+	{
+		if (empty($events)) {
+			return $this->analyze_day_punches([], [], 'Workroom');
+		}
+
+		usort($events, function ($a, $b) {
+			return ($a['at'] ?? 0) <=> ($b['at'] ?? 0);
+		});
+
+		$deduped = [];
+		foreach ($events as $ev) {
+			$type = $ev['type'] ?? '';
+			if ($type !== 'IN' && $type !== 'OUT') {
+				$deduped[] = $ev;
+				continue;
+			}
+			$keep = true;
+			if (!empty($deduped)) {
+				$prev = $deduped[count($deduped) - 1];
+				if (($prev['type'] ?? '') === $type && abs(($ev['at'] ?? 0) - ($prev['at'] ?? 0)) <= 120) {
+					$keep = false;
+				}
+			}
+			if ($keep) {
+				$deduped[] = $ev;
+			}
+		}
+		$events = $deduped;
+
+		$first_in_at = null;
+		foreach ($events as $ev) {
+			if (($ev['type'] ?? '') === 'IN') {
+				$first_in_at = (int) $ev['at'];
+				break;
+			}
+		}
+		if ($first_in_at !== null) {
+			$events = array_values(array_filter($events, function ($ev) use ($first_in_at) {
+				if (($ev['type'] ?? '') !== 'OUT') {
+					return true;
+				}
+				return (int) ($ev['at'] ?? 0) > $first_in_at;
+			}));
+		}
+
+		$ins = [];
+		$outs = [];
+		foreach ($events as $ev) {
+			if (($ev['type'] ?? '') === 'OUT') {
+				$outs[] = $ev;
+			} elseif (($ev['type'] ?? '') === 'IN') {
+				$ins[] = $ev;
+			}
+		}
+
+		$check_in = $ins ? date('H:i', (int) $ins[0]['at']) : '';
+		$check_out = $outs ? date('H:i', (int) $outs[count($outs) - 1]['at']) : '';
+
+		$break_hrs = 0.0;
+		for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
+			if (($events[$j]['type'] ?? '') === 'OUT' && ($events[$j + 1]['type'] ?? '') === 'IN') {
+				$break_hrs += max(0, ((int) $events[$j + 1]['at'] - (int) $events[$j]['at']) / 3600);
+			}
+		}
+
+		$span_hrs = 0.0;
+		if ($check_in && $check_out && !empty($ins[0]['at']) && !empty($outs[count($outs) - 1]['at'])) {
+			$in_at = (int) $ins[0]['at'];
+			$out_at = (int) $outs[count($outs) - 1]['at'];
+			if ($out_at > $in_at) {
+				$span_hrs = ($out_at - $in_at) / 3600;
+			}
+		}
+
+		$hours = max(0, $span_hrs - $break_hrs);
+		if ($hours > 16) {
+			$hours = 16;
+			$span_hrs = min($span_hrs, 16 + $break_hrs);
+		}
+
+		$punch_missing = false;
+		if (count($events) > 0) {
+			if ((count($ins) > 0 && count($outs) === 0) || (count($outs) > 0 && count($ins) === 0)) {
+				$punch_missing = true;
+			} elseif (count($ins) !== count($outs)) {
+				$punch_missing = true;
+			}
+		}
+
+		$swipes = [];
+		foreach ($events as $ev) {
+			$swipes[] = [
+				'time' => date('H:i:s', (int) ($ev['at'] ?? 0)),
+				'type' => $ev['type'] ?: '—',
+				'source' => $ev['source'] ?? '',
+				'door' => $ev['door'] ?? '',
+			];
+		}
+
+		$ins_times = array_map(function ($ev) {
+			return date('H:i:s', (int) $ev['at']);
+		}, $ins);
+		$outs_times = array_map(function ($ev) {
+			return date('H:i:s', (int) $ev['at']);
+		}, $outs);
+
+		return [
+			'ins' => $ins_times,
+			'outs' => $outs_times,
+			'check_in' => $check_in,
+			'check_out' => $check_out,
+			'hours' => $hours,
+			'break_hrs' => round($break_hrs, 2),
+			'span_hrs' => round($span_hrs, 2),
+			'break_from_punches' => true,
+			'punch_missing' => $punch_missing,
+			'swipes' => $swipes,
+		];
+	}
+
 	protected function analyze_day_punches($cio_rows, $bio_rows, $workroom_source = 'Workroom')
 	{
 		if (!empty($bio_rows)) {
@@ -20090,13 +20507,17 @@ public function add_requisition_ajax($data)
 		$lunch_start = $this->normalize_shift_time($shift_info->start_lunch_break ?? '', '13:00');
 		$lunch_end = $this->normalize_shift_time($shift_info->end_lunch_break ?? '', '13:30');
 
-		// Break = shift lunch only (card counts first in / last out, not intermediate gaps).
-		$break_hrs = (float) ($shift_info->lunch_break_hour ?? 0);
-		if ($break_hrs <= 0) {
-			$break_hrs = max(0, (strtotime('1970-01-01 ' . $lunch_end) - strtotime('1970-01-01 ' . $lunch_start)) / 3600);
-		}
-		if ($break_hrs <= 0) {
-			$break_hrs = 0.5;
+		if (!empty($punch['break_from_punches'])) {
+			$break_hrs = (float) ($punch['break_hrs'] ?? 0);
+		} else {
+			// Break = shift lunch only (legacy calendar-day punches).
+			$break_hrs = (float) ($shift_info->lunch_break_hour ?? 0);
+			if ($break_hrs <= 0) {
+				$break_hrs = max(0, (strtotime('1970-01-01 ' . $lunch_end) - strtotime('1970-01-01 ' . $lunch_start)) / 3600);
+			}
+			if ($break_hrs <= 0) {
+				$break_hrs = 0.5;
+			}
 		}
 
 		$first_in = $punch['check_in'] ?: '—';
