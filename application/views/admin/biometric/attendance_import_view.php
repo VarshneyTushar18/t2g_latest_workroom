@@ -214,9 +214,9 @@
             ?>
             <div class="t2g-sync-banner <?= $is_live ? '' : 'is-stale' ?>" id="t2g_sync_banner">
               <div>
-                <h5>Live Biomax sync</h5>
+                <h5>Live Biometric sync</h5>
                 <div class="t2g-sync-meta">
-                  Auto-updates every <strong>2 minutes</strong> from the office Biomax bridge.
+                  Auto-updates every <strong>2 minutes</strong> from the office Biometric bridge.
                 </div>
                 <div class="t2g-sync-meta mtop5" id="t2g_sync_detail">
                   Last sync: <strong id="t2g_sync_last"><?= $last_sync ? html_escape($last_sync) : '—' ?></strong>
@@ -241,8 +241,8 @@
                 <div id="bio_daily_filters">
                   <div class="bio-simple-head">
                     <div>
-                      <h4 id="bio_page_title">Today's Biomax attendance</h4>
-                      <p class="bio-simple-sub" id="bio_page_sub">Showing only <strong><?= html_escape($today_label) ?></strong> · Biomax punches</p>
+                      <h4 id="bio_page_title">Today's Biometric attendance</h4>
+                      <p class="bio-simple-sub" id="bio_page_sub">Showing only <strong><?= html_escape($today_label) ?></strong> · Biometric punches</p>
                     </div>
                   </div>
 
@@ -303,7 +303,7 @@
 
                   <div class="bio-viewing-label" id="bio_viewing_label">Viewing: <strong>Today</strong> (<?= html_escape(date('d-M-Y')) ?>)</div>
                   <div class="bio-empty-today" id="bio_empty_today">
-                    <strong>No Biomax punches for today yet.</strong><br>
+                    <strong>No Biometric punches for today yet.</strong><br>
                     The office bridge may still be catching up, or nobody has punched today.
                     Use <em>Other day</em> to check yesterday, or wait ~2 minutes and refresh.
                   </div>
@@ -373,7 +373,7 @@
                     </tr>
                     <?php } ?>
                   <?php } else { ?>
-                    <tr><td colspan="10" class="text-center text-muted">No Biomax attendance for today yet.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted">No Biometric attendance for today yet.</td></tr>
                   <?php } ?>
                 </tbody>
               </table>
@@ -387,7 +387,7 @@
               </div><!-- /#bio_tab_daily -->
 
               <div role="tabpanel" class="tab-pane" id="bio_tab_swipes">
-                <p class="bio-simple-sub mtop15">Individual Biomax punch swipes. Defaults to <strong>today</strong>.</p>
+                <p class="bio-simple-sub mtop15">Individual Biometric punch swipes. Defaults to <strong>today</strong>.</p>
                 <div class="row mtop10">
                   <div class="col-md-3">
                     <label>From date</label>
@@ -541,18 +541,18 @@ function updateBioRangeUI() {
 
   const todayYmd = '<?= date('Y-m-d') ?>';
   const todayNice = '<?= date('d M Y') ?>';
-  let title = "Today's Biomax attendance";
-  let sub = 'Showing only <strong>' + escapeHtml(todayNice) + '</strong> · Biomax punches';
+  let title = "Today's Biometric attendance";
+  let sub = 'Showing only <strong>' + escapeHtml(todayNice) + '</strong> · Biometric punches';
   let label = 'Today (' + formatDisplayDay(todayYmd) + ')';
 
   if (bioRange === 'day') {
     const dayVal = $('#filter_day').val() || todayYmd;
-    title = 'Biomax attendance';
-    sub = 'Showing <strong>' + escapeHtml(formatDisplayDay(dayVal)) + '</strong> · Biomax punches';
+    title = 'Biometric attendance';
+    sub = 'Showing <strong>' + escapeHtml(formatDisplayDay(dayVal)) + '</strong> · Biometric punches';
     label = 'Day (' + formatDisplayDay(dayVal) + ')';
   } else if (bioRange === 'month') {
     const monthVal = $('#filter_month').val() || '<?= date('Y-m') ?>';
-    title = 'This month — Biomax attendance';
+    title = 'This month — Biometric attendance';
     sub = 'Showing month <strong>' + escapeHtml(monthVal) + '</strong>';
     label = 'This month (' + monthVal + ')';
   }
@@ -648,8 +648,8 @@ function loadAttendanceData(page = 1) {
       });
     } else {
       const tip = bioRange === 'today'
-        ? 'No Biomax attendance for <b>today</b> yet. Try <b>Other day</b> for yesterday.'
-        : 'No Biomax records for this selection.';
+        ? 'No Biometric attendance for <b>today</b> yet. Try <b>Other day</b> for yesterday.'
+        : 'No Biometric records for this selection.';
       rows = `<tr><td colspan="10" class="text-center text-muted">${tip}</td></tr>`;
     }
 
@@ -744,7 +744,7 @@ $(document).ready(function() {
     setInterval(refreshSyncStatus, 30000);
 
     // Auto-reload attendance table every 2 minutes while viewing Today
-    // (matches Biomax bridge poll interval).
+    // (matches Biometric bridge poll interval).
     setInterval(function () {
       if (document.hidden) return;
       if (bioRange !== 'today') return;
@@ -796,7 +796,7 @@ function showPunchModal(punchStr, date, empName) {
         + escapeHtml(p.time.substring(0, 5)) + ' ' + p.type.toUpperCase() + '</span>';
     }).join('');
     $('#punchRawList').html(
-      '<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">All punches from Biomax ('
+      '<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">All punches from Biometric ('
       + punches.length + ')</div>' + chips
     ).show();
   }
@@ -861,7 +861,7 @@ function showPunchModal(punchStr, date, empName) {
   }
 
   if (hasOpenSession) {
-    $('#punchModalHint').text('Last punch is IN — Out is not in Biomax yet. After the next Out swipe, sync (every 2 min) will show the full session.');
+    $('#punchModalHint').text('Last punch is IN — Out is not in Biometric yet. After the next Out swipe, sync (every 2 min) will show the full session.');
   }
 
   $('#punchModal').modal('show');

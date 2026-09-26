@@ -100,6 +100,106 @@ class timesheets extends AdminController
 
 		$data['title'] = 'HRMS';
 		$data['quick_actions'] = $quick_actions;
+		$data['staff_first_name'] = trim((string) (get_staff()->firstname ?? ''));
+		if ($data['staff_first_name'] === '') {
+			$data['staff_first_name'] = trim((string) get_staff_full_name(get_staff_user_id()));
+		}
+
+		$hour = (int) date('G');
+		if ($hour < 12) {
+			$data['greeting_label'] = 'Good Morning';
+		} elseif ($hour < 17) {
+			$data['greeting_label'] = 'Good Afternoon';
+		} else {
+			$data['greeting_label'] = 'Good Evening';
+		}
+
+		$data['hrms_quotes'] = [
+			'Small daily improvements are the key to staggering long-term results.',
+			'Your attitude determines your direction.',
+			'Progress, not perfection.',
+			'Consistency beats intensity when intensity is inconsistent.',
+			'Do the best you can until you know better. Then when you know better, do better.',
+			'Great things are done by a series of small things brought together.',
+			'Focus on being productive instead of busy.',
+			'Every accomplishment starts with the decision to try.',
+			'Stay positive, work hard, make it happen.',
+			'Success is the sum of small efforts repeated day in and day out.',
+			'Be so good they can’t ignore you.',
+			'The secret of getting ahead is getting started.',
+			'Opportunities don’t happen. You create them.',
+			'Quality is not an act, it is a habit.',
+			'Make each day your masterpiece.',
+		];
+
+		// Upcoming company holidays + calendar marks from tblday_off.
+		$upcoming_holidays = [];
+		$holiday_dates = [];
+		try {
+			$this->load->model('holiday_model');
+			$year = (int) date('Y');
+			$today = date('Y-m-d');
+			$holidays_year = $this->holiday_model->get_company_holidays_for_year($year);
+			$holidays_next = $this->holiday_model->get_company_holidays_for_year($year + 1);
+			$all = array_merge($holidays_year, $holidays_next);
+			foreach ($all as $h) {
+				$d = (string) ($h['display_date'] ?? $h['break_date'] ?? '');
+				$name = trim((string) ($h['off_reason'] ?? 'Holiday'));
+				if ($d === '' || $d === '0000-00-00') {
+					continue;
+				}
+				$holiday_dates[$d] = $name;
+				if ($d >= $today) {
+					$upcoming_holidays[] = [
+						'date' => $d,
+						'name' => $name,
+						'day'  => date('l', strtotime($d)),
+						'label' => date('d M', strtotime($d)),
+					];
+				}
+			}
+			usort($upcoming_holidays, function ($a, $b) {
+				return strcmp($a['date'], $b['date']);
+			});
+			$upcoming_holidays = array_slice($upcoming_holidays, 0, 6);
+		} catch (Throwable $e) {
+			$upcoming_holidays = [];
+			$holiday_dates = [];
+		}
+
+		$data['upcoming_holidays'] = $upcoming_holidays;
+		$data['holiday_dates'] = $holiday_dates;
+		$data['holiday_calendar_url'] = admin_url('holiday/calendar');
+		$data['server_now'] = date('c');
+
+		// Time & Attendance card: Biometric when today's sheet has punches (else Workroom/WFH).
+		$biometric_checkin_label = '';
+		try {
+			$on_wfh_today = timesheets_is_staff_wfh_on_date((int) get_staff_user_id(), date('Y-m-d'));
+			$this->load->model('biometric_model');
+			$bio = null;
+			if (!$on_wfh_today && method_exists($this->biometric_model, 'get_staff_active_punch')) {
+				$bio = $this->biometric_model->get_staff_active_punch((int) get_staff_user_id(), 13);
+			} elseif (!$on_wfh_today) {
+				$bio = $this->biometric_model->get_staff_today_punch((int) get_staff_user_id());
+			}
+			if (is_array($bio)) {
+				if (method_exists($this->biometric_model, 'get_navbar_first_checkin_display')) {
+					$biometric_checkin_label = (string) $this->biometric_model->get_navbar_first_checkin_display($bio);
+				} elseif (method_exists($this->biometric_model, 'get_biometric_punch_summary')) {
+					$sum = $this->biometric_model->get_biometric_punch_summary($bio);
+					if ($sum) {
+						$biometric_checkin_label = (string) ($sum['first_time_formatted'] ?? '');
+						if ($biometric_checkin_label === '' && !empty($sum['first_ts'])) {
+							$biometric_checkin_label = date('H:i:s', (int) $sum['first_ts']);
+						}
+					}
+				}
+			}
+		} catch (Throwable $e) {
+			$biometric_checkin_label = '';
+		}
+		$data['biometric_checkin_label'] = $biometric_checkin_label;
 
 		$this->load->view('hrms_home', $data);
 	}
@@ -1688,12 +1788,8 @@ class timesheets extends AdminController
 
 						$this->timesheets_model->send_request_approve($data_app, $data['staff_id']);
 
-						$data_new = [];
-
-						$data_new['send_mail_approve'] = $data;
-
-						$this->session->set_userdata($data_new);
-
+						// Leave emails are sent below in PHP — do not arm JS backup mailer
+						// (that caused duplicate emails to approvers/managers).
 						$check = 'not_choose';
 					} else {
 
@@ -1760,16 +1856,13 @@ class timesheets extends AdminController
 
 				$this->timesheets_model->notify_create_new_leave($result, $rel_type);
 
-				// Email: approvers (please approve) + reporting manager (info only)
-
+				// Email once from PHP only (approvers + reporting manager).
 				$this->timesheets_model->send_leave_application_approver_emails($result, $rel_type, (int) $data['staff_id']);
 
 				$this->timesheets_model->notify_manager_leave_application($result, (int) $data['staff_id']);
 
-				// Keep session for any JS backup mailers on detail page
-				$data_new = [];
-				$data_new['send_mail_approve'] = $data;
-				$this->session->set_userdata($data_new);
+				// Clear any leftover backup-mailer session so detail page does not send again.
+				$this->session->unset_userdata('send_mail_approve');
 
 
 
@@ -1810,7 +1903,7 @@ class timesheets extends AdminController
 				: null;
 			$applicant_id = (int) ($leave_row->staff_id ?? ($data['userid'] ?? 0));
 
-			if (!timesheets_can_approve_leave('', $applicant_id)) {
+			if (!timesheets_can_final_approve_leave('', $applicant_id)) {
 				access_denied('leave_approval');
 			}
 
@@ -1859,7 +1952,9 @@ class timesheets extends AdminController
 				: null;
 			$applicant_id = (int) ($leave_row->staff_id ?? ($data['userid'] ?? 0));
 
-			if (!timesheets_can_approve_leave('', $applicant_id)) {
+			$can_final = timesheets_can_final_approve_leave('', $applicant_id);
+			$can_hod = timesheets_can_hod_forward_leave($applicant_id);
+			if (!$can_final && !$can_hod) {
 				access_denied('leave_approval');
 			}
 
@@ -1890,6 +1985,44 @@ class timesheets extends AdminController
 				redirect(admin_url('timesheets/requisition_detail/'));
 			}
 		}
+	}
+
+	/**
+	 * HOD / Manager forwards leave to Super HR (status stays pending).
+	 */
+	public function forward_leave_comment()
+	{
+		if (!$this->input->post()) {
+			redirect(admin_url('timesheets/requisition_manage'));
+		}
+
+		$data = $this->input->post();
+		$leave_id = (int) ($data['leave_id'] ?? 0);
+		$leave_row = $leave_id > 0
+			? $this->db->where('id', $leave_id)->get(db_prefix() . 'timesheets_requisition_leave')->row()
+			: null;
+		$applicant_id = (int) ($leave_row->staff_id ?? ($data['userid'] ?? 0));
+
+		if (!timesheets_can_hod_forward_leave($applicant_id)) {
+			access_denied('leave_forward');
+		}
+
+		if (!$leave_row || (int) $leave_row->status !== 0) {
+			set_alert('warning', 'Leave is not pending.');
+			redirect(admin_url('timesheets/requisition_detail/' . $leave_id));
+		}
+
+		$comment = trim((string) ($data['forward_comment'] ?? $data['approval_comment'] ?? ''));
+		$ok = $this->timesheets_model->forward_leave_to_super_hr($leave_id, (int) get_staff_user_id(), $comment);
+
+		$this->load->library('session');
+		if ($ok) {
+			$this->session->set_flashdata('message', 'Leave forwarded to Super HR successfully');
+		} else {
+			$this->session->set_flashdata('message', 'Could not forward leave');
+		}
+
+		redirect(admin_url('timesheets/requisition_detail/' . $leave_id));
 	}
 
 
@@ -2085,8 +2218,13 @@ class timesheets extends AdminController
 
 
 
-		// Approve/Reject: HR/Accounts leave → Super Admin (Harpreet) only; others → Sarabjeet/HR/Admin/Super Admin.
-		$data['manager'] = timesheets_can_approve_leave('', (int) ($data['request_leave']->staff_id ?? 0));
+		// Approve: Super HR / HR / Admin / Super Admin. Forward: HOD / managers of applicant.
+		$applicant_id = (int) ($data['request_leave']->staff_id ?? 0);
+		$this->timesheets_model->ensure_leave_hod_forward_columns();
+		$data['can_final_approve_leave'] = timesheets_can_final_approve_leave('', $applicant_id);
+		$data['can_hod_forward_leave'] = timesheets_can_hod_forward_leave($applicant_id);
+		$data['hod_forwarded'] = (int) ($data['request_leave']->hod_forwarded ?? 0);
+		$data['manager'] = $data['can_final_approve_leave'] || ($data['can_hod_forward_leave'] && (int) ($data['request_leave']->status ?? 0) === 0);
 
 		//echo "<pre>";print_r($data['type_of_leave']);die;
 		//$data['department_result'] = get_department_by_staffid($staff_id);
@@ -2463,10 +2601,10 @@ class timesheets extends AdminController
 	public function approve_additional_timesheets($id)
 	{
 
-		if (!timesheets_can_approve_attendance()) {
+		if (!timesheets_can_final_approve_attendance()) {
 			echo json_encode([
 				'success' => false,
-				'message' => 'Only Sahil, Sarabjeet Singh, HR, or Super Admin can approve attendance.',
+				'message' => 'Only HR / Super HR / Admin / Super Admin can approve attendance. HOD/managers must Forward.',
 			]);
 			die();
 		}
@@ -2492,6 +2630,17 @@ class timesheets extends AdminController
 
 
 			$this->timesheets_model->edit_timesheets($additional_timesheet);
+
+			try {
+				$this->timesheets_model->notify_regularisation_decision(
+					(int) $id,
+					(int) ($data['status'] ?? 0) === 1,
+					trim((string) ($data['note'] ?? $data['reason'] ?? $data['rejection_comment'] ?? '')),
+					(int) get_staff_user_id()
+				);
+			} catch (Throwable $e) {
+				log_activity('Regularization legacy approve notify failed #' . (int) $id . ': ' . $e->getMessage());
+			}
 
 
 
@@ -3636,72 +3785,202 @@ class timesheets extends AdminController
 			$addedfrom = $requisition->staff_id;
 		}
 
-		// Leave applications: HR/Accounts → Super Admin only; others → Sarabjeet/HR/Admin/Super Admin.
+		// Leave applications: final approve only Super HR / HR / Admin / Super Admin.
+		// HOD may only reject (or use forward_leave_comment) — never final-approve via this endpoint.
 		if (isset($data['rel_type']) && $data['rel_type'] !== 'additional_timesheets') {
 			$applicant_id = (int) ($requisition->staff_id ?? 0);
-			if (!timesheets_can_approve_leave('', $applicant_id)) {
-				$msg = timesheets_staff_is_hr_or_accounts($applicant_id)
-					? 'Only Super Admin (Harpreet) can approve leave for HR / Accounts staff.'
-					: 'Only Sarabjeet Singh, HR, Super HR, Admin, or Super Admin can approve leave.';
+			$approve_flag = (int) ($data['approve'] ?? 0);
+			if ($approve_flag === 1) {
+				if (!timesheets_can_final_approve_leave('', $applicant_id)) {
+					$msg = timesheets_staff_is_hr_or_accounts($applicant_id)
+						? 'Only Super Admin (Harpreet) can approve leave for HR / Accounts staff.'
+						: 'Only Super HR / HR / Sarabjeet / Admin / Super Admin can approve leave. HOD/managers must Forward.';
+					echo json_encode([
+						'success' => false,
+						'message' => $msg,
+					]);
+					die();
+				}
+			} elseif ($approve_flag === 2) {
+				$can_final = timesheets_can_final_approve_leave('', $applicant_id);
+				$can_hod = timesheets_can_hod_forward_leave($applicant_id);
+				if (!$can_final && !$can_hod) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'You are not allowed to reject this leave.',
+					]);
+					die();
+				}
+			} elseif ($approve_flag === 3) {
+				// Forward to Super HR
+				if (!timesheets_can_hod_forward_leave($applicant_id)) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'Only the reporting HOD / manager can forward leave to Super HR.',
+					]);
+					die();
+				}
+				$note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
+				$ok = $this->timesheets_model->forward_leave_to_super_hr((int) $data['rel_id'], (int) get_staff_user_id(), $note);
+				echo json_encode([
+					'success' => (bool) $ok,
+					'message' => $ok ? 'Leave forwarded to Super HR successfully' : 'Could not forward leave',
+				]);
+				die();
+			} else {
 				echo json_encode([
 					'success' => false,
-					'message' => $msg,
+					'message' => 'Invalid leave action.',
 				]);
 				die();
 			}
 		}
 
-		// Attendance regularization: only Sahil / Sarabjeet / HR / Super Admin.
+		// Attendance regularization: HOD Forward/Reject; HR / Super HR / Admin final Approve.
 		if (isset($data['rel_type']) && $data['rel_type'] === 'additional_timesheets') {
-			if (!timesheets_can_approve_attendance()) {
-				echo json_encode([
-					'success' => false,
-					'message' => 'Only Sahil, Sarabjeet Singh, HR, or Super Admin can approve attendance.',
-				]);
-				die();
-			}
-
+			$additional_timesheet = $this->db->where('id', (int) $data['rel_id'])
+				->get(db_prefix() . 'timesheets_additional_timesheet')
+				->row();
+			$creator_id = (int) ($additional_timesheet->creator ?? 0);
+			$approve_flag = (int) ($data['approve'] ?? 0);
 			$reject_note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
-			if ((int) $data['approve'] === 2 && $reject_note === '') {
+
+			if (!$additional_timesheet || (int) $additional_timesheet->status !== 0) {
 				echo json_encode([
 					'success' => false,
-					'message' => 'Please enter a reason for rejecting.',
+					'message' => 'Regularization is not pending.',
 				]);
 				die();
 			}
 
-			$check_approve_status = $this->timesheets_model->check_approval_details($data['rel_id'], $data['rel_type']);
-
-			// Allowlisted approvers can act even when no approval chain is configured.
-			if ($check_approve_status === false || !isset($check_approve_status['staffid'])) {
-				$additional_timesheet = $this->db->where('id', (int) $data['rel_id'])
-					->get(db_prefix() . 'timesheets_additional_timesheet')
-					->row();
-
-				if ($additional_timesheet && (int) $additional_timesheet->status === 0) {
-					$status = ((int) $data['approve'] === 1) ? 1 : 2;
-					$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], $status);
-
-					if ($status === 2) {
-						$this->timesheets_model->save_additional_timesheet_rejection((int) $data['rel_id'], $reject_note);
-					}
-
-					if ($status === 1) {
-						$this->timesheets_model->edit_timesheets($additional_timesheet);
-					}
-
+			if ($approve_flag === 3) {
+				if (!timesheets_can_hod_review_regularisation($creator_id)) {
 					echo json_encode([
-						'success' => true,
-						'message' => $status === 1 ? _l('approved_successfully') : _l('rejected_successfully'),
+						'success' => false,
+						'message' => 'Only the reporting HOD / manager can forward regularization to Super HR.',
 					]);
 					die();
 				}
+				$ok = $this->timesheets_model->forward_additional_timesheet_to_hr((int) $data['rel_id'], (int) get_staff_user_id());
+				echo json_encode([
+					'success' => (bool) $ok,
+					'message' => $ok ? 'Regularization forwarded to Super HR successfully' : 'Could not forward regularization',
+				]);
+				die();
+			}
+
+			if ($approve_flag === 2) {
+				$can_final = timesheets_can_final_approve_attendance();
+				$can_hod = timesheets_can_hod_review_regularisation($creator_id);
+				if (!$can_final && !$can_hod) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'You are not allowed to reject this regularization.',
+					]);
+					die();
+				}
+				if ($reject_note === '') {
+					echo json_encode([
+						'success' => false,
+						'message' => 'Please enter a reason for rejecting.',
+					]);
+					die();
+				}
+				$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], 2);
+				$this->timesheets_model->save_additional_timesheet_rejection((int) $data['rel_id'], $reject_note);
+				try {
+					$this->timesheets_model->notify_regularisation_decision((int) $data['rel_id'], false, $reject_note, (int) get_staff_user_id());
+				} catch (Throwable $e) {
+					log_activity('Regularization reject notify failed #' . (int) $data['rel_id'] . ': ' . $e->getMessage());
+				}
+				echo json_encode([
+					'success' => true,
+					'message' => _l('rejected_successfully'),
+				]);
+				die();
+			}
+
+			if ($approve_flag === 1) {
+				if (!timesheets_can_final_approve_attendance()) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'Only HR / Super HR / Admin / Super Admin can approve regularization. HOD/managers must Forward.',
+					]);
+					die();
+				}
+
+				$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], 1);
+				$this->timesheets_model->edit_timesheets($additional_timesheet);
+				try {
+					$this->timesheets_model->notify_regularisation_decision(
+						(int) $data['rel_id'],
+						true,
+						$reject_note,
+						(int) get_staff_user_id()
+					);
+				} catch (Throwable $e) {
+					log_activity('Regularization approve notify failed #' . (int) $data['rel_id'] . ': ' . $e->getMessage());
+				}
+				echo json_encode([
+					'success' => true,
+					'message' => _l('approved_successfully'),
+				]);
+				die();
+			}
+
+			echo json_encode([
+				'success' => false,
+				'message' => 'Invalid regularization action.',
+			]);
+			die();
+		}
+
+		// HOD / manager can reject leave without being in the final approver chain.
+		if (
+			isset($data['rel_type'])
+			&& $data['rel_type'] !== 'additional_timesheets'
+			&& (int) ($data['approve'] ?? 0) === 2
+			&& $requisition
+			&& (int) $requisition->status === 0
+			&& timesheets_can_hod_forward_leave((int) $requisition->staff_id)
+			&& !timesheets_can_final_approve_leave('', (int) $requisition->staff_id)
+		) {
+			$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], 2);
+			$reject_note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
+			$this->timesheets_model->notify_leave_decision_to_employee((int) $data['rel_id'], false, $reject_note, (int) get_staff_user_id());
+			echo json_encode([
+				'success' => true,
+				'message' => _l('rejected_successfully'),
+			]);
+			die();
+		}
+
+		// Final leave approvers can approve/reject even when approval-chain row is missing/mismatched.
+		if (
+			isset($data['rel_type'])
+			&& $data['rel_type'] !== 'additional_timesheets'
+			&& $requisition
+			&& (int) $requisition->status === 0
+			&& timesheets_can_final_approve_leave('', (int) $requisition->staff_id)
+		) {
+			$check_leave = $this->timesheets_model->check_approval_details($data['rel_id'], $data['rel_type']);
+			$in_chain = is_array($check_leave) && isset($check_leave['staffid']) && in_array(get_staff_user_id(), (array) $check_leave['staffid']);
+			if (!$in_chain) {
+				$status = ((int) $data['approve'] === 1) ? 1 : 2;
+				$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], $status);
+				$note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
+				$this->timesheets_model->notify_leave_decision_to_employee((int) $data['rel_id'], $status === 1, $note, (int) get_staff_user_id());
+				echo json_encode([
+					'success' => true,
+					'message' => $status === 1 ? _l('approved_successfully') : _l('rejected_successfully'),
+				]);
+				die();
 			}
 		}
 
 		$check_approve_status = $this->timesheets_model->check_approval_details($data['rel_id'], $data['rel_type']);
 
-		if (isset($data['approve']) && in_array(get_staff_user_id(), $check_approve_status['staffid'])) {
+		if (isset($data['approve']) && is_array($check_approve_status) && isset($check_approve_status['staffid']) && in_array(get_staff_user_id(), $check_approve_status['staffid'])) {
 
 			$success = $this->timesheets_model->update_approval_details($check_approve_status['id'], $data);
 
@@ -3910,6 +4189,9 @@ class timesheets extends AdminController
 	public function get_data_additional_timesheets($id)
 	{
 
+		$this->timesheets_model->ensure_additional_timesheet_hod_forward_columns();
+		$this->timesheets_model->ensure_additional_timesheet_rejection_column();
+
 		$check_approve_status = $this->timesheets_model->check_approval_details($id, 'additional_timesheets');
 
 		$list_approve_status = $this->timesheets_model->get_list_approval_details($id, 'additional_timesheets');
@@ -4031,9 +4313,9 @@ class timesheets extends AdminController
 
 			$html .= '  <tr class="project-overview">
 
-		<td class="bold" width="30%">' . _l('timekeeping_value') . '</td>
+		<td class="bold" width="30%">' . _l('timekeeping_value') . ' / Work hrs</td>
 
-		<td>' . $additional_timesheets->timekeeping_value . '</td>
+		<td>' . html_escape(function_exists('timesheets_format_work_hours') ? timesheets_format_work_hours($additional_timesheets->timekeeping_value) : ($additional_timesheets->timekeeping_value . 'h')) . '</td>
 
 		</tr>
 
@@ -4200,7 +4482,7 @@ class timesheets extends AdminController
 
 		if (isset($check_approve_status['staffid'])) {
 
-			if (in_array(get_staff_user_id(), $check_approve_status['staffid']) && timesheets_can_approve_attendance()) {
+			if (in_array(get_staff_user_id(), $check_approve_status['staffid']) && timesheets_can_final_approve_attendance()) {
 
 				$html .= '<div class="btn-group pull-left" >
 
@@ -4234,7 +4516,7 @@ class timesheets extends AdminController
 
 			</div>';
 			}
-		} elseif ((int) $additional_timesheets->status === 0 && timesheets_can_approve_attendance()) {
+		} elseif ((int) $additional_timesheets->status === 0 && timesheets_can_final_approve_attendance()) {
 			$html .= '<div class="btn-group pull-left" >
 
 			<a href="#" class="btn btn-success dropdown-toggle " data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">' . _l('approve') . '<span class="caret"></span></a>
@@ -4266,6 +4548,14 @@ class timesheets extends AdminController
 			</ul>
 
 			</div>';
+		} elseif ((int) $additional_timesheets->status === 0 && timesheets_can_hod_review_regularisation((int) $additional_timesheets->creator)) {
+			$already_fwd = (int) ($additional_timesheets->hod_forwarded ?? 0) === 1;
+			if ($already_fwd) {
+				$html .= '<span class="btn btn-info pull-left disabled margin-right-5">Forwarded to Super HR</span>';
+			} else {
+				$html .= '<a href="#" data-loading-text="' . _l('wait_text') . '" onclick="forward_regularisation_request(' . $additional_timesheets->id . '); return false;" class="btn btn-info pull-left margin-right-5">Forward to Super HR</a>';
+			}
+			$html .= '<a href="#" data-loading-text="' . _l('wait_text') . '" onclick="deny_request(' . $additional_timesheets->id . ',\'additional_timesheets\'); return false;" class="btn btn-warning pull-left">' . _l('deny') . '</a>';
 		}
 
 		if ($check != 'choose') {
@@ -8029,6 +8319,22 @@ class timesheets extends AdminController
 			// Ensure helper functions exist even if module bootstrap was skipped
 			if (!function_exists('get_timesheets_option')) {
 				$this->load->helper('timesheets/timesheets');
+			}
+
+			try {
+				$this->load->model('biometric_model');
+				$staff_id = (int) ($this->input->post('staff_id') ?: get_staff_user_id());
+				if (
+					$staff_id > 0
+					&& !timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'))
+					&& method_exists($this->biometric_model, 'staff_biometric_available')
+					&& $this->biometric_model->staff_biometric_available($staff_id, 13)
+				) {
+					set_alert('warning', 'Office Biometric attendance is active for today. Workroom check-in/out is only for staff without biometric.');
+					redirect(admin_url());
+					return;
+				}
+			} catch (Throwable $e) {
 			}
 
 			$data = $this->input->post();
@@ -13725,7 +14031,11 @@ class timesheets extends AdminController
 			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id) {
 				$this->db->where('s.active', 1);
 				if ($team_manage_filter) {
-					$this->db->where('s.team_manage', $team_manage_filter);
+					// Direct reports OR the manager/HOD themselves (own attendance).
+					$this->db->group_start();
+					$this->db->where('s.team_manage', (int) $team_manage_filter);
+					$this->db->or_where('s.staffid', (int) $team_manage_filter);
+					$this->db->group_end();
 				}
 				if ($department_id > 0) {
 					$this->db->where(
@@ -13917,7 +14227,11 @@ class timesheets extends AdminController
 		$this->db->from(db_prefix() . 'staff s');
 		$this->db->where('s.active', 1);
 		if ($team_manage_filter) {
+			// Include manager/HOD self + people who report to them.
+			$this->db->group_start();
 			$this->db->where('s.team_manage', (int) $team_manage_filter);
+			$this->db->or_where('s.staffid', (int) $team_manage_filter);
+			$this->db->group_end();
 		}
 		if ((int) $department_id > 0) {
 			$this->db->where(
@@ -14044,17 +14358,6 @@ class timesheets extends AdminController
 			 ORDER BY date ASC'
 		)->result_array();
 
-		$cio_rows = [];
-		foreach ($check_in_out as $cio) {
-			$cio_rows[] = [
-				'date' => date('Y-m-d', strtotime($cio['date'])),
-				'time' => date('H:i:s', strtotime($cio['date'])),
-				'datetime' => $cio['date'],
-				'type' => ((int) $cio['type_check'] === 2) ? 'OUT' : 'IN',
-				'source' => 'Workroom',
-			];
-		}
-
 		// Biometric swipes from imported report (API hook later)
 		$bio_swipes = [];
 		$bio_note = 'Showing imported biometric data when available. Live device API can plug in here later.';
@@ -14081,6 +14384,29 @@ class timesheets extends AdminController
 			$bio_note = 'Biometric data unavailable right now. API integration coming soon.';
 		}
 
+		$bio_punch_dates = $this->timesheets_model->get_biometric_punch_dates_for_staff($staffid, $from, $to);
+		$wfh_dates = $this->timesheets_model->get_staff_wfh_dates_in_range($staffid, $from, $to);
+
+		$cio_rows = [];
+		foreach ($check_in_out as $cio) {
+			$cio_date = date('Y-m-d', strtotime($cio['date']));
+			if (!empty($bio_punch_dates[$cio_date]) && empty($wfh_dates[$cio_date])) {
+				continue;
+			}
+			$cio_rows[] = [
+				'date' => $cio_date,
+				'time' => date('H:i:s', strtotime($cio['date'])),
+				'datetime' => $cio['date'],
+				'type' => ((int) $cio['type_check'] === 2) ? 'OUT' : 'IN',
+				'source' => !empty($wfh_dates[$cio_date]) ? 'WFH' : 'Workroom',
+			];
+		}
+
+		$bio_swipes = array_values(array_filter($bio_swipes, function ($s) use ($wfh_dates) {
+			$d = isset($s['swipe_sort']) ? substr($s['swipe_sort'], 0, 10) : '';
+			return $d === '' || empty($wfh_dates[$d]);
+		}));
+
 		echo json_encode([
 			'ok' => true,
 			'staff' => [
@@ -14094,6 +14420,7 @@ class timesheets extends AdminController
 			'events' => $events,
 			'check_in_out' => $cio_rows,
 			'biometric_swipes' => $bio_swipes,
+			'wfh_dates' => array_keys($wfh_dates),
 			'api_ready' => false,
 			'bio_note' => $bio_note,
 		]);

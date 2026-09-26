@@ -1,5 +1,5 @@
 @echo off
-REM One-shot FULL backfill: pull Biomax from start date → TODAY (weekly chunks) → Workroom
+REM One-shot FULL backfill: pull Biometric from start date → TODAY (weekly chunks) → Workroom
 REM Edit start date below if you need older history.
 cd /d "%~dp0"
 python -c "import requests" 2>nul || python -m pip install requests

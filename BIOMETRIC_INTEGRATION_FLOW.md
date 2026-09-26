@@ -11,7 +11,7 @@ Workroom already has biometric storage and UI:
 - UI page: `application/views/admin/biometric/attendance_import_view.php`
 - Target table: `tblbiometric_report`
 
-Today, data is synced via the **Biomax bridge API** (`/biometric_sync/attendance`).  
+Today, data is synced via the **Biometric bridge API** (`/biometric_sync/attendance`).  
 Manual Excel import is **disabled**. Target sync interval: **2 minutes** (GreytHR-style systems often use 15–30 minutes).
 
 ---

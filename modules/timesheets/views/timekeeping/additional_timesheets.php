@@ -18,6 +18,7 @@
 
 <?php
   $table_data = [
+      _l('the_number_sign'),
       'Employee',
       'Department',
       'Date',

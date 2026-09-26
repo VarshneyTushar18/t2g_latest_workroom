@@ -354,7 +354,7 @@ php -S 127.0.0.1:8000 router.php
 | `application/controllers/` | Core controllers |
 | `modules/timesheets/` | Leave, attendance, shifts |
 | `application/controllers/admin/Biometric.php` | Biometric Attendance UI |
-| `biometric-bridge/` | Office PC Biomax → Workroom sync |
+| `biometric-bridge/` | Office PC Biometric → Workroom sync |
 | `router.php` | Local PHP server rewrite helper |
 
 ---

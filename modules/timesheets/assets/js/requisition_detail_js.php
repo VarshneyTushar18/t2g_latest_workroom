@@ -53,6 +53,11 @@
     var rel_id = $(invoker).data('file');
     view_isn_file(id, rel_id);
   }  function approve_leave(){    "use strict";    $('#approve_leave_ap').modal('show');    $('.edit-title').addClass('hide');	  $('.add-title').removeClass('hide');    $('#approve_leave_ap select[name="rel_type"]').val(1).change();    $('#approve_leave_ap input[name="subject"]').val('');    $('#approve_leave_ap textarea').val('');     }      function reject_leave(){    "use strict";    $('#reject_leave_rj').modal('show');    $('.edit-title').addClass('hide');	  $('.add-title').removeClass('hide');    $('#reject_leave_rj select[name="rel_type"]').val(1).change();    $('#reject_leave_rj input[name="subject"]').val('');    $('#reject_leave_rj textarea').val('');     }
+  function forward_leave(){
+    "use strict";
+    $('#forward_leave_fw').modal('show');
+    $('#forward_leave_fw textarea').val('');
+  }
 
   function view_isn_file(id, rel_id) {
     "use strict";

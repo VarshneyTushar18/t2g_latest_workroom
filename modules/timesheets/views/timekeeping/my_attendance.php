@@ -95,6 +95,9 @@
   .t2g-att-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; margin-bottom: 12px; }
   .t2g-att-badge-in { background: #16a34a; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
   .t2g-att-badge-out { background: #dc2626; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+  .t2g-att-source { font-size: 10px; color: #64748b; margin-left: 8px; font-weight: 600; }
+  .t2g-att-source-wfh { color: #7c3aed; }
+  .t2g-att-source-bio { color: #0369a1; }
   .t2g-att-punch-list ul { list-style: none; margin: 0; padding: 0; font-size: 12px; }
   .t2g-att-punch-list li { padding: 5px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
   .t2g-att-checkio-btn {
@@ -219,11 +222,16 @@
         <p id="reg_day_label" class="text-muted" style="font-size:12px;"></p>
         <div class="form-group">
           <label>Corrected time in <span class="text-danger">*</span></label>
-          <input type="time" class="form-control input-sm" id="reg_time_in" required>
+          <input type="time" class="form-control input-sm" id="reg_time_in" step="60" required>
         </div>
         <div class="form-group">
           <label>Corrected time out <span class="text-danger">*</span></label>
-          <input type="time" class="form-control input-sm" id="reg_time_out" required>
+          <input type="time" class="form-control input-sm" id="reg_time_out" step="60" required>
+          <p class="text-muted" style="margin:6px 0 0;font-size:12px;">Minutes are allowed (e.g. 09:15–09:45 = 30 minutes).</p>
+          <p class="text-info" style="margin:4px 0 0;font-size:12px;" id="reg_hours_preview"></p>
+          <p class="text-muted" style="margin:6px 0 0;font-size:12px;" id="reg_suggest_text"></p>
+          <p style="margin:6px 0 0;font-size:12px;font-weight:600;color:#9a3412;" id="reg_leave_deduct_text"></p>
+          <button type="button" class="btn btn-default btn-xs" id="reg_suggest_btn" style="margin-top:6px;">Suggest times for 9h</button>
         </div>
         <div class="form-group">
           <label>Reason <span class="text-danger">*</span></label>
@@ -330,8 +338,8 @@
       return 'neutral';
     }
 
-    var req = day.required_hours || 9;
-    var half = 5;
+    var presentMin = day.present_min_hours || 8.0;
+    var halfMin = day.half_day_min_hours || 5;
     var hrs = dayHours(day);
 
     if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') {
@@ -339,21 +347,21 @@
     }
     // Rejected regularization must not force Absent if hours say half day / present.
     if (day.status === 'rejected') {
-      if (hrs >= req) return 'ok';
-      if (hrs >= half) return 'half';
+      if (hrs + 0.001 >= presentMin) return 'ok';
+      if (hrs + 0.001 >= halfMin) return 'half';
       return 'bad';
     }
     if (day.status === 'half_day' || code === 'HD') {
       return 'half';
     }
-    if (hrs >= req || day.status === 'ok' || code === 'P') {
-      return hrs >= req ? 'ok' : (hrs >= half ? 'half' : (hrs > 0 ? 'bad' : 'neutral'));
+    if (hrs + 0.001 >= presentMin || day.status === 'ok' || code === 'P') {
+      return hrs + 0.001 >= presentMin ? 'ok' : (hrs + 0.001 >= halfMin ? 'half' : (hrs > 0 ? 'bad' : 'neutral'));
     }
     if (day.status === 'short_hours') {
-      return hrs >= half ? 'half' : 'bad';
+      return hrs + 0.001 >= halfMin ? 'half' : 'bad';
     }
-    if (hrs >= req) return 'ok';
-    if (hrs >= half) return 'half';
+    if (hrs + 0.001 >= presentMin) return 'ok';
+    if (hrs + 0.001 >= halfMin) return 'half';
     if (hrs > 0) return 'bad';
     return 'neutral';
   }
@@ -390,7 +398,8 @@
       if (isAbsent) {
         penalty++;
       }
-      if (isAbsent || d.status === 'short_hours') {
+      // Same rule as Regularization page: only days you can actually apply for.
+      if (d.can_regularise && d.status !== 'pending' && d.status !== 'future') {
         exceptions++;
       }
       var tw = parseHrs(d.total_work_hrs);
@@ -469,6 +478,13 @@
     if (day.shift_start && day.shift_end) {
       html += '<div class="t2g-att-day-shift">Shift : ' + esc(day.shift_start) + ' to ' + esc(day.shift_end) + '</div>';
     }
+    if (day.attendance_source === 'wfh') {
+      html += '<div class="t2g-att-day-shift t2g-att-source-wfh">Attendance source : WFH (Workroom)</div>';
+    } else if (day.attendance_source === 'biometric') {
+      html += '<div class="t2g-att-day-shift t2g-att-source-bio">Attendance source : Biometric</div>';
+    } else if (day.attendance_source === 'workroom') {
+      html += '<div class="t2g-att-day-shift">Attendance source : Workroom</div>';
+    }
     html += '</div><div class="t2g-att-day-body">';
 
     html += '<table class="t2g-att-metrics"><thead><tr>';
@@ -496,20 +512,13 @@
     }
     html += '</tbody></table>';
 
-    if (day.sessions && day.sessions.length) {
-      html += '<div class="t2g-att-section">Session Details</div>';
-      html += '<table class="t2g-att-subtable"><thead><tr><th>Session</th><th>First in</th><th>Last out</th></tr></thead><tbody>';
-      day.sessions.forEach(function(s) {
-        html += '<tr><td>' + esc(s.label) + '</td><td>' + valOrDash(s.first_in) + '</td><td>' + valOrDash(s.last_out) + '</td></tr>';
-      });
-      html += '</tbody></table>';
-    }
-
     if (day.swipes && day.swipes.length) {
       html += '<div class="t2g-att-section">Punch Log</div><div class="t2g-att-punch-list"><ul>';
       day.swipes.forEach(function(sw) {
         var badge = sw.type === 'IN' ? '<span class="t2g-att-badge-in">IN</span>' : (sw.type === 'OUT' ? '<span class="t2g-att-badge-out">OUT</span>' : esc(sw.type));
-        html += '<li><span>' + esc(sw.time) + '</span>' + badge + '</li>';
+        var src = String(sw.source || '');
+        var srcCls = src === 'WFH' ? 't2g-att-source-wfh' : (src === 'Biometric' ? 't2g-att-source-bio' : '');
+        html += '<li><span>' + esc(sw.time) + '</span><span>' + badge + (src ? '<span class="t2g-att-source ' + srcCls + '">' + esc(src) + '</span>' : '') + '</span></li>';
       });
       html += '</ul></div>';
     }
@@ -545,12 +554,85 @@
     reloadCalendar(monthYear);
   }
 
+  function toMins(hhmm) {
+    if (!hhmm || hhmm === '—' || hhmm === '-') return null;
+    var p = String(hhmm).substring(0, 5).split(':');
+    if (p.length < 2) return null;
+    var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return (h * 60) + m;
+  }
+  function fromMins(mins) {
+    mins = Math.max(0, Math.min((23 * 60) + 59, Math.round(mins)));
+    return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60);
+  }
+  function lunchOverlapMins(inM, outM) {
+    var ls = 12 * 60, le = (12 * 60) + 30;
+    return Math.max(0, Math.min(outM, le) - Math.max(inM, ls));
+  }
+  function workMinsFromRange(inM, outM) {
+    if (inM === null || outM === null || outM <= inM) return 0;
+    return Math.max(0, outM - inM - lunchOverlapMins(inM, outM));
+  }
+  function fmtHm(mins) {
+    var h = Math.floor(mins / 60), m = Math.round(mins % 60);
+    if (m === 60) { h++; m = 0; }
+    return (h > 0 ? h + 'h ' : '') + m + 'm';
+  }
+  function suggestTimesFor9h(day) {
+    var required = parseFloat(day.required_hours);
+    if (isNaN(required) || required <= 0) required = 9;
+    var requiredMins = Math.round(required * 60);
+    var recordedIn = toMins(day.first_in || day.check_in);
+    var recordedOut = toMins(day.last_out || day.check_out);
+    var shiftIn = toMins(day.shift_start);
+    if (shiftIn === null) shiftIn = (9 * 60) + 30;
+    function outForIn(inM) {
+      var outM = inM + requiredMins + 30;
+      outM = inM + requiredMins + lunchOverlapMins(inM, outM);
+      if (outM > (23 * 60) + 59) outM = (23 * 60) + 59;
+      return outM;
+    }
+    function inForOut(outM) {
+      var inM = outM - requiredMins - 30;
+      if (inM < 0) inM = 0;
+      inM = outM - requiredMins - lunchOverlapMins(inM, outM);
+      if (inM < 0) inM = 0;
+      return inM;
+    }
+    var sugIn, sugOut, note;
+    if (recordedIn !== null) {
+      sugIn = recordedIn;
+      sugOut = outForIn(sugIn);
+      note = 'Kept first punch, extended out for ' + required + 'h.';
+    } else if (recordedOut !== null) {
+      sugOut = recordedOut;
+      sugIn = inForOut(sugOut);
+      note = 'Kept last punch, moved in earlier for ' + required + 'h.';
+    } else {
+      sugIn = shiftIn;
+      sugOut = outForIn(sugIn);
+      note = 'Suggested full window for ' + required + 'h.';
+    }
+    return { required: required, time_in: fromMins(sugIn), time_out: fromMins(sugOut), note: note };
+  }
+
   function openRegModal(day) {
     $('#reg_date').val(day.date);
     $('#reg_day_label').text('Correction for ' + day.date);
-    $('#reg_time_in').val(day.check_in && day.check_in !== '—' ? day.check_in.substring(0, 5) : (day.shift_start || '09:30'));
-    $('#reg_time_out').val(day.check_out && day.check_out !== '—' ? day.check_out.substring(0, 5) : (day.shift_end || '18:30'));
+    var s = suggestTimesFor9h(day);
+    $('#reg_time_in').val(s.time_in);
+    $('#reg_time_out').val(s.time_out);
+    $('#reg_suggest_text').text('Suggested: ' + s.time_in + ' – ' + s.time_out + ' (' + s.note + ') Editable.');
+    var leaveDays = parseFloat(day.leave_days_current);
+    if (isNaN(leaveDays)) leaveDays = parseFloat(day.leave_days_if_regularised);
+    if (isNaN(leaveDays)) leaveDays = 0;
+    var leaveNow = leaveDays === 0.5 ? 'Half day (0.5 leave)' : (leaveDays >= 1 ? 'Absent (1 leave)' : 'Present (0 leave)');
+    $('#reg_leave_deduct_text').text(
+      'Current day: ' + leaveNow + '. On approval, leave balance will be adjusted to match corrected hours (Absent=1, Half day=0.5, Present=0).'
+    );
     $('#reg_reason').val('');
+    previewRegHours();
     $('#attRegModal').modal('show');
   }
 
@@ -564,15 +646,19 @@
     $.getJSON(admin_url + 'timesheets/get_viewable_staff_json').done(function(res) {
       var staff = res.staff || [];
       if (!staff.length) return;
+      var meId = '<?php echo (int) get_staff_user_id(); ?>';
       $sel.empty();
       for (var i = 0; i < staff.length; i++) {
         var s = staff[i];
         var id = String(s.staffid);
         var name = $.trim((s.firstname || '') + ' ' + (s.lastname || ''));
+        if (id === meId) name += ' (Me)';
         $sel.append($('<option></option>').attr('value', id).text(name));
       }
       if (cur && $sel.find('option[value="' + cur + '"]').length) {
         $sel.val(cur);
+      } else if ($sel.find('option[value="' + meId + '"]').length) {
+        $sel.val(meId);
       }
       if ($sel.hasClass('selectpicker') || $sel.data('selectpicker')) {
         $sel.selectpicker('refresh');
@@ -621,6 +707,34 @@
       } catch (e) { alert_float('danger', 'Export failed.'); }
     }).fail(function() { alert_float('danger', 'Could not export attendance.'); })
       .always(function() { $btn.prop('disabled', false); });
+  });
+
+  function previewRegHours() {
+    var tin = $('#reg_time_in').val();
+    var tout = $('#reg_time_out').val();
+    var $p = $('#reg_hours_preview');
+    if (!tin || !tout) { $p.text(''); return; }
+    var inM = toMins(tin), outM = toMins(tout);
+    if (inM === null || outM === null || outM <= inM) {
+      $p.text('Time out must be after time in.');
+      return;
+    }
+    var lunch = lunchOverlapMins(inM, outM);
+    var work = workMinsFromRange(inM, outM);
+    var msg = 'Work duration: ' + fmtHm(work) + ' (' + (work / 60).toFixed(2) + 'h)';
+    if (lunch > 0) msg += ' after ' + lunch + 'm lunch';
+    if (work + 0.5 >= (9 * 60)) msg += ' · meets 9h target';
+    else msg += ' · short by ' + fmtHm((9 * 60) - work);
+    $p.text(msg);
+  }
+  $('#reg_time_in, #reg_time_out').on('change input', previewRegHours);
+  $('#reg_suggest_btn').on('click', function() {
+    var d = dayMap[$('#reg_date').val()] || { date: $('#reg_date').val(), required_hours: 9 };
+    var s = suggestTimesFor9h(d);
+    $('#reg_time_in').val(s.time_in);
+    $('#reg_time_out').val(s.time_out);
+    $('#reg_suggest_text').text('Suggested: ' + s.time_in + ' – ' + s.time_out + ' (' + s.note + ') Editable.');
+    previewRegHours();
   });
 
   $('#reg_submit_btn').on('click', function() {

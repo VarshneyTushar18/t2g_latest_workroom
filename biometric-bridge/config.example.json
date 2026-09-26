@@ -6,9 +6,9 @@
   "lookback_days": 14,
   "chunk_days": 7,
   "push_batch_size": 300,
-  "biomax_api_url": "http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs",
-  "biomax_api_key": "490813092603",
-  "biomax_serial_number": "",
+  "biometric_api_url": "http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs",
+  "biometric_api_key": "490813092603",
+  "biometric_serial_number": "",
   "checkpoint_file": "checkpoint.json",
   "log_file": "logs/bridge.log"
 }

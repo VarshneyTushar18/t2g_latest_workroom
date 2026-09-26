@@ -480,6 +480,7 @@
   var csrf = (typeof csrfData !== 'undefined') ? csrfData : { token_name: 'csrf_token_name', hash: '' };
   var allBioSwipes = [];
   var allCioSwipes = [];
+  var wfhDateSet = {};
   var selectedPunchDate = null;
 
   function typeBadge(type) {
@@ -523,12 +524,48 @@
     }
   }
 
+  function biometricDatesSet() {
+    var dates = {};
+    (allBioSwipes || []).forEach(function (r) {
+      if (r.date) {
+        dates[String(r.date)] = true;
+      }
+    });
+    return dates;
+  }
+
+  function isWfhDate(dateStr) {
+    return !!wfhDateSet[String(dateStr || '')];
+  }
+
+  function bioRowsForView() {
+    var rows = filterRowsByDate(allBioSwipes, selectedPunchDate);
+    return rows.filter(function (r) {
+      return !isWfhDate(r.date);
+    });
+  }
+
+  function workroomRowsForView() {
+    var bioDates = biometricDatesSet();
+    var rows = filterRowsByDate(allCioSwipes, selectedPunchDate);
+    return rows.filter(function (r) {
+      var d = String(r.date || '');
+      if (isWfhDate(d)) {
+        return true;
+      }
+      return !bioDates[d];
+    });
+  }
+
   function renderPunchTables() {
     var emptyDay = selectedPunchDate
       ? ('No punches on ' + selectedPunchDate)
       : 'No records for this month';
-    fillSwipeTable('#empAttFsBioBody', filterRowsByDate(allBioSwipes, selectedPunchDate), emptyDay);
-    fillSwipeTable('#empAttFsCioBody', filterRowsByDate(allCioSwipes, selectedPunchDate), emptyDay);
+    var bioRows = bioRowsForView();
+    var cioRows = workroomRowsForView();
+    var wfhDay = selectedPunchDate && isWfhDate(selectedPunchDate);
+    fillSwipeTable('#empAttFsBioBody', bioRows, wfhDay ? 'WFH day — biometric not used' : emptyDay);
+    fillSwipeTable('#empAttFsCioBody', cioRows, bioRows.length && !wfhDay ? 'Workroom hidden — biometric punches used for this day' : emptyDay);
     updatePunchFilterUi();
   }
 
@@ -564,6 +601,7 @@
     }
     allBioSwipes = [];
     allCioSwipes = [];
+    wfhDateSet = {};
     selectedPunchDate = null;
   }
 
@@ -577,6 +615,7 @@
     selectedPunchDate = null;
     allBioSwipes = [];
     allCioSwipes = [];
+    wfhDateSet = {};
 
     var payload = { staffid: staffId, month_year: monthYear };
     payload[csrf.token_name] = csrf.hash;
@@ -591,6 +630,8 @@
       $('#empAttFsBioNote').text(res.bio_note || '');
       allBioSwipes = res.biometric_swipes || [];
       allCioSwipes = res.check_in_out || [];
+      wfhDateSet = {};
+      (res.wfh_dates || []).forEach(function (d) { wfhDateSet[String(d)] = true; });
       clearPunchDayFilter();
 
       if (fsCal) {

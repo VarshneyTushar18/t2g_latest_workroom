@@ -251,13 +251,13 @@ class Cron_model extends App_Model
                 continue;
             }
 
-            // Check if the latest check-in is older than 13 hours
+            // Auto-checkout only when THIS person's check-in is older than 13 hours
+            // (not at calendar midnight for everyone).
             if ($latestCheckinTimestamp < $thirteenHoursAgoFormatted) {
                 // Check if the staff member is not already checked out
                 if (!$this->isUserCheckedOut($staffId, $latestCheckinTimestamp)) {
-                    $work_date = date('Y-m-d', strtotime($latestCheckinTimestamp));
-                    // Cap auto-out at end of that work day (not "now"), so hours are realistic.
-                    $auto_out = $work_date . ' 19:00:00';
+                    // Out time = check-in + 13 hours (per person), not a shared 19:00.
+                    $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + (13 * 3600));
                     if (strtotime($auto_out) <= strtotime($latestCheckinTimestamp)) {
                         $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + (9 * 3600));
                     }
@@ -270,14 +270,8 @@ class Cron_model extends App_Model
                     $this->db->insert(db_prefix() . 'check_in_out', $checkoutData);
 
                     $hours = (float) $CI->timesheets_model->get_hour($latestCheckinTimestamp, $auto_out);
-                    // Checked in = not Absent. Use Present / Half-day from hours.
-                    if ($hours >= 9) {
-                        $type = 'P';
-                    } elseif ($hours >= 5) {
-                        $type = 'HD';
-                    } else {
-                        $type = 'HD';
-                    }
+                    $CI->load->helper('timesheets/timesheets');
+                    $type = timesheets_attendance_code_from_hours($hours);
 
                     $existing = $this->db->where('staff_id', $staffId)
                         ->where('date_work', $work_date)
@@ -336,7 +330,8 @@ class Cron_model extends App_Model
         if ($latest && !empty($latest->latest_checkin) && $latest->latest_checkin < $thirteenHoursAgoFormatted) {
             if (!$this->isUserCheckedOut($staffId, $latest->latest_checkin)) {
                 $work_date = date('Y-m-d', strtotime($latest->latest_checkin));
-                $auto_out = $work_date . ' 19:00:00';
+                // Per-person: auto-out at check-in + 13 hours (not shared midnight/19:00).
+                $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (13 * 3600));
                 if (strtotime($auto_out) <= strtotime($latest->latest_checkin)) {
                     $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (9 * 3600));
                 }
@@ -350,7 +345,8 @@ class Cron_model extends App_Model
                 $CI = &get_instance();
                 $CI->load->model('timesheets_model');
                 $hours = (float) $CI->timesheets_model->get_hour($latest->latest_checkin, $auto_out);
-                $type = ($hours >= 9) ? 'P' : 'HD';
+                $CI->load->helper('timesheets/timesheets');
+                $type = timesheets_attendance_code_from_hours($hours);
 
                 $existing = $this->db->where('staff_id', $staffId)
                     ->where('date_work', $work_date)
@@ -3790,15 +3786,18 @@ class Cron_model extends App_Model
 
     public function check_working_hrs($hrs, &$nine_plus, &$five_to_nine, &$zero_to_five)
     {
+        $this->load->helper('timesheets/timesheets');
+        $present_min = timesheets_present_min_hours();
+        $half_min = timesheets_half_day_min_hours();
 
         switch (true) {
-            case $hrs <= 5 && $hrs > 0:
+            case $hrs + 0.001 < $half_min && $hrs > 0:
                 $zero_to_five++;
                 break;
-            case $hrs > 5 && $hrs < 9:
+            case $hrs + 0.001 >= $half_min && $hrs + 0.001 < $present_min:
                 $five_to_nine++;
                 break;
-            case $hrs >= 9:
+            case $hrs + 0.001 >= $present_min:
                 $nine_plus++;
                 break;
         }
@@ -5845,11 +5844,11 @@ class Cron_model extends App_Model
                     if ($formatted_date1 && $formatted_date2) {
                         $interval = $formatted_date1->diff($formatted_date2);
                         $time_diff = sprintf('%02d:%02d', $interval->h, $interval->i);
-                        $check_in_time = $formatted_date1->format('h:i:s A');
-                        $check_out_time = $formatted_date2->format('h:i:s A');
+                        $check_in_time = $formatted_date1->format('H:i:s');
+                        $check_out_time = $formatted_date2->format('H:i:s');
                     } else {
-                        $check_in_time = $formatted_date1 ? $formatted_date1->format('h:i:s A') : '';
-                        $check_out_time = $formatted_date2 ? $formatted_date2->format('h:i:s A') : '';
+                        $check_in_time = $formatted_date1 ? $formatted_date1->format('H:i:s') : '';
+                        $check_out_time = $formatted_date2 ? $formatted_date2->format('H:i:s') : '';
                         $time_diff = '';
                     }
 

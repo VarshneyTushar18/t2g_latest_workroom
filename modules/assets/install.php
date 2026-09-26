@@ -95,3 +95,34 @@ if (!$CI->db->field_exists('belongs_to', db_prefix().'assets')) {
       ADD `visible_to_client` TINYINT(1) NOT NULL DEFAULT '0' AFTER `belongs_to`,
       ADD `asset_image` VARCHAR(200) NULL DEFAULT NULL AFTER `visible_to_client`;");
 }
+if (!$CI->db->field_exists('status_override', db_prefix().'assets')) {
+    $CI->db->query('ALTER TABLE `'.db_prefix()."assets`
+      ADD `status_override` TINYINT(1) NOT NULL DEFAULT '0' AFTER `status';");
+}
+if (!$CI->db->table_exists(db_prefix().'asset_sales')) {
+    $CI->db->query('CREATE TABLE `'.db_prefix().'asset_sales` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `asset_id` INT(11) NOT NULL,
+  `asset_name` VARCHAR(255) NOT NULL,
+  `asset_code` VARCHAR(100) NOT NULL,
+  `quantity` INT(11) NOT NULL,
+  `sale_date` DATETIME NOT NULL,
+  `selling_price` DECIMAL(15,2) NOT NULL,
+  `buyer_name` VARCHAR(255) NOT NULL,
+  `buyer_company` VARCHAR(255) NULL,
+  `buyer_email` VARCHAR(255) NULL,
+  `buyer_phone` VARCHAR(50) NULL,
+  `buyer_address` TEXT NULL,
+  `handler_name` VARCHAR(255) NOT NULL,
+  `handler_contact` VARCHAR(100) NULL,
+  `handler_department` VARCHAR(255) NULL,
+  `payment_method` VARCHAR(100) NOT NULL,
+  `payment_reference` VARCHAR(255) NULL,
+  `handover_location` VARCHAR(255) NULL,
+  `notes` TEXT NULL,
+  `created_by` INT(11) NOT NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `asset_id` (`asset_id`)
+);');
+}

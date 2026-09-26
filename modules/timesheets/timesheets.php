@@ -235,7 +235,7 @@ function timesheets_module_init_menu_items() {
 					'slug' => 'timesheets_regularisation_approvals',
 					'name' => 'Regularization Approvals',
 					'href' => admin_url('timesheets/requisition_manage?tab=additional_timesheets'),
-					'icon' => 'fa fa-check-square-o',
+					'icon' => 'fa fa-check-square',
 					'position' => 5,
 				]);
 			}

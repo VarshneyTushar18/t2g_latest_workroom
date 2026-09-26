@@ -4,6 +4,10 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 $tbl = db_prefix() . 'timesheets_additional_timesheet';
 
+$this->ci->load->model('timesheets_model');
+$this->ci->timesheets_model->ensure_additional_timesheet_hod_forward_columns();
+$this->ci->timesheets_model->ensure_additional_timesheet_rejection_column();
+
 if (!$this->ci->db->field_exists('rejection_comment', $tbl)) {
     $this->ci->db->query('ALTER TABLE `' . $tbl . '` ADD COLUMN `rejection_comment` TEXT NULL');
 }
@@ -85,12 +89,13 @@ if ($this->ci->input->post('chose_ats')) {
     }
 }
 
-$result  = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['b.firstname']);
+$result  = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['b.firstname', $tbl . '.hod_forwarded as hod_forwarded', $tbl . '.creator as creator_id']);
 $output  = $result['output'];
 $rResult = $result['rResult'];
 
 foreach ($rResult as $aRow) {
     $row = [];
+    $row[] = (int) $aRow['id'];
 
     $_data = '<a href="' . admin_url('staff/profile/' . $aRow['creator']) . '">' . staff_profile_image($aRow['creator'], [
         'staff-profile-image-small',
@@ -102,7 +107,7 @@ foreach ($rResult as $aRow) {
     $row[] = html_escape($aRow['time_in'] ?: '—');
     $row[] = html_escape($aRow['time_out'] ?: '—');
     $row[] = $aRow['timekeeping_value'] !== '' && $aRow['timekeeping_value'] !== null
-        ? html_escape($aRow['timekeeping_value']) . 'h'
+        ? html_escape(timesheets_format_work_hours($aRow['timekeeping_value']))
         : '—';
 
     $reason = trim((string) ($aRow['reason'] ?? ''));
@@ -159,6 +164,8 @@ foreach ($rResult as $aRow) {
             $statusHtml .= '<div class="text-danger" style="font-size:12px;margin-top:4px;" title="' . html_escape($rej) . '">' . html_escape($short) . '</div>';
         }
         $row[] = $statusHtml;
+    } elseif (!empty($aRow['hod_forwarded'])) {
+        $row[] = '<span class="label label-info">Forwarded to Super HR</span>';
     } else {
         $row[] = '<span class="label label-warning">Pending</span>';
     }
@@ -166,11 +173,19 @@ foreach ($rResult as $aRow) {
     $rel_type = 'additional_timesheets';
     $row_id = (int) $aRow['id'];
     $user_id = get_staff_user_id();
+    $creator_id = (int) ($aRow['creator_id'] ?? $aRow['creator'] ?? 0);
     $options = '<div class="tw-flex tw-flex-wrap tw-items-center tw-gap-1">';
 
-    if ((int) $aRow['status'] === 0 && timesheets_can_approve_attendance($user_id)) {
+    if ((int) $aRow['status'] === 0) {
+        if (timesheets_can_final_approve_attendance($user_id)) {
             $options .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('approve') . '" onclick="approve_request(' . $row_id . ',\'' . $rel_type . '\'); return false;" class="btn btn-success btn-icon btn-sm"><i class="fa fa-check"></i></span>';
             $options .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . $row_id . ',\'' . $rel_type . '\'); return false;" class="btn btn-danger btn-icon btn-sm"><i class="fa fa-times"></i></span>';
+        } elseif (timesheets_can_hod_review_regularisation($creator_id, $user_id)) {
+            if (empty($aRow['hod_forwarded'])) {
+                $options .= '<span data-placement="top" data-toggle="tooltip" data-title="Forward to Super HR" onclick="forward_regularisation_request(' . $row_id . '); return false;" class="btn btn-info btn-icon btn-sm"><i class="fa fa-share"></i></span>';
+            }
+            $options .= '<span data-placement="top" data-toggle="tooltip" data-title="' . _l('deny') . '" onclick="deny_request(' . $row_id . ',\'' . $rel_type . '\'); return false;" class="btn btn-danger btn-icon btn-sm"><i class="fa fa-times"></i></span>';
+        }
     }
 
     $options .= '<a href="Javascript:void(0);" onclick="view_additional_timesheets(' . $row_id . '); return false" class="btn btn-default btn-sm" data-toggle="sidebar-right" data-target=".additional-timesheets-sidebar" title="Review"><i class="fa fa-eye"></i></a>';
