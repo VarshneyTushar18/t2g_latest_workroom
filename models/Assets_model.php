@@ -215,6 +215,102 @@ class assets_model extends App_Model
         return false;
     }
 
+    public function update_asset_status($asset_id, $status)
+    {
+        $asset = $this->get($asset_id);
+        if (!$asset) {
+            return false;
+        }
+
+        $this->db->where('id', $asset_id);
+        $this->db->update(db_prefix() . 'assets', [
+            'status' => $status,
+            'status_override' => 1,
+        ]);
+
+        if ($this->db->affected_rows() > 0) {
+            $this->db->insert(db_prefix() . 'inventory_history', [
+                'assets' => $asset_id,
+                'date_time' => date('Y-m-d H:i:s'),
+                'acction' => 'status_changed',
+                'inventory_begin' => $asset->amount - $asset->total_allocation,
+                'inventory_end' => $asset->amount - $asset->total_allocation,
+            ]);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public function get_asset_sale_context($asset_id)
+    {
+        $asset = $this->get($asset_id);
+        if (!$asset) {
+            return false;
+        }
+
+        return [
+            'id' => (int) $asset->id,
+            'assets_name' => $asset->assets_name,
+            'assets_code' => $asset->assets_code,
+            'available_quantity' => max(0, (int) $asset->amount - (int) $asset->total_allocation),
+            'status' => (int) $asset->status,
+        ];
+    }
+
+    public function sell_asset($data)
+    {
+        $this->db->trans_start();
+        $asset = $this->get((int) $data['asset_id']);
+        $available = $asset ? (int) $asset->amount - (int) $asset->total_allocation : 0;
+
+        if (!$asset || (int) $asset->status === 3 || (int) $asset->total_allocation > 0 || (int) $data['quantity'] !== $available) {
+            $this->db->trans_rollback();
+            return false;
+        }
+
+        $sale = [
+            'asset_id' => $asset->id,
+            'asset_name' => $asset->assets_name,
+            'asset_code' => $asset->assets_code,
+            'quantity' => (int) $data['quantity'],
+            'sale_date' => date('Y-m-d H:i:s', strtotime(str_replace('T', ' ', $data['sale_date']))),
+            'selling_price' => reformat_currency_asset($data['selling_price']),
+            'buyer_name' => $data['buyer_name'],
+            'buyer_company' => $data['buyer_company'],
+            'buyer_email' => $data['buyer_email'],
+            'buyer_phone' => $data['buyer_phone'],
+            'buyer_address' => $data['buyer_address'],
+            'handler_name' => $data['handler_name'],
+            'handler_contact' => $data['handler_contact'],
+            'handler_department' => $data['handler_department'],
+            'payment_method' => $data['payment_method'],
+            'payment_reference' => $data['payment_reference'],
+            'handover_location' => $data['handover_location'],
+            'notes' => $data['notes'],
+            'created_by' => get_staff_user_id(),
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+        $this->db->insert(db_prefix() . 'asset_sales', $sale);
+        $sale_id = $this->db->insert_id();
+        $this->db->where('id', $asset->id)->update(db_prefix() . 'assets', [
+            'status' => 3,
+            'status_override' => 1,
+        ]);
+        $this->db->insert(db_prefix() . 'inventory_history', [
+            'assets' => $asset->id,
+            'date_time' => $sale['sale_date'],
+            'acction' => 'sold',
+            'inventory_begin' => $available,
+            'inventory_end' => 0,
+            'cost' => $sale['selling_price'],
+        ]);
+        $this->db->trans_complete();
+
+        return $this->db->trans_status() ? $sale_id : false;
+    }
+
     public function delete_assets($id)
     {
         $this->db->where('rel_id', $id);
@@ -301,6 +397,12 @@ class assets_model extends App_Model
     public function allocation_asset($data)
     {
         $assets               = $this->get($data['assets']);
+        if (!$assets || (int) $assets->status === 3 || (int) $assets->status === 4 || (int) $assets->status === 5 || (int) $assets->status === 6 || (int) $assets->status === 7) {
+            return false;
+        }
+        if ((int) $data['amount'] < 1 || (int) $data['amount'] > ((int) $assets->amount - (int) $assets->total_allocation)) {
+            return false;
+        }
         $data['time_acction'] = to_sql_date($data['time_acction'], true);
         $insert_id            = $this->db->insert('tblassets_acction_1', $data);
         if ($insert_id) {
@@ -313,7 +415,11 @@ class assets_model extends App_Model
             ]);
 
             $this->db->where('id', $data['assets']);
-            $this->db->update(db_prefix() . 'assets', ['total_allocation' => $assets->total_allocation + $data['amount']]);
+            $this->db->update(db_prefix() . 'assets', [
+                'total_allocation' => $assets->total_allocation + $data['amount'],
+                'status'           => 2,
+                'status_override'  => 1,
+            ]);
 
             // custom function to send mail on allocation
             $this->allocation_asset_mail($data);
@@ -371,8 +477,11 @@ class assets_model extends App_Model
             ]);
             $this->revoke_asset_mail($data);
             $this->db->where('id', $data['assets']);
+            $remaining_allocation = max(0, (int) $assets->total_allocation - (int) $data['amount']);
             $this->db->update(db_prefix() . 'assets', [
-                'total_allocation' => $assets->total_allocation - $data['amount'],
+                'total_allocation' => $remaining_allocation,
+                'status'           => $remaining_allocation > 0 ? 2 : 1,
+                'status_override'  => 1,
             ]);
 
             return $insert_id;
@@ -820,8 +929,220 @@ class assets_model extends App_Model
     }
 	public function get_staff_departments()
 	{
-		return $this->db->get(db_prefix() . 'departments')->result_array();
+        $this->db->where(
+            "LOWER(TRIM(name)) NOT IN ('admin', 'assigned', 'unassigned')",
+            null,
+            false
+        );
+        $this->db->order_by('name', 'ASC');
+
+        return $this->db->get(db_prefix() . 'departments')->result_array();
 	}
+
+    public function get_asset_lookup_staff()
+    {
+        $prefix = db_prefix();
+
+        $this->db->distinct();
+        $this->db->select([
+            $prefix . 'staff.staffid',
+            $prefix . 'staff.firstname',
+            $prefix . 'staff.lastname',
+            $prefix . 'staff.staff_identifi',
+        ]);
+        $this->db->from($prefix . 'staff');
+        $this->db->join(
+            $prefix . 'assets_acction_1',
+            $prefix . 'assets_acction_1.acction_to = ' . $prefix . 'staff.staffid',
+            'inner'
+        );
+        $this->db->where($prefix . 'staff.active', 1);
+        $this->db->order_by($prefix . 'staff.firstname', 'ASC');
+        $this->db->order_by($prefix . 'staff.lastname', 'ASC');
+
+        return $this->db->get()->result_array();
+    }
+
+    /**
+     * Dashboard stats: totals, assigned, available, damaged, warranty, unavailable, and type breakdown.
+     */
+    public function get_dashboard_stats()
+    {
+        $prefix = db_prefix();
+
+        $total = (int) $this->db->count_all($prefix . 'assets');
+
+        $assigned = (int) $this->db
+            ->where('IFNULL(total_allocation, 0) > 0', null, false)
+            ->count_all_results($prefix . 'assets');
+
+        $available = max(0, $total - $assigned);
+
+        $damaged = (int) $this->db
+            ->where('IFNULL(total_damages, 0) > 0', null, false)
+            ->count_all_results($prefix . 'assets');
+
+        // Warranty expired: purchase date + warranty months is before today
+        $out_of_warranty = (int) $this->db
+            ->where('date_buy IS NOT NULL', null, false)
+            ->where('IFNULL(warranty_period, 0) > 0', null, false)
+            ->where('DATE_ADD(date_buy, INTERVAL warranty_period MONTH) < CURDATE()', null, false)
+            ->count_all_results($prefix . 'assets');
+
+        // Not available for use: lost or liquidated
+        $not_available = (int) $this->db
+            ->group_start()
+            ->where('IFNULL(total_lost, 0) > 0', null, false)
+            ->or_where('IFNULL(total_liquidation, 0) > 0', null, false)
+            ->group_end()
+            ->count_all_results($prefix . 'assets');
+
+        $this->db->select($prefix . 'assets_group.group_name AS type_name', false);
+        $this->db->select('COUNT(' . $prefix . 'assets.id) AS total_count', false);
+        $this->db->select('SUM(CASE WHEN IFNULL(' . $prefix . 'assets.total_allocation, 0) > 0 THEN 1 ELSE 0 END) AS assigned_count', false);
+        $this->db->select('SUM(CASE WHEN IFNULL(' . $prefix . 'assets.total_allocation, 0) = 0 THEN 1 ELSE 0 END) AS available_count', false);
+        $this->db->from($prefix . 'assets');
+        $this->db->join(
+            $prefix . 'assets_group',
+            $prefix . 'assets_group.group_id = ' . $prefix . 'assets.asset_group',
+            'left'
+        );
+        $this->db->group_by($prefix . 'assets.asset_group');
+        $this->db->order_by('total_count', 'DESC');
+        $types = $this->db->get()->result_array();
+
+        foreach ($types as &$row) {
+            if (empty($row['type_name'])) {
+                $row['type_name'] = 'Uncategorized';
+            }
+            $row['total_count']     = (int) $row['total_count'];
+            $row['assigned_count']  = (int) $row['assigned_count'];
+            $row['available_count'] = (int) $row['available_count'];
+        }
+        unset($row);
+
+        return [
+            'total'           => $total,
+            'assigned'        => $assigned,
+            'available'       => $available,
+            'damaged'         => $damaged,
+            'out_of_warranty' => $out_of_warranty,
+            'not_available'   => $not_available,
+            'types'           => $types,
+        ];
+    }
+
+    /**
+     * Asset counts grouped by department (tblassets.department -> tbldepartments.departmentid),
+     * same shape/logic as the type breakdown in get_dashboard_stats().
+     */
+    public function get_assets_by_department()
+    {
+        $prefix = db_prefix();
+
+        $this->db->select($prefix . 'departments.name AS department_name', false);
+        $this->db->select('COUNT(' . $prefix . 'assets.id) AS total_count', false);
+        $this->db->select('SUM(CASE WHEN IFNULL(' . $prefix . 'assets.total_allocation, 0) > 0 THEN 1 ELSE 0 END) AS assigned_count', false);
+        $this->db->select('SUM(CASE WHEN IFNULL(' . $prefix . 'assets.total_allocation, 0) = 0 THEN 1 ELSE 0 END) AS available_count', false);
+        $this->db->from($prefix . 'assets');
+        $this->db->join(
+            $prefix . 'departments',
+            $prefix . 'departments.departmentid = ' . $prefix . 'assets.department',
+            'inner'
+        );
+        $this->db->where(
+            "LOWER(TRIM(" . $prefix . "departments.name)) NOT IN ('admin', 'assigned', 'unassigned')",
+            null,
+            false
+        );
+        $this->db->group_by($prefix . 'assets.department');
+        $this->db->order_by('total_count', 'DESC');
+        $rows = $this->db->get()->result_array();
+
+        foreach ($rows as &$row) {
+            $row['total_count']     = (int) $row['total_count'];
+            $row['assigned_count']  = (int) $row['assigned_count'];
+            $row['available_count'] = (int) $row['available_count'];
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * Search assets by id, assets_code, or assets_name.
+     */
+    public function search_assets($term, $limit = 15)
+    {
+        $term = trim((string) $term);
+        if ($term === '') {
+            return [];
+        }
+
+        $prefix = db_prefix();
+        $this->db->select($prefix . 'assets.id, assets_code, assets_name, total_allocation, amount');
+        $this->db->select($prefix . 'assets_group.group_name', false);
+        $this->db->from($prefix . 'assets');
+        $this->db->join(
+            $prefix . 'assets_group',
+            $prefix . 'assets_group.group_id = ' . $prefix . 'assets.asset_group',
+            'left'
+        );
+        $this->db->group_start();
+        if (ctype_digit($term)) {
+            $this->db->where($prefix . 'assets.id', (int) $term);
+            $this->db->or_like('assets_code', $term);
+            $this->db->or_like('assets_name', $term);
+        } else {
+            $this->db->like('assets_code', $term);
+            $this->db->or_like('assets_name', $term);
+            $this->db->or_like('serial_no', $term);
+        }
+        $this->db->group_end();
+        $this->db->order_by('assets_name', 'ASC');
+        $this->db->limit((int) $limit);
+
+        return $this->db->get()->result_array();
+    }
+
+    /**
+     * Allocation / revoke history for a single asset (newest first).
+     */
+    public function get_asset_action_history($asset_id)
+    {
+        $asset_id = (int) $asset_id;
+        if ($asset_id <= 0) {
+            return [];
+        }
+
+        $prefix = db_prefix();
+        $this->db->select([
+            $prefix . 'assets_acction_1.id',
+            $prefix . 'assets_acction_1.acction_code',
+            $prefix . 'assets_acction_1.type',
+            $prefix . 'assets_acction_1.amount',
+            $prefix . 'assets_acction_1.time_acction',
+            $prefix . 'assets_acction_1.acction_location',
+            $prefix . 'assets_acction_1.acction_reason',
+            $prefix . 'assets_acction_1.acction_to',
+            $prefix . 'assets_acction_1.acction_from',
+            'to_staff.firstname as to_firstname',
+            'to_staff.lastname as to_lastname',
+            'to_staff.staff_identifi as to_empid',
+            'from_staff.firstname as from_firstname',
+            'from_staff.lastname as from_lastname',
+        ], false);
+        $this->db->from($prefix . 'assets_acction_1');
+        $this->db->join($prefix . 'staff as to_staff', 'to_staff.staffid = ' . $prefix . 'assets_acction_1.acction_to', 'left');
+        $this->db->join($prefix . 'staff as from_staff', 'from_staff.staffid = ' . $prefix . 'assets_acction_1.acction_from', 'left');
+        $this->db->where($prefix . 'assets_acction_1.assets', $asset_id);
+        $this->db->where_in($prefix . 'assets_acction_1.type', ['allocation', 'revoke']);
+        $this->db->order_by($prefix . 'assets_acction_1.time_acction', 'DESC');
+        $this->db->order_by($prefix . 'assets_acction_1.id', 'DESC');
+
+        return $this->db->get()->result_array();
+    }
+
 	public function getDepartmentemp($deptid)
 	{
 		/*print_r($deptid);
@@ -840,11 +1161,25 @@ class assets_model extends App_Model
 		//$query = $this->db->get('mytable');
 	}
 	
-	public function getDataFilter($dept,$empid)
+    public function getDataFilter($empid)
 	{
-		$result = $this->db->query("SELECT tblassets.*,tblstaff.firstname,tblstaff.lastname,tblstaff.email from `tblassets` 
-		LEFT JOIN `tblassets_acction_1` ON tblassets_acction_1.assets = tblassets.id 
-		LEFT JOIN `tblstaff` ON tblassets_acction_1.acction_to = tblstaff.staffid where tblassets_acction_1.acction_to=".$empid);
-		return	$result->result_array();
+        $prefix = db_prefix();
+
+        $this->db->distinct();
+        $this->db->select($prefix . 'assets.*, ' . $prefix . 'staff.firstname, ' . $prefix . 'staff.lastname, ' . $prefix . 'staff.staff_identifi, ' . $prefix . 'staff.email');
+        $this->db->from($prefix . 'assets');
+        $this->db->join(
+            $prefix . 'assets_acction_1',
+            $prefix . 'assets_acction_1.assets = ' . $prefix . 'assets.id',
+            'inner'
+        );
+        $this->db->join(
+            $prefix . 'staff',
+            $prefix . 'assets_acction_1.acction_to = ' . $prefix . 'staff.staffid',
+            'inner'
+        );
+        $this->db->where($prefix . 'assets_acction_1.acction_to', (int) $empid);
+
+        return $this->db->get()->result_array();
 	}
 }

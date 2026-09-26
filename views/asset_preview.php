@@ -1,46 +1,56 @@
-<div class="panel_s">
-   <div class="panel-body">
-      <div class="col-md-12 project-overview-left">
-         <div class="row">
-            <div class="col-md-12">
-               <h4><?php echo htmlspecialchars($assets->assets_name); ?></h4>
-               <hr />
-            </div>
-         </div>
+<div class="am-preview">
+      <div class="am-preview-title">
+         <span class="am-page-icon"><i class="fa fa-laptop" aria-hidden="true"></i></span>
+         <h4><?php echo htmlspecialchars($assets->assets_name); ?></h4>
+      </div>
          <?php if (has_permission('assets', '', 'edit') || is_admin()) { ?>
-            <div class="row">
-
-               <a href="#" onclick="allocation(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-edit"></i><?php echo ' ' . htmlspecialchars(_l('allocation')); ?></a>
-               <a href="#" onclick="recalled(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-sign-in"></i><?php echo ' ' . htmlspecialchars(_l('recalled')); ?></a>
-               <a href="#" onclick="additional(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-plus"></i><?php echo ' ' . htmlspecialchars(_l('additional')); ?></a>
-               <a href="#" onclick="noti_lost(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-close"></i><?php echo ' ' . htmlspecialchars(_l('noti_lost')); ?></a>
-               <a href="#" onclick="broken(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-chain-broken"></i><?php echo ' ' . htmlspecialchars(_l('noti_broken')); ?></a>
-               <a href="#" onclick="liquidation(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-sign-out"></i><?php echo ' ' . htmlspecialchars(_l('liquidation')); ?></a>
-               <a href="#" onclick="warranty(); return false;" class="btn btn-info pull-left display-block mright5"><i class="fa fa-gear"></i><?php echo ' ' . htmlspecialchars(_l('warranty')); ?></a>
-               <a href="#" onclick="new_asset(); return false;" class="btn btn-info pull-left display-block mright5"><?php echo htmlspecialchars(_l('add_new')); ?></a>
-
-
+            <div class="am-toolbar">
+               <a href="#" onclick="allocation(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon blue"><i class="fa fa-share"></i></span><?php echo htmlspecialchars(_l('allocation')); ?>
+               </a>
+               <a href="#" onclick="recalled(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon amber"><i class="fa fa-reply"></i></span><?php echo htmlspecialchars(_l('recalled')); ?>
+               </a>
+               <a href="#" onclick="additional(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon teal"><i class="fa fa-plus"></i></span><?php echo htmlspecialchars(_l('additional')); ?>
+               </a>
+               <a href="#" onclick="noti_lost(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon red"><i class="fa fa-exclamation-triangle"></i></span><?php echo htmlspecialchars(_l('noti_lost')); ?>
+               </a>
+               <a href="#" onclick="broken(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon rose"><i class="fa fa-chain-broken"></i></span><?php echo htmlspecialchars(_l('noti_broken')); ?>
+               </a>
+               <a href="#" onclick="liquidation(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon slate"><i class="fa fa-recycle"></i></span><?php echo htmlspecialchars(_l('liquidation')); ?>
+               </a>
+               <a href="#" onclick="warranty(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon orange"><i class="fa fa-wrench"></i></span><?php echo htmlspecialchars(_l('warranty')); ?>
+               </a>
+               <a href="#" onclick="new_asset(); return false;" class="btn am-btn">
+                  <span class="am-btn-icon violet"><i class="fa fa-plus-circle"></i></span><?php echo htmlspecialchars(_l('add_new')); ?>
+               </a>
             </div>
          <?php } ?>
-         <div class="row">
             <div class="horizontal-scrollable-tabs preview-tabs-top">
                <div class="scroller arrow-left"><i class="fa fa-angle-left"></i></div>
                <div class="scroller arrow-right"><i class="fa fa-angle-right"></i></div>
                <div class="horizontal-tabs">
                   <ul class="nav nav-tabs nav-tabs-horizontal mbot15" role="tablist">
                      <li role="presentation" class="active">
-                        <a href="#general_infor" aria-controls="general_infor" role="tab" data-toggle="tab" aria-controls="general_infor">
+                        <a href="#general_infor" aria-controls="general_infor" role="tab" data-toggle="tab">
+                           <span class="am-tab-icon blue"><i class="fa fa-info-circle"></i></span>
                            <?php echo htmlspecialchars(_l('general_infor')); ?>
                         </a>
                      </li>
                      <li role="presentation">
-                        <a href="#inventory_history" aria-controls="inventory_history" role="tab" data-toggle="tab" aria-controls="inventory_history">
+                        <a href="#inventory_history" aria-controls="inventory_history" role="tab" data-toggle="tab">
+                           <span class="am-tab-icon teal"><i class="fa fa-line-chart"></i></span>
                            <?php echo htmlspecialchars(_l('inventory_history')); ?>
                         </a>
                      </li>
-
                      <li role="presentation">
-                        <a href="#pending_withdrawing" aria-controls="pending_withdrawing" role="tab" data-toggle="tab" aria-controls="pending_withdrawing">
+                        <a href="#pending_withdrawing" aria-controls="pending_withdrawing" role="tab" data-toggle="tab">
+                           <span class="am-tab-icon amber"><i class="fa fa-exchange"></i></span>
                            <?php echo htmlspecialchars(_l('pending_withdrawing_history')); ?>
                         </a>
                      </li>
@@ -51,14 +61,20 @@
                <div role="tabpanel" class="tab-pane active" id="general_infor">
                   <div class="panel panel-info">
                      <div class="panel-body">
-                        <div class="row col-md-12">
-                           <h4><?php echo htmlspecialchars(_l('asset_information')); ?></h4>
-                           <hr />
+                        <div class="row">
+                           <div class="col-md-9">
+                              <h4 class="tw-mt-0"><?php echo htmlspecialchars(_l('asset_information')); ?></h4>
+                           </div>
+                           <div class="col-md-3 text-right">
+                              <img alt="<?php echo htmlspecialchars($assets->file_name ?? $assets->assets_name); ?>"
+                                   src="https://drive.google.com/thumbnail?id=<?php echo htmlspecialchars($assets->file_id); ?>"
+                                   class="img-thumbnail img-responsive zoom"
+                                   style="width: 90px; height: 90px; display: inline-block; margin-bottom: 8px;"
+                                   onerror="this.src='<?php echo module_dir_url('assets', 'uploads'); ?>/image-not-available.png'">
+                           </div>
                         </div>
-                        <div class="col-md-12">
-                        
-                           <img alt='<?php $assets->file_name; ?>' src='https://drive.google.com/thumbnail?id=<?php echo $assets->file_id; ?>' class='img-thumbnail img-responsive zoom pull-right' style="width: 150px; height: 150px;" onerror="this.src='<?php echo module_dir_url('assets', 'uploads'); ?>/image-not-available.png'">
-                        </div>
+                        <hr class="hr-panel-separator" style="margin-top: 0;" />
+                        <div class="row">
                         <div class="col-md-6 noleftrightpadding">
                            <table class="table border table-striped nomargintop">
                               <tbody>
@@ -226,6 +242,7 @@
                               </tbody>
                            </table>
                         </div>
+                        </div>
                         <div class="col-md-12" id="assets_pv_file">
                            <?php
                            $file_html = '';
@@ -352,9 +369,7 @@
                   ?>
                </div>
             </div>
-         </div>
-      </div>
-   </div>
+</div>
    <div id="asset_file_data"></div>
    <?php include_once 'includes/allocation_modal.php'; ?>
    <?php include_once 'includes/recalled_modal.php'; ?>
