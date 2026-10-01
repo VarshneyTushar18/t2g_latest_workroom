@@ -131,7 +131,7 @@
                       <div id="apply_recorded_summary" style="margin-bottom:6px;"></div>
                       <div id="apply_suggest_text" style="margin-bottom:8px;"></div>
                       <div id="apply_leave_deduct_text" style="margin-bottom:8px;font-weight:600;color:#9a3412;"></div>
-                      <button type="button" class="btn btn-default btn-xs" id="apply_suggest_btn">Suggest times for 9h</button>
+                      <button type="button" class="btn btn-default btn-xs" id="apply_suggest_btn">Suggest times for required span</button>
                       <span class="text-muted" style="margin-left:8px;">You can still edit times manually.</span>
                     </div>
                     <div class="form-group">
@@ -228,6 +228,10 @@
   'use strict';
   var monthYear = '<?php echo html_escape($month_year ?? date('Y-m')); ?>';
   var calendarData = <?php echo json_encode($calendar['days'] ?? []); ?>;
+  var calendarMeta = {
+    required_span_minutes: <?php echo (int) ($calendar['required_span_minutes'] ?? 535); ?>,
+    half_day_min_span_minutes: <?php echo (int) ($calendar['half_day_min_span_minutes'] ?? 300); ?>
+  };
   var dayMap = {};
   var selectedDate = '';
   var gapIndex = 0;
@@ -248,6 +252,8 @@
     $.getJSON(admin_url + 'timesheets/my_attendance_calendar', { month: monthYear, staff_id: staffIdForCal })
       .done(function(res) {
         calendarData = res.days || [];
+        if (res.required_span_minutes) calendarMeta.required_span_minutes = parseInt(res.required_span_minutes, 10);
+        if (res.half_day_min_span_minutes) calendarMeta.half_day_min_span_minutes = parseInt(res.half_day_min_span_minutes, 10);
         dayMap = {};
         calendarData.forEach(function(d) { dayMap[d.date] = d; });
         selectedDate = '';
@@ -348,10 +354,15 @@
     var n = parseFloat(String(val).replace('h', ''));
     return isNaN(n) ? null : n;
   }
-  function suggestTimesFor9h(day) {
-    var required = parseFloat(day.required_hours);
-    if (isNaN(required) || required <= 0) required = 9;
-    var requiredMins = Math.round(required * 60);
+  function spanMinutesLabel(mins) {
+    mins = parseInt(mins, 10) || 0;
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return (h > 0 ? h + 'h ' : '') + m + 'm';
+  }
+  function suggestTimesForRequiredSpan(day) {
+    var requiredMins = parseInt(day.required_span_minutes || calendarMeta.required_span_minutes, 10);
+    if (isNaN(requiredMins) || requiredMins <= 0) requiredMins = 535;
+    var required = requiredMins / 60;
     var recordedIn = toMins(day.first_in || day.check_in);
     var recordedOut = toMins(day.last_out || day.check_out);
     var shiftIn = toMins(day.shift_start);
@@ -376,19 +387,20 @@
     if (recordedIn !== null) {
       sugIn = recordedIn;
       sugOut = outForIn(sugIn);
-      note = 'Kept your first punch and calculated time out to complete ' + required + 'h.';
+      note = 'Kept your first punch and calculated time out to complete ' + spanMinutesLabel(requiredMins) + ' span.';
     } else if (recordedOut !== null) {
       sugOut = recordedOut;
       sugIn = inForOut(sugOut);
-      note = 'Kept your last punch and calculated time in to complete ' + required + 'h.';
+      note = 'Kept your last punch and calculated time in to complete ' + spanMinutesLabel(requiredMins) + ' span.';
     } else {
       sugIn = shiftIn;
       sugOut = outForIn(sugIn);
-      note = 'No punches found — suggested window to complete ' + required + 'h.';
+      note = 'No punches found — suggested window to complete ' + spanMinutesLabel(requiredMins) + ' span.';
     }
 
     return {
       required: required,
+      required_mins: requiredMins,
       time_in: fromMins(sugIn),
       time_out: fromMins(sugOut),
       note: note,
@@ -401,7 +413,7 @@
   }
 
   function applySuggestion(day, fillTimes) {
-    var s = suggestTimesFor9h(day);
+    var s = suggestTimesForRequiredSpan(day);
     var recBits = [];
     if (s.recorded_in || s.recorded_out) {
       recBits.push('Recorded: ' + (s.recorded_in || '—') + ' – ' + (s.recorded_out || '—'));
@@ -413,7 +425,7 @@
     }
     $('#apply_recorded_summary').text(recBits.join(' · '));
     $('#apply_suggest_text').text(
-      'To complete ' + s.required + 'h, suggested: ' + s.time_in + ' – ' + s.time_out + '. ' + s.note
+      'To complete ' + spanMinutesLabel(s.required_mins || calendarMeta.required_span_minutes) + ' span, suggested: ' + s.time_in + ' – ' + s.time_out + '. ' + s.note
     );
     var leaveDays = parseFloat(day.leave_days_current);
     if (isNaN(leaveDays)) leaveDays = parseFloat(day.leave_days_if_regularised);
@@ -550,13 +562,13 @@
     }
     var lunch = lunchOverlapMins(inM, outM);
     var work = workMinsFromRange(inM, outM);
-    var target = 9 * 60;
+    var target = calendarMeta.required_span_minutes || 535;
     var day = dayMap[selectedDate];
-    if (day && parseFloat(day.required_hours) > 0) target = Math.round(parseFloat(day.required_hours) * 60);
+    if (day && parseInt(day.required_span_minutes, 10) > 0) target = parseInt(day.required_span_minutes, 10);
     var msg = 'Work duration: ' + fmtHm(work) + ' (' + (work / 60).toFixed(2) + 'h)';
     if (lunch > 0) msg += ' after ' + lunch + 'm lunch';
-    if (work + 0.5 >= target) msg += ' · meets ' + (target / 60) + 'h target';
-    else msg += ' · short by ' + fmtHm(target - work) + ' (need ' + (target / 60) + 'h)';
+    if (work >= target) msg += ' · meets ' + spanMinutesLabel(target) + ' span target';
+    else msg += ' · short by ' + fmtHm(target - work) + ' (need ' + spanMinutesLabel(target) + ' span)';
     $p.text(msg);
   }
   $('#apply_time_in, #apply_time_out').on('change input', previewApplyHours);

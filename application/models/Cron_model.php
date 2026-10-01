@@ -176,7 +176,7 @@ class Cron_model extends App_Model
             // check in check out auto checkout
             $this->processCheckins();
 
-            // PEDMA evaluation reminders to managers (1st / 5th / 10th + daily after 10th)
+            // PEDMA evaluation reminder emails to managers (1st / 5th / 10th only; popup handles after 10th)
             $this->send_pedma_evaluation_reminders();
 
             /**
@@ -8567,7 +8567,7 @@ public function send_break_report_to_staff()
 			$html .= '</tbody></table>';
 			//$this->email->to('naved.ahamad1@tech2globe.net');
 			 $this->email->to('harpreet.singh@tech2globe.com');
-			 $this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net']); // Optional
+			 $this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net', 'monika.sharma@tech2globe.com']);
 				$this->email->subject('Break Time Report: ' . $date);
 				$this->email->message($html);
 			print_r($html);
@@ -8640,7 +8640,7 @@ public function send_break_report_to_staff()
 
     /**
      * Email PEDMA evaluation reminders to managers.
-     * Days 1 / 5 / 10 of month, then daily after the 10th until team PEDMAs are published.
+     * Emails only on days 1, 5, and 10. After the 10th, managers are reminded via Workroom popup only.
      */
     public function send_pedma_evaluation_reminders($force = false)
     {
@@ -8654,7 +8654,7 @@ public function send_break_report_to_staff()
 
         $day = (int) date('j');
         $today = date('Y-m-d');
-        $shouldSend = in_array($day, [1, 5, 10], true) || $day > 10;
+        $shouldSend = in_array($day, [1, 5, 10], true);
 
         if (!$shouldSend && !$force) {
             return ['skipped' => true, 'reason' => 'not_reminder_day', 'sent' => 0];

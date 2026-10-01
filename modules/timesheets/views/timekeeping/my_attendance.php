@@ -36,6 +36,10 @@
   .t2g-att-cal-code {
     display: block; margin-top: 6px; font-size: 12px; font-weight: 800; text-align: center; line-height: 1.2;
   }
+  .t2g-att-cal-io {
+    display: block; margin-top: 3px; font-size: 9px; font-weight: 600; color: #475569;
+    text-align: center; line-height: 1.15; letter-spacing: -.01em;
+  }
   .t2g-att-cal-code.code-ok { color: #15803d; }
   .t2g-att-cal-code.code-half { color: #c2410c; }
   .t2g-att-cal-code.code-bad { color: #dc2626; }
@@ -186,11 +190,11 @@
                   </div>
                   <div class="t2g-att-cal-grid" id="t2g_cal_grid"></div>
                   <div class="t2g-att-cal-legend">
-                    <span><i class="lg-ok"></i> Present (9+ hrs)</span>
-                    <span><i class="lg-half"></i> Half day (5–9 hrs)</span>
+                    <span><i class="lg-ok"></i> <span id="t2g_legend_present">Present (9h − 5 min grace → 8h 55m+)</span></span>
+                    <span><i class="lg-half"></i> <span id="t2g_legend_half">Half day (5h–8h 54m span)</span></span>
                     <span><i class="lg-bad"></i> Absent (&lt;5 hrs)</span>
                     <span><i class="lg-leave"></i> Leave</span>
-                    <span><i class="lg-off"></i> Off / Holiday</span>
+                    <span><i class="lg-off"></i> Off / Holiday / Night carryover</span>
                   </div>
                 </div>
               </div>
@@ -231,7 +235,7 @@
           <p class="text-info" style="margin:4px 0 0;font-size:12px;" id="reg_hours_preview"></p>
           <p class="text-muted" style="margin:6px 0 0;font-size:12px;" id="reg_suggest_text"></p>
           <p style="margin:6px 0 0;font-size:12px;font-weight:600;color:#9a3412;" id="reg_leave_deduct_text"></p>
-          <button type="button" class="btn btn-default btn-xs" id="reg_suggest_btn" style="margin-top:6px;">Suggest times for 9h</button>
+          <button type="button" class="btn btn-default btn-xs" id="reg_suggest_btn" style="margin-top:6px;">Suggest times for required span</button>
         </div>
         <div class="form-group">
           <label>Reason <span class="text-danger">*</span></label>
@@ -253,9 +257,34 @@
   var monthYear = '<?php echo html_escape($month_year); ?>';
   var staffCode = '<?php echo html_escape($staff_code ?? ''); ?>';
   var calendarData = <?php echo json_encode($calendar['days'] ?? []); ?>;
+  var calendarMeta = {
+    required_span_minutes: <?php echo (int) ($calendar['required_span_minutes'] ?? 535); ?>,
+    present_target_minutes: <?php echo (int) ($calendar['present_target_minutes'] ?? 540); ?>,
+    present_grace_minutes: <?php echo (int) ($calendar['present_grace_minutes'] ?? 5); ?>,
+    half_day_min_span_minutes: <?php echo (int) ($calendar['half_day_min_span_minutes'] ?? 300); ?>,
+    required_hours: <?php echo json_encode((float) ($calendar['required_hours'] ?? 8.9166666667)); ?>
+  };
   var dayMap = {};
   var selectedDate = '';
   var calendarLoading = false;
+
+  function spanMinutesLabel(mins) {
+    mins = parseInt(mins, 10) || 0;
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return (h > 0 ? h + 'h ' : '') + m + 'm';
+  }
+  function updateSpanLegend() {
+    var presentM = calendarMeta.required_span_minutes || 535;
+    var targetM = calendarMeta.present_target_minutes || 540;
+    var graceM = calendarMeta.present_grace_minutes || 5;
+    var halfM = calendarMeta.half_day_min_span_minutes || 300;
+    $('#t2g_legend_present').text(
+      'Present (' + spanMinutesLabel(targetM) + ' − ' + graceM + ' min grace → ' + spanMinutesLabel(presentM) + '+)'
+    );
+    $('#t2g_legend_half').text('Half day (' + spanMinutesLabel(halfM) + '–' + spanMinutesLabel(presentM - 1) + ' span)');
+    $('#reg_suggest_btn').text('Suggest times for ' + spanMinutesLabel(presentM) + ' span');
+  }
+  updateSpanLegend();
 
   calendarData.forEach(function(d) { dayMap[d.date] = d; });
 
@@ -272,6 +301,12 @@
     $.getJSON(admin_url + 'timesheets/my_attendance_calendar', { month: monthYear, staff_id: staffId() })
       .done(function(res) {
         calendarData = res.days || [];
+        if (res.required_span_minutes) calendarMeta.required_span_minutes = parseInt(res.required_span_minutes, 10);
+        if (res.present_target_minutes) calendarMeta.present_target_minutes = parseInt(res.present_target_minutes, 10);
+        if (res.present_grace_minutes) calendarMeta.present_grace_minutes = parseInt(res.present_grace_minutes, 10);
+        if (res.half_day_min_span_minutes) calendarMeta.half_day_min_span_minutes = parseInt(res.half_day_min_span_minutes, 10);
+        if (res.required_hours) calendarMeta.required_hours = parseFloat(res.required_hours);
+        updateSpanLegend();
         dayMap = {};
         calendarData.forEach(function(d) { dayMap[d.date] = d; });
         selectedDate = '';
@@ -311,7 +346,9 @@
   }
 
   function dayCodeLabel(code) {
+    if (code === 'INC') return 'Inc';
     if (code === 'AB') return 'A';
+    if (code === 'NC') return 'NC';
     return code || '';
   }
 
@@ -326,6 +363,7 @@
   function dayHealthTone(day) {
     if (!day || day.status === 'future') return 'neutral';
     var code = day.code || '';
+    if (day.status === 'night_carryover' || code === 'NC') return 'off';
     if (day.status === 'weekend' || code === 'O') return 'off';
     if (day.status === 'holiday' || code === 'HO' || code === 'H') return 'holiday';
     if (day.status === 'leave' || day.status === 'saturday_leave') return 'leave';
@@ -376,7 +414,14 @@
   }
 
   function dayCodeHtml(day) {
-    if (!day || !day.code) return '';
+    if (!day) return '';
+    if (day.status === 'night_carryover' || day.code === 'NC') {
+      return '<span class="t2g-att-cal-code code-off" title="Night shift hours on prior day">NC</span>';
+    }
+    if (day.status === 'punch_missing' || day.code === 'INC') {
+      return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
+    }
+    if (!day.code) return '';
     var tone = dayHealthTone(day);
     var label = dayCodeLabel(day.code);
     return '<span class="t2g-att-cal-code ' + dayCodeClass(tone) + '">' + esc(label) + '</span>';
@@ -445,6 +490,11 @@
       html += '<div class="' + cls + '" data-date="' + ds + '">';
       html += '<span class="t2g-att-cal-num">' + d + '</span>';
       if (day && day.code) html += dayCodeHtml(day);
+      if (day && day.attendance_source === 'biometric' && (day.check_in || day.first_in) && (day.check_out || day.last_out)) {
+        var calIn = day.check_in || day.first_in;
+        var calOut = day.check_out || day.last_out;
+        html += '<span class="t2g-att-cal-io">' + esc(calIn) + '–' + esc(calOut) + '</span>';
+      }
       html += '</div>';
       cell++;
     }
@@ -579,10 +629,10 @@
     if (m === 60) { h++; m = 0; }
     return (h > 0 ? h + 'h ' : '') + m + 'm';
   }
-  function suggestTimesFor9h(day) {
-    var required = parseFloat(day.required_hours);
-    if (isNaN(required) || required <= 0) required = 9;
-    var requiredMins = Math.round(required * 60);
+  function suggestTimesForRequiredSpan(day) {
+    var requiredMins = parseInt(day.required_span_minutes || calendarMeta.required_span_minutes, 10);
+    if (isNaN(requiredMins) || requiredMins <= 0) requiredMins = 535;
+    var required = requiredMins / 60;
     var recordedIn = toMins(day.first_in || day.check_in);
     var recordedOut = toMins(day.last_out || day.check_out);
     var shiftIn = toMins(day.shift_start);
@@ -604,23 +654,23 @@
     if (recordedIn !== null) {
       sugIn = recordedIn;
       sugOut = outForIn(sugIn);
-      note = 'Kept first punch, extended out for ' + required + 'h.';
+      note = 'Kept first punch, extended out for ' + spanMinutesLabel(requiredMins) + ' span.';
     } else if (recordedOut !== null) {
       sugOut = recordedOut;
       sugIn = inForOut(sugOut);
-      note = 'Kept last punch, moved in earlier for ' + required + 'h.';
+      note = 'Kept last punch, moved in earlier for ' + spanMinutesLabel(requiredMins) + ' span.';
     } else {
       sugIn = shiftIn;
       sugOut = outForIn(sugIn);
-      note = 'Suggested full window for ' + required + 'h.';
+      note = 'Suggested full window for ' + spanMinutesLabel(requiredMins) + ' span.';
     }
-    return { required: required, time_in: fromMins(sugIn), time_out: fromMins(sugOut), note: note };
+    return { required: required, required_mins: requiredMins, time_in: fromMins(sugIn), time_out: fromMins(sugOut), note: note };
   }
 
   function openRegModal(day) {
     $('#reg_date').val(day.date);
     $('#reg_day_label').text('Correction for ' + day.date);
-    var s = suggestTimesFor9h(day);
+    var s = suggestTimesForRequiredSpan(day);
     $('#reg_time_in').val(s.time_in);
     $('#reg_time_out').val(s.time_out);
     $('#reg_suggest_text').text('Suggested: ' + s.time_in + ' – ' + s.time_out + ' (' + s.note + ') Editable.');
@@ -723,14 +773,15 @@
     var work = workMinsFromRange(inM, outM);
     var msg = 'Work duration: ' + fmtHm(work) + ' (' + (work / 60).toFixed(2) + 'h)';
     if (lunch > 0) msg += ' after ' + lunch + 'm lunch';
-    if (work + 0.5 >= (9 * 60)) msg += ' · meets 9h target';
-    else msg += ' · short by ' + fmtHm((9 * 60) - work);
+    var targetM = calendarMeta.required_span_minutes || 535;
+    if (work >= targetM) msg += ' · meets ' + spanMinutesLabel(targetM) + ' span target';
+    else msg += ' · short by ' + fmtHm(targetM - work);
     $p.text(msg);
   }
   $('#reg_time_in, #reg_time_out').on('change input', previewRegHours);
   $('#reg_suggest_btn').on('click', function() {
-    var d = dayMap[$('#reg_date').val()] || { date: $('#reg_date').val(), required_hours: 9 };
-    var s = suggestTimesFor9h(d);
+    var d = dayMap[$('#reg_date').val()] || { date: $('#reg_date').val(), required_span_minutes: calendarMeta.required_span_minutes };
+    var s = suggestTimesForRequiredSpan(d);
     $('#reg_time_in').val(s.time_in);
     $('#reg_time_out').val(s.time_out);
     $('#reg_suggest_text').text('Suggested: ' + s.time_in + ' – ' + s.time_out + ' (' + s.note + ') Editable.');

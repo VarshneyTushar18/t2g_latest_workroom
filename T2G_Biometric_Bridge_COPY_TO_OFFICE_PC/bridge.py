@@ -106,14 +106,246 @@ def parse_log_datetime(value: Any) -> datetime | None:
         return None
 
 
-def punch_direction_label(raw: Any, index: int) -> str:
+# Match Workroom Timesheets_model::ATTENDANCE_SESSION_WINDOW_HOURS
+DEFAULT_SESSION_WINDOW_HOURS = 13
+DEDUP_PUNCH_SECONDS = 120
+# Device often sends blank PunchDirection — reset IN/OUT guessing after idle gaps.
+GAP_RESET_MINUTES = 240
+NIGHT_CLUSTER_MINUTES = 120
+MORNING_SHIFT_HOUR = 6
+# Typical day-shift arrival window (9:30am / 11am shifts punch ~08:00-12:59).
+MORNING_DAY_SHIFT_START_HOUR = 8
+MORNING_DAY_SHIFT_END_HOUR = 13
+# After evening OUT, a lone 00:xx–05:xx swipe 90min–4h later is usually final exit (not break return).
+NIGHT_EXIT_AFTER_OUT_MIN_MINUTES = 90
+
+
+def is_night_final_exit_after_out(prev_dt: datetime, prev_label: str, dt: datetime) -> bool:
+    """True when a post-midnight swipe likely ends a night shift (not a short break return)."""
+    if prev_label != "out":
+        return False
+    gap = dt - prev_dt
+    min_gap = timedelta(minutes=NIGHT_EXIT_AFTER_OUT_MIN_MINUTES)
+    max_gap = timedelta(minutes=GAP_RESET_MINUTES)
+    return (
+        dt.date() != prev_dt.date()
+        and dt.hour < MORNING_SHIFT_HOUR
+        and prev_dt.hour >= 15
+        and min_gap <= gap < max_gap
+    )
+
+
+def known_punch_direction(raw: Any) -> str | None:
     text = str(raw or "").strip().lower()
     if text in ("in", "i", "0", "checkin", "check-in", "entry"):
         return "in"
     if text in ("out", "o", "1", "checkout", "check-out", "exit"):
         return "out"
-    # Alternate when direction missing
-    return "in" if index % 2 == 0 else "out"
+    return None
+
+
+def label_punch_sequence(punches: list[tuple[datetime, str]]) -> list[tuple[datetime, str]]:
+    """
+    Label each punch IN/OUT. Device direction wins; otherwise alternate with
+    gap-aware resets (blank PunchDirection is common on office devices).
+    """
+    labeled: list[tuple[datetime, str]] = []
+    expect = "in"
+    prev_dt: datetime | None = None
+    gap_reset = timedelta(minutes=GAP_RESET_MINUTES)
+    night_cluster = timedelta(minutes=NIGHT_CLUSTER_MINUTES)
+
+    for dt, raw_dir in punches:
+        known = known_punch_direction(raw_dir)
+        if not known and prev_dt is not None and labeled:
+            gap = dt - prev_dt
+            prev_label = labeled[-1][1]
+            if prev_label == "in":
+                if dt.date() == prev_dt.date() and dt.hour < MORNING_SHIFT_HOUR:
+                    # Midnight re-swipes vs leaving before dawn on the same sheet-day.
+                    expect = "in" if gap < night_cluster else "out"
+                elif gap >= gap_reset:
+                    if (
+                        dt.date() == prev_dt.date()
+                        and dt.hour >= MORNING_SHIFT_HOUR
+                        and prev_dt.hour < MORNING_SHIFT_HOUR
+                    ):
+                        # Midnight carryover IN + later daytime arrival.
+                        expect = "in"
+                    elif (
+                        dt.date() != prev_dt.date()
+                        and MORNING_DAY_SHIFT_START_HOUR <= dt.hour < MORNING_DAY_SHIFT_END_HOUR
+                    ):
+                        # Next-day morning arrival (e.g. prior evening IN still open on sheet).
+                        expect = "in"
+                    elif (
+                        dt.date() != prev_dt.date()
+                        and dt.hour < 12
+                        and prev_dt.hour >= 15
+                    ):
+                        # Night shift end (e.g. 18:00 IN → 03:00/06:00 OUT next day).
+                        expect = "out"
+                    elif dt.date() == prev_dt.date() and prev_dt.hour >= MORNING_SHIFT_HOUR:
+                        # Normal day shift: long gap after daytime IN → leaving for the day.
+                        expect = "out"
+                    else:
+                        expect = "in"
+                elif dt.date() != prev_dt.date() and dt.hour >= MORNING_SHIFT_HOUR:
+                    expect = "in"
+            elif prev_label == "out":
+                if is_night_final_exit_after_out(prev_dt, prev_label, dt):
+                    # Evening OUT → final exit swipe after midnight (blank device direction).
+                    expect = "out"
+                elif gap >= gap_reset:
+                    expect = "in"
+
+        if known:
+            label = known
+            expect = "out" if label == "in" else "in"
+        else:
+            label = expect
+            expect = "out" if label == "in" else "in"
+        labeled.append((dt, label))
+        prev_dt = dt
+    return labeled
+
+
+def dedupe_adjacent_punches(
+    labeled: list[tuple[datetime, str]], window_sec: int = DEDUP_PUNCH_SECONDS
+) -> list[tuple[datetime, str]]:
+    """Drop duplicate swipes within a short window (same direction)."""
+    if not labeled:
+        return []
+    deduped: list[tuple[datetime, str]] = [labeled[0]]
+    for dt, label in labeled[1:]:
+        prev_dt, prev_label = deduped[-1]
+        if label == prev_label and abs(int((dt - prev_dt).total_seconds())) <= window_sec:
+            continue
+        deduped.append((dt, label))
+    return deduped
+
+
+def collapse_duplicate_open_in_punches(labeled: list[tuple[datetime, str]]) -> list[tuple[datetime, str]]:
+    """Drop extra IN punches while already checked in (e.g. midnight re-swipe)."""
+    collapsed: list[tuple[datetime, str]] = []
+    open_in = False
+    last_in_dt: datetime | None = None
+    gap_reset = timedelta(minutes=GAP_RESET_MINUTES)
+
+    for dt, label in labeled:
+        if label == "in":
+            if open_in and last_in_dt is not None:
+                gap = dt - last_in_dt
+                # Long gap after a carryover IN → new work segment (morning users).
+                if gap >= gap_reset and dt.hour >= MORNING_SHIFT_HOUR:
+                    open_in = False
+            if open_in:
+                continue
+            open_in = True
+            last_in_dt = dt
+            collapsed.append((dt, label))
+            continue
+        if label == "out":
+            open_in = False
+            last_in_dt = None
+        collapsed.append((dt, label))
+    return collapsed
+
+
+def fix_trailing_night_exit_mistake_in(
+    labeled: list[tuple[datetime, str]],
+) -> list[tuple[datetime, str]]:
+    """Flip a terminal early-morning IN that should have been OUT (night shift exit)."""
+    if len(labeled) < 2:
+        return labeled
+    prev_dt, prev_label = labeled[-2]
+    last_dt, last_label = labeled[-1]
+    if last_label == "in" and is_night_final_exit_after_out(prev_dt, prev_label, last_dt):
+        return labeled[:-1] + [(last_dt, "out")]
+    return labeled
+
+
+def build_attendance_sessions(
+    labeled: list[tuple[datetime, str]], window_hours: int = DEFAULT_SESSION_WINDOW_HOURS
+) -> list[dict[str, Any]]:
+    """
+    Group punches into work sessions: first IN starts a session; punches within
+    window_hours belong to that day (night carryover matches department report).
+    """
+    window = timedelta(hours=max(1, window_hours))
+    sessions: list[dict[str, Any]] = []
+    i = 0
+    n = len(labeled)
+
+    while i < n:
+        while i < n and labeled[i][1] != "in":
+            i += 1
+        if i >= n:
+            break
+
+        start_at = labeled[i][0]
+        end_at = start_at + window
+        events: list[tuple[datetime, str]] = []
+
+        while i < n and labeled[i][0] <= end_at:
+            events.append(labeled[i])
+            i += 1
+
+        if events:
+            sessions.append(
+                {
+                    "start_at": start_at,
+                    "start_date": format_workroom_date(start_at),
+                    "events": events,
+                }
+            )
+
+    return sessions
+
+
+def build_attendance_record_from_events(
+    code: str,
+    day_key: str,
+    events: list[tuple[datetime, str]],
+    sample_row: dict[str, Any],
+) -> dict[str, Any]:
+    """One Workroom row from a session's punch list."""
+    labeled = events
+    punch_bits = [f"{format_hhmm(dt)} ({label})" for dt, label in labeled]
+
+    first_in = next((dt for dt, label in labeled if label == "in"), None)
+    last_out = None
+    if labeled and labeled[-1][1] != "in":
+        last_out = next((dt for dt, label in reversed(labeled) if label == "out"), None)
+
+    worked = timedelta(0)
+    open_in: datetime | None = None
+    for dt, label in labeled:
+        if label == "in":
+            open_in = dt
+        elif label == "out" and open_in is not None:
+            worked += dt - open_in
+            open_in = None
+    work_secs = max(0, int(worked.total_seconds()))
+    work_hh = f"{work_secs // 3600:02d}:{(work_secs % 3600) // 60:02d}"
+
+    name = str(
+        sample_row.get("EmployeeName") or sample_row.get("employee_name") or ""
+    ).strip()
+
+    return {
+        "employee_code": code,
+        "employee_name": name,
+        "attendance_date": day_key,
+        "a_in_time": format_hhmm(first_in) if first_in else "",
+        "a_out_time": format_hhmm(last_out) if last_out else "",
+        "work_duration": work_hh if work_secs > 0 else "",
+        "punch_records": ", ".join(punch_bits),
+        "status": "Present" if labeled else "",
+        "location": str(sample_row.get("Location") or ""),
+        "remark": "biometric-bridge",
+        "last_punch_time": labeled[-1][0].isoformat(sep=" "),
+    }
 
 
 def format_workroom_date(dt: datetime) -> str:
@@ -123,6 +355,10 @@ def format_workroom_date(dt: datetime) -> str:
 
 
 def format_hhmm(dt: datetime) -> str:
+    return dt.strftime("%H:%M:%S")
+
+
+def format_hhmm_short(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
 
@@ -133,12 +369,18 @@ def duration_hhmm(start: datetime, end: datetime) -> str:
     return f"{hours:02d}:{minutes:02d}"
 
 
-def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def aggregate_device_logs(
+    logs: list[dict[str, Any]], session_window_hours: int = DEFAULT_SESSION_WINDOW_HOURS
+) -> list[dict[str, Any]]:
     """
     Biometric GetDeviceLogs returns punch rows.
-    Workroom expects one attendance row per employee per day.
+    Workroom expects one attendance row per employee per shift-day.
+
+    Punches are grouped into 13h sessions from first IN (not calendar midnight),
+    matching Workroom calendar / department report night-shift behaviour.
     """
-    buckets: dict[tuple[str, str], list[tuple[datetime, str, dict]]] = defaultdict(list)
+    by_employee: dict[str, list[tuple[datetime, str, dict]]] = defaultdict(list)
+    seen_keys: set[tuple[str, datetime]] = set()
 
     for row in logs:
         if not isinstance(row, dict):
@@ -168,99 +410,73 @@ def aggregate_device_logs(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not dt:
             continue
 
-        day_key = format_workroom_date(dt)
-        buckets[(code, day_key)].append((dt, str(row.get("PunchDirection") or row.get("Direction") or ""), row))
+        dedupe_key = (code, dt.replace(microsecond=0))
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
 
-    # Help diagnose missing "today" rows
-    if buckets:
-        by_day: dict[str, int] = defaultdict(int)
-        for (_code, day_key), punches in buckets.items():
-            by_day[day_key] += 1
-        logging.info(
-            "Aggregated %s employee-day row(s) across dates: %s",
-            len(buckets),
-            ", ".join(f"{d}={by_day[d]}" for d in sorted(by_day.keys())),
-        )
-    else:
-        skipped_no_date = 0
+        direction = str(row.get("PunchDirection") or row.get("Direction") or "")
+        by_employee[code].append((dt, direction, row))
+
+    if not by_employee:
         sample_keys = []
         for row in logs[:5]:
             if isinstance(row, dict):
                 sample_keys.append(sorted(row.keys()))
-                if not parse_log_datetime(
-                    row.get("LogDate")
-                    or row.get("log_date")
-                    or row.get("LogDateTime")
-                    or row.get("AttendanceDateTime")
-                    or row.get("PunchTime")
-                    or row.get("DateTime")
-                ):
-                    skipped_no_date += 1
         logging.warning(
             "No punches could be aggregated (sample keys=%s). Check LogDate format.",
             sample_keys[:2],
         )
+        return []
 
-    records: list[dict[str, Any]] = []
+    day_buckets: dict[tuple[str, str], list[tuple[datetime, str, dict]]] = defaultdict(list)
     latest_punch: datetime | None = None
 
-    for (code, day_key), punches in buckets.items():
+    for code, punches in by_employee.items():
         punches.sort(key=lambda x: x[0])
-        punch_bits = []
-        labeled: list[tuple[datetime, str]] = []
-        for i, (dt, direction, _row) in enumerate(punches):
-            label = punch_direction_label(direction, i)
-            labeled.append((dt, label))
-            punch_bits.append(f"{format_hhmm(dt)} ({label})")
+        raw_seq = [(dt, direction) for dt, direction, _row in punches]
+        labeled = label_punch_sequence(raw_seq)
+        labeled = dedupe_adjacent_punches(labeled)
+        labeled = collapse_duplicate_open_in_punches(labeled)
+        labeled = fix_trailing_night_exit_mistake_in(labeled)
+
+        for dt, _label in labeled:
             if latest_punch is None or dt > latest_punch:
                 latest_punch = dt
 
-        first = punches[0][0]
-        last = punches[-1][0]
-        # Out time = last real OUT only (never treat a final IN as Out).
-        last_out = None
-        for dt, label in reversed(labeled):
-            if label == "out":
-                last_out = dt
-                break
-        # Work duration = sum of completed In→Out sessions (open IN ignored).
-        worked = timedelta(0)
-        open_in: datetime | None = None
-        for dt, label in labeled:
-            if label == "in":
-                open_in = dt
-            elif label == "out" and open_in is not None:
-                worked += dt - open_in
-                open_in = None
-        work_secs = max(0, int(worked.total_seconds()))
-        work_hh = f"{work_secs // 3600:02d}:{(work_secs % 3600) // 60:02d}"
+        sessions = build_attendance_sessions(labeled, session_window_hours)
+        for session in sessions:
+            day_key = session["start_date"]
+            events = session["events"]
+            if not events:
+                continue
+            # Re-attach sample row dict for name/location (nearest punch row).
+            event_times = {dt for dt, _ in events}
+            sample_row = next(
+                (row for dt, _d, row in punches if dt in event_times),
+                punches[0][2],
+            )
+            for dt, label in events:
+                day_buckets[(code, day_key)].append((dt, label, sample_row))
 
-        name = str(
-            punches[0][2].get("EmployeeName")
-            or punches[0][2].get("employee_name")
-            or ""
-        ).strip()
+    records: list[dict[str, Any]] = []
+    for (code, day_key), bucket in day_buckets.items():
+        bucket.sort(key=lambda x: x[0])
+        events = [(dt, label) for dt, label, _row in bucket]
+        sample_row = bucket[0][2]
+        records.append(build_attendance_record_from_events(code, day_key, events, sample_row))
 
-        records.append(
-            {
-                "employee_code": code,
-                "employee_name": name,
-                "attendance_date": day_key,
-                "a_in_time": format_hhmm(first),
-                "a_out_time": format_hhmm(last_out) if last_out else "",
-                "work_duration": work_hh if work_secs > 0 else "",
-                "punch_records": ", ".join(punch_bits),
-                "status": "Present" if punches else "",
-                "location": str(punches[0][2].get("Location") or ""),
-                "remark": "biometric-bridge",
-                "last_punch_time": last.isoformat(sep=" "),
-            }
-        )
+    by_day: dict[str, int] = defaultdict(int)
+    for _code, day_key in day_buckets:
+        by_day[day_key] += 1
+    logging.info(
+        "Aggregated %s employee-day row(s) across dates: %s",
+        len(records),
+        ", ".join(f"{d}={by_day[d]}" for d in sorted(by_day.keys())),
+    )
 
-    # Keep global latest punch for checkpoint (do not overwrite per-row last punch).
     records.sort(key=lambda r: (r["attendance_date"], r["employee_code"]))
     if latest_punch:
-        # Stash on every row only as transport metadata for checkpoint update.
         for row in records:
             row["_checkpoint_last_punch"] = latest_punch.isoformat(sep=" ")
     return records
@@ -366,7 +582,8 @@ def fetch_biometric_records(cfg: dict, checkpoint: dict, *, force_from=None, for
             time.sleep(0.5)
 
     logging.info("Total raw punch logs across chunks: %s (today=%s, fetch to %s)", len(all_logs), today.isoformat(), to_date.isoformat())
-    records = aggregate_device_logs(all_logs)
+    window_hours = max(1, int(cfg.get("session_window_hours") or DEFAULT_SESSION_WINDOW_HOURS))
+    records = aggregate_device_logs(all_logs, session_window_hours=window_hours)
 
     # Push newest days first so latest-day data lands even if a later batch fails.
     def _day_sort_key(row: dict) -> tuple:
@@ -474,7 +691,8 @@ def run_fix_today(cfg: dict) -> None:
         return
 
     # 3) Aggregate + show dates
-    records = aggregate_device_logs(raw)
+    window_hours = max(1, int(cfg.get("session_window_hours") or DEFAULT_SESSION_WINDOW_HOURS))
+    records = aggregate_device_logs(raw, session_window_hours=window_hours)
     by_day: dict[str, int] = defaultdict(int)
     for row in records:
         by_day[row.get("attendance_date") or "?"] += 1

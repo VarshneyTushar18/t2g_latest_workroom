@@ -3493,9 +3493,7 @@ class Staff_model extends App_Model
         } elseif ((int) $dayOfMonth === 5) {
             $message .= '<p><b>Schedule:</b> Reminder day 5 of the month.</p>';
         } elseif ((int) $dayOfMonth === 10) {
-            $message .= '<p><b>Schedule:</b> Reminder day 10 of the month. After today, Workroom will also show a popup every 30 minutes until evaluations are completed.</p>';
-        } else {
-            $message .= '<p><b>Overdue:</b> PEDMA evaluations are past the 10th. Please complete them as soon as possible.</p>';
+            $message .= '<p><b>Schedule:</b> Final email reminder for this month. After today, Workroom will show a daily popup until evaluations are completed (no further emails).</p>';
         }
         $message .= '<p><a href="' . $evalUrl . '">Open PEDMA Evaluation</a></p>';
         $message .= '<p><em>Kind Regards,<br>Tech2globe Workroom</em></p>';

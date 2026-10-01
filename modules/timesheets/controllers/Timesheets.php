@@ -4097,6 +4097,65 @@ class timesheets extends AdminController
 		die();
 	}
 
+	/**
+	 * Bulk approve pending attendance regularization requests (HR / Super HR / Admin).
+	 */
+	public function bulk_approve_regularisation()
+	{
+		if (!$this->input->is_ajax_request()) {
+			show_404();
+		}
+
+		if (!timesheets_can_final_approve_attendance()) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Only HR / Super HR / Admin / Super Admin can approve regularization.',
+			]);
+			die();
+		}
+
+		$ids = $this->input->post('ids');
+		if (!is_array($ids)) {
+			$ids = preg_split('/\s*,\s*/', trim((string) $ids), -1, PREG_SPLIT_NO_EMPTY);
+		}
+		$ids = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+		if (empty($ids)) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Select at least one pending request.',
+			]);
+			die();
+		}
+
+		$approved = 0;
+		$failed = 0;
+		$errors = [];
+
+		foreach ($ids as $id) {
+			$result = $this->timesheets_model->approve_pending_additional_timesheet($id, (int) get_staff_user_id());
+			if (!empty($result['success'])) {
+				$approved++;
+				continue;
+			}
+			$failed++;
+			$errors[] = '#' . $id . ': ' . ($result['message'] ?? 'Failed');
+		}
+
+		$message = $approved . ' request(s) approved';
+		if ($failed > 0) {
+			$message .= ', ' . $failed . ' failed';
+		}
+
+		echo json_encode([
+			'success' => $approved > 0 && $failed === 0,
+			'approved' => $approved,
+			'failed' => $failed,
+			'message' => $message,
+			'errors' => $errors,
+		]);
+		die();
+	}
+
 
 
 	/**
@@ -14463,7 +14522,17 @@ class timesheets extends AdminController
 		}
 
 		// Fast open: calendar JSON loads via my_attendance_calendar AJAX after paint.
-		$data['calendar'] = ['days' => [], 'required_hours' => 9, 'month' => $month_year, 'staff_id' => $staff_id];
+		$this->load->helper('timesheets/timesheets');
+		$data['calendar'] = [
+			'days' => [],
+			'required_hours' => timesheets_required_work_hours(),
+			'required_span_minutes' => timesheets_required_span_minutes(),
+			'present_target_minutes' => timesheets_present_target_minutes(),
+			'present_grace_minutes' => timesheets_present_grace_minutes(),
+			'half_day_min_span_minutes' => timesheets_half_day_min_span_minutes(),
+			'month' => $month_year,
+			'staff_id' => $staff_id,
+		];
 		$staff_row = $this->db->select('staff_identifi')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row();
 		$data['staff_code'] = ($staff_row && trim((string) $staff_row->staff_identifi) !== '')
 			? trim((string) $staff_row->staff_identifi)
@@ -14523,7 +14592,16 @@ class timesheets extends AdminController
 		$parts = explode('-', $month_year);
 		$data['month_year'] = $month_year;
 		// Fast open: calendar loads via AJAX after paint.
-		$data['calendar'] = ['days' => [], 'required_hours' => 9, 'month' => $month_year, 'staff_id' => $staff_id];
+		$data['calendar'] = [
+			'days' => [],
+			'required_hours' => timesheets_required_work_hours(),
+			'required_span_minutes' => timesheets_required_span_minutes(),
+			'present_target_minutes' => timesheets_present_target_minutes(),
+			'present_grace_minutes' => timesheets_present_grace_minutes(),
+			'half_day_min_span_minutes' => timesheets_half_day_min_span_minutes(),
+			'month' => $month_year,
+			'staff_id' => $staff_id,
+		];
 		$staff_row = $this->db->select('staff_identifi')->where('staffid', $staff_id)->get(db_prefix() . 'staff')->row();
 		$data['staff_code'] = ($staff_row && trim((string) $staff_row->staff_identifi) !== '')
 			? trim((string) $staff_row->staff_identifi)

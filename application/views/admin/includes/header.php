@@ -67,11 +67,10 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
     <?php
-    $CI = &get_instance();
-    if (!function_exists('get_timesheets_option')) {
+    if (!function_exists('timesheets_admin_navbar_punch_context')) {
+        $CI = &get_instance();
         $CI->load->helper('timesheets/timesheets');
     }
-    $CI->load->model('timesheets/timesheets_model');
 
     if (function_exists('get_option')) {
         $tz = (string) get_option('default_timezone');
@@ -80,118 +79,20 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
         }
     }
 
-    $allows_updating_check_in_time = 0;
-    if (function_exists('get_timesheets_option')) {
-        $data_allows_updating = get_timesheets_option('allows_updating_check_in_time');
-        if ($data_allows_updating !== null && $data_allows_updating !== '') {
-            $allows_updating_check_in_time = $data_allows_updating;
-        }
-    }
-
-    // 13-hour cooldown window: after 13 hours, punches disappear, auto-checkout occurs if not checked out, and user is ready for next day's punch.
     $cooldown_hours = 13;
+    $navbar_punch = function_exists('timesheets_admin_navbar_punch_context')
+        ? timesheets_admin_navbar_punch_context($cooldown_hours)
+        : [];
 
-    // If staff member has an unclosed Workroom check-in older than 13 hours, trigger auto-checkout
-    try {
-        $CI->load->model('cron_model');
-        if (method_exists($CI->cron_model, 'processCheckinForStaff')) {
-            $CI->cron_model->processCheckinForStaff((int) get_staff_user_id());
-        }
-    } catch (Throwable $e) {
-    }
-
-    $today_ymd = date('Y-m-d');
-    $data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
-
-    $html_list = '';
-    $time_from_checkin = 999;
-    $type_check_in_out = '';
-
-    if (!empty($data_check_in_out[0]['date'])) {
-        $last_type = (int) ($data_check_in_out[0]['type_check'] ?? 0);
-        $last_date = $data_check_in_out[0]['date'];
-        $last_ts = strtotime($last_date);
-
-        if ($last_type === 1) {
-            // Open check-in: window = THIS person's check-in + 13 hours (not calendar midnight).
-            $hours = (time() - $last_ts) / 3600;
-            if ($hours >= 0 && $hours < $cooldown_hours) {
-                $type_check_in_out = 1;
-                $time_from_checkin = $hours;
-                $html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('H:i:s', $last_ts) . '</span>';
-            } else {
-                $type_check_in_out = 2;
-                $time_from_checkin = 999;
-                $html_list = '';
-            }
-        } elseif ($last_type === 2) {
-            $in_date = !empty($data_check_in_out[1]['date']) ? $data_check_in_out[1]['date'] : $last_date;
-            $in_ts = strtotime($in_date);
-            // Still show session pills until 13h from THAT person's check-in (not midnight for everyone).
-            $hours = (time() - $in_ts) / 3600;
-
-            if ($hours >= 0 && $hours < $cooldown_hours) {
-                $type_check_in_out = 2;
-                $time_from_checkin = $hours;
-                $html_list = '';
-                if (!empty($data_check_in_out[1]['date'])) {
-                    $html_list .= '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . Date('H:i:s', $in_ts) . '</span> ';
-                }
-                $html_list .= '<span class="header-workroom-pill header-workroom-pill-out header-source-pill" title="Workroom web check-out"><span class="header-source-tag">Workroom</span> Check out : ' . Date('H:i:s', $last_ts) . '</span>';
-            } else {
-                $type_check_in_out = 2;
-                $time_from_checkin = 999;
-                $html_list = '';
-            }
-        }
-    }
-
-    // Navbar Biometric pill when sheet has punches and last swipe is within 13h.
-    // First check-in = first IN on sheet; break = sum of OUT→IN gaps from sheet (not Workroom).
-    $biometric_navbar_active = false;
-    $biometric_checkin_label = '';
-    $biometric_is_checked_out = false;
-    $biometric_last_out_ts = 0;
-    $biometric_break_summary = null;
-
-    try {
-        if (!function_exists('timesheets_is_staff_wfh_on_date')) {
-            $CI->load->helper('timesheets/timesheets');
-        }
-        $on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
-            && timesheets_is_staff_wfh_on_date((int) get_staff_user_id(), date('Y-m-d'));
-
-        $CI->load->model('biometric_model');
-        $biometric_row = null;
-        if (!$on_wfh_today && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
-            $biometric_row = $CI->biometric_model->get_staff_active_punch((int) get_staff_user_id(), $cooldown_hours);
-        } elseif (!$on_wfh_today) {
-            $biometric_row = $CI->biometric_model->get_staff_today_punch((int) get_staff_user_id());
-        }
-        if (is_array($biometric_row)) {
-            $bio_summary = $CI->biometric_model->get_biometric_punch_summary($biometric_row);
-            if ($bio_summary) {
-                $biometric_navbar_active = true;
-                if (method_exists($CI->biometric_model, 'get_navbar_first_checkin_display')) {
-                    $biometric_checkin_label = (string) $CI->biometric_model->get_navbar_first_checkin_display($biometric_row);
-                } else {
-                    $biometric_checkin_label = (string) ($bio_summary['first_time_formatted'] ?? '');
-                }
-                if ($biometric_checkin_label === '' && !empty($bio_summary['first_ts'])) {
-                    $biometric_checkin_label = date('H:i:s', (int) $bio_summary['first_ts']);
-                }
-                $biometric_is_checked_out = $bio_summary['is_checked_out'];
-                $biometric_last_out_ts = $bio_summary['last_ts'];
-                if (method_exists($CI->biometric_model, 'get_biometric_break_summary')) {
-                    $biometric_break_summary = $CI->biometric_model->get_biometric_break_summary($biometric_row);
-                }
-            }
-        }
-    } catch (Throwable $e) {
-        $biometric_navbar_active = false;
-        $biometric_checkin_label = '';
-        $biometric_break_summary = null;
-    }
+    $allows_updating_check_in_time = (int) ($navbar_punch['allows_updating_check_in_time'] ?? 0);
+    $html_list = (string) ($navbar_punch['html_list'] ?? '');
+    $time_from_checkin = (float) ($navbar_punch['time_from_checkin'] ?? 999);
+    $type_check_in_out = $navbar_punch['type_check_in_out'] ?? '';
+    $biometric_navbar_active = !empty($navbar_punch['biometric_navbar_active']);
+    $biometric_checkin_label = (string) ($navbar_punch['biometric_checkin_label'] ?? '');
+    $biometric_is_checked_out = !empty($navbar_punch['biometric_is_checked_out']);
+    $biometric_last_out_ts = (int) ($navbar_punch['biometric_last_out_ts'] ?? 0);
+    $biometric_break_summary = $navbar_punch['biometric_break_summary'] ?? null;
 
     // Biometric available → show Biometric pill only. No biometric today → Workroom check in/out.
     ?>

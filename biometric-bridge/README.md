@@ -34,3 +34,9 @@
 ## Mapping note
 
 `EmployeeCode` from Biometric must match Workroom staff Emp ID (`staff_identifi`).
+
+## Punch grouping (important)
+
+The bridge groups raw device logs into **13-hour work sessions** starting at the first **IN** punch (same rule as Workroom calendar). Punches after midnight stay on the **shift start day**, not the calendar day — this matches the department attendance report for night staff.
+
+`session_window_hours` in `config.json` defaults to **13** (do not change unless Workroom policy changes).

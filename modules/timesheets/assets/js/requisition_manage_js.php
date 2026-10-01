@@ -60,9 +60,9 @@
     };
 
     // Latest submitted regularization first (request id desc, not attendance date).
-    initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [0], [10], addtimesheetServerParams, [0, 'desc']);
+    initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [1], [11], addtimesheetServerParams, [1, 'desc']);
     if ($.fn.DataTable.isDataTable(table_additional_timesheets)) {
-      table_additional_timesheets.DataTable().columns([0]).visible(false, false);
+      table_additional_timesheets.DataTable().columns([1]).visible(false, false);
     }
     $.each(addtimesheetServerParams, function() {
       $('#status_filter_ats').on('change', function() {
@@ -1054,6 +1054,69 @@
   }
 
 
+
+  function t2gUpdateRegBulkBar() {
+    var count = $('.reg-approve-check:checked').length;
+    $('#t2g_bulk_count').text(count);
+    if (count > 0) {
+      $('#t2g_reg_bulk_bar').show();
+    } else {
+      $('#t2g_reg_bulk_bar').hide();
+      $('#mass_select_all_reg').prop('checked', false);
+    }
+  }
+
+  $('body').on('change', '.reg-approve-check', function() {
+    t2gUpdateRegBulkBar();
+    var total = $('.reg-approve-check').length;
+    var checked = $('.reg-approve-check:checked').length;
+    $('#mass_select_all_reg').prop('checked', total > 0 && total === checked);
+  });
+
+  $('body').on('change', '#mass_select_all_reg', function() {
+    var checked = $(this).prop('checked');
+    $('.reg-approve-check').prop('checked', checked);
+    t2gUpdateRegBulkBar();
+  });
+
+  $('#t2g_bulk_clear_btn').on('click', function() {
+    $('.reg-approve-check, #mass_select_all_reg').prop('checked', false);
+    t2gUpdateRegBulkBar();
+  });
+
+  $('#t2g_bulk_approve_btn').on('click', function() {
+    var ids = [];
+    $('.reg-approve-check:checked').each(function() {
+      ids.push(parseInt($(this).val(), 10));
+    });
+    if (!ids.length) {
+      alert_float('warning', 'Select at least one pending request.');
+      return;
+    }
+    if (!confirm('Approve ' + ids.length + ' selected regularization request(s)?')) {
+      return;
+    }
+    $("body").append('<div class="dt-loader"></div>');
+    $.post(admin_url + 'timesheets/bulk_approve_regularisation', { ids: ids }).done(function(response) {
+      $("body").find('.dt-loader').remove();
+      if (typeof response === 'string') {
+        try { response = JSON.parse(response); } catch (e) { response = {}; }
+      }
+      if (response.success === true || response.success === 'true' || (response.approved && response.approved > 0)) {
+        alert_float('success', response.message || ('Approved ' + response.approved + ' request(s).'));
+        $('.reg-approve-check, #mass_select_all_reg').prop('checked', false);
+        t2gUpdateRegBulkBar();
+        if (typeof table_additional_timesheets !== 'undefined' && table_additional_timesheets.length && $.fn.DataTable.isDataTable(table_additional_timesheets)) {
+          table_additional_timesheets.DataTable().ajax.reload(null, false);
+        }
+        return;
+      }
+      alert_float('warning', response.message || 'Could not approve selected requests.');
+    }).fail(function() {
+      $("body").find('.dt-loader').remove();
+      alert_float('danger', 'Bulk approve failed. Please try again.');
+    });
+  });
 
   function approve_request(id, rel_type){
     "use strict";

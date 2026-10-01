@@ -407,6 +407,15 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
   .hrms-cal-code.code-leave { color: #7c3aed; }
   .hrms-cal-code.code-off { color: #64748b; }
   .hrms-cal-code.code-holiday { color: #0369a1; }
+  .hrms-cal-io {
+    display: block;
+    margin-top: 2px;
+    font-size: 8px;
+    font-weight: 600;
+    color: #475569;
+    line-height: 1.1;
+    text-align: center;
+  }
   .hrms-cal-day.tone-ok { background: #dcfce7; border-color: #86efac; }
   .hrms-cal-day.tone-half { background: #ffedd5; border-color: #fdba74; }
   .hrms-cal-day.tone-bad { background: #fee2e2; border-color: #fca5a5; }
@@ -671,6 +680,7 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
   function dayHealthTone(day) {
     if (!day || day.status === 'future') return 'neutral';
     var code = day.code || '';
+    if (day.status === 'night_carryover' || code === 'NC') return 'off';
     if (day.status === 'weekend' || code === 'O') return 'off';
     if (day.status === 'holiday' || code === 'HO' || code === 'H') return 'holiday';
     if (day.status === 'leave' || day.status === 'saturday_leave') return 'leave';
@@ -709,6 +719,7 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
 
   function dayCodeLabel(code) {
     if (code === 'AB') return 'A';
+    if (code === 'NC') return 'NC';
     return code || '';
   }
 
@@ -735,6 +746,11 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
       html += '<span class="hrms-cal-num">' + day + '</span>';
       if (d && d.code) {
         html += '<span class="hrms-cal-code ' + dayCodeClass(tone) + '">' + dayCodeLabel(d.code) + '</span>';
+      }
+      if (d && d.attendance_source === 'biometric' && (d.check_in || d.first_in) && (d.check_out || d.last_out)) {
+        var calIn = d.check_in || d.first_in;
+        var calOut = d.check_out || d.last_out;
+        html += '<span class="hrms-cal-io">' + calIn + '–' + calOut + '</span>';
       }
       html += '</div>';
     }

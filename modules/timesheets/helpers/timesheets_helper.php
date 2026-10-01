@@ -26,17 +26,11 @@ function get_timesheets_option($name) {
 
 	$CI = &get_instance();
 
-	$options = [];
-
-	$val = '';
+	static $options = [];
 
 	$name = trim($name);
 
-
-
-	if (!isset($options[$name])) {
-
-		// is not auto loaded
+	if (!array_key_exists($name, $options)) {
 
 		$CI->db->select('option_val');
 
@@ -44,21 +38,13 @@ function get_timesheets_option($name) {
 
 		$row = $CI->db->get(db_prefix() . 'timesheets_option')->row();
 
-		if ($row) {
-
-			$val = $row->option_val;
-
-		}
-
-	} else {
-
-		$val = $options[$name];
+		$options[$name] = $row ? $row->option_val : '';
 
 	}
 
 
 
-	return hooks()->apply_filters('get_timesheets_option', $val, $name);
+	return hooks()->apply_filters('get_timesheets_option', $options[$name], $name);
 
 }
 
@@ -1319,13 +1305,54 @@ function timesheets_user_can_pick_staff()
 }
 
 /**
+ * Target work span for a full day before grace (minutes). Policy: 9 hours.
+ *
+ * @return int
+ */
+function timesheets_present_target_minutes()
+{
+	return 540; // 9h
+}
+
+/**
+ * Grace minutes subtracted from present target (late tolerance on span rule).
+ *
+ * @return int
+ */
+function timesheets_present_grace_minutes()
+{
+	return 5;
+}
+
+/**
+ * Minimum first-IN→last-OUT span (minutes) for a full present day (P).
+ * Present when span >= target − grace (9h − 5m = 8h 55m).
+ *
+ * @return int
+ */
+function timesheets_required_span_minutes()
+{
+	return timesheets_present_target_minutes() - timesheets_present_grace_minutes();
+}
+
+/**
+ * Minimum span (minutes) for a half-day (HD).
+ *
+ * @return int
+ */
+function timesheets_half_day_min_span_minutes()
+{
+	return 300; // 5h
+}
+
+/**
  * Minimum actual work hours for a half-day (HD).
  *
  * @return float
  */
 function timesheets_half_day_min_hours()
 {
-	return 5.0;
+	return timesheets_half_day_min_span_minutes() / 60;
 }
 
 /**
@@ -1365,23 +1392,84 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 }
 
 /**
- * Minimum actual work hours for a full present day (P).
+ * Minimum displayed work hours when span qualifies as Present.
  *
  * @return float
  */
 function timesheets_present_min_hours()
 {
-	return 8.0;
+	return timesheets_required_span_minutes() / 60;
 }
 
 /**
- * Target shift hours used for regularization suggestions (includes lunch).
+ * Target span hours for regularization suggestions (first IN → last OUT).
  *
  * @return float
  */
 function timesheets_required_work_hours()
 {
-	return 9.0;
+	return timesheets_required_span_minutes() / 60;
+}
+
+/**
+ * Classify attendance from first-IN→last-OUT span in whole minutes (floor).
+ *
+ * @param int|null $span_minutes
+ * @param bool     $punch_missing
+ * @return array{status:string,type:?string,issue:string,can_regularise:bool}
+ */
+function timesheets_classify_span_minutes($span_minutes, $punch_missing = false)
+{
+	if ($punch_missing) {
+		return [
+			'status' => 'punch_missing',
+			'type' => null,
+			'issue' => 'Punch in/out incomplete',
+			'can_regularise' => true,
+		];
+	}
+
+	$span_minutes = $span_minutes === null ? null : (int) $span_minutes;
+	$present_min = timesheets_required_span_minutes();
+	$half_min = timesheets_half_day_min_span_minutes();
+
+	if ($span_minutes === null || $span_minutes <= 0) {
+		return [
+			'status' => 'absent',
+			'type' => 'AB',
+			'issue' => 'No attendance recorded',
+			'can_regularise' => true,
+		];
+	}
+
+	if ($span_minutes >= $present_min) {
+		return [
+			'status' => 'ok',
+			'type' => 'P',
+			'issue' => '',
+			'can_regularise' => false,
+		];
+	}
+
+	if ($span_minutes >= $half_min) {
+		$target = timesheets_present_target_minutes();
+		$grace = timesheets_present_grace_minutes();
+
+		return [
+			'status' => 'half_day',
+			'type' => 'HD',
+			'issue' => 'Half day (span ' . $span_minutes . ' min — present needs ' . $present_min . ' min = '
+				. intdiv($target, 60) . 'h with ' . $grace . ' min grace)',
+			'can_regularise' => true,
+		];
+	}
+
+	return [
+		'status' => 'absent',
+		'type' => 'AB',
+		'issue' => 'Less than ' . $half_min . ' min (' . $span_minutes . ' min) — counted as Absent',
+		'can_regularise' => true,
+	];
 }
 
 /**
@@ -1620,6 +1708,148 @@ function timesheets_get_leave_cc_staff_list($staff_id = '')
 		->order_by('firstname', 'ASC')
 		->get(db_prefix() . 'staff')
 		->result_array();
+}
+
+/**
+ * Build navbar punch context (Workroom + Biometric). Cached per staff ~90s to cut DB load on every admin page.
+ *
+ * @return array<string, mixed>
+ */
+function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
+{
+	$CI = &get_instance();
+	$staff_id = (int) get_staff_user_id();
+	$cache_key = 'ts_navbar_punch_' . $staff_id;
+	$cached = $CI->session->userdata($cache_key);
+	if (is_array($cached) && !empty($cached['expires']) && (int) $cached['expires'] > time() && !empty($cached['data'])) {
+		return $cached['data'];
+	}
+
+	// Auto-checkout stale open check-ins at most once every 5 minutes per user (cron also handles this).
+	$throttle_key = 'ts_process_checkin_' . $staff_id;
+	$last_checkin_run = (int) $CI->session->userdata($throttle_key);
+	if ($last_checkin_run < time() - 300) {
+		try {
+			$CI->load->model('cron_model');
+			if (method_exists($CI->cron_model, 'processCheckinForStaff')) {
+				$CI->cron_model->processCheckinForStaff($staff_id);
+			}
+		} catch (Throwable $e) {
+		}
+		$CI->session->set_userdata($throttle_key, time());
+	}
+
+	$CI->load->model('timesheets/timesheets_model');
+	$data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
+
+	$html_list = '';
+	$time_from_checkin = 999;
+	$type_check_in_out = '';
+
+	if (!empty($data_check_in_out[0]['date'])) {
+		$last_type = (int) ($data_check_in_out[0]['type_check'] ?? 0);
+		$last_date = $data_check_in_out[0]['date'];
+		$last_ts = strtotime($last_date);
+
+		if ($last_type === 1) {
+			$hours = (time() - $last_ts) / 3600;
+			if ($hours >= 0 && $hours < $cooldown_hours) {
+				$type_check_in_out = 1;
+				$time_from_checkin = $hours;
+				$html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . date('H:i:s', $last_ts) . '</span>';
+			} else {
+				$type_check_in_out = 2;
+				$time_from_checkin = 999;
+				$html_list = '';
+			}
+		} elseif ($last_type === 2) {
+			$in_date = !empty($data_check_in_out[1]['date']) ? $data_check_in_out[1]['date'] : $last_date;
+			$in_ts = strtotime($in_date);
+			$hours = (time() - $in_ts) / 3600;
+
+			if ($hours >= 0 && $hours < $cooldown_hours) {
+				$type_check_in_out = 2;
+				$time_from_checkin = $hours;
+				$html_list = '';
+				if (!empty($data_check_in_out[1]['date'])) {
+					$html_list .= '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . date('H:i:s', $in_ts) . '</span> ';
+				}
+				$html_list .= '<span class="header-workroom-pill header-workroom-pill-out header-source-pill" title="Workroom web check-out"><span class="header-source-tag">Workroom</span> Check out : ' . date('H:i:s', $last_ts) . '</span>';
+			} else {
+				$type_check_in_out = 2;
+				$time_from_checkin = 999;
+				$html_list = '';
+			}
+		}
+	}
+
+	$biometric_navbar_active = false;
+	$biometric_checkin_label = '';
+	$biometric_is_checked_out = false;
+	$biometric_last_out_ts = 0;
+	$biometric_break_summary = null;
+
+	try {
+		$on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
+			&& timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'));
+
+		$CI->load->model('biometric_model');
+		$biometric_row = null;
+		if (!$on_wfh_today && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
+			$biometric_row = $CI->biometric_model->get_staff_active_punch($staff_id, $cooldown_hours);
+		} elseif (!$on_wfh_today) {
+			$biometric_row = $CI->biometric_model->get_staff_today_punch($staff_id);
+		}
+		if (is_array($biometric_row)) {
+			$bio_summary = $CI->biometric_model->get_biometric_punch_summary($biometric_row);
+			if ($bio_summary) {
+				$biometric_navbar_active = true;
+				if (method_exists($CI->biometric_model, 'get_navbar_first_checkin_display')) {
+					$biometric_checkin_label = (string) $CI->biometric_model->get_navbar_first_checkin_display($biometric_row);
+				} else {
+					$biometric_checkin_label = (string) ($bio_summary['first_time_formatted'] ?? '');
+				}
+				if ($biometric_checkin_label === '' && !empty($bio_summary['first_ts'])) {
+					$biometric_checkin_label = date('H:i:s', (int) $bio_summary['first_ts']);
+				}
+				$biometric_is_checked_out = $bio_summary['is_checked_out'];
+				$biometric_last_out_ts = $bio_summary['last_ts'];
+				if (method_exists($CI->biometric_model, 'get_biometric_break_summary')) {
+					$biometric_break_summary = $CI->biometric_model->get_biometric_break_summary($biometric_row);
+				}
+			}
+		}
+	} catch (Throwable $e) {
+		$biometric_navbar_active = false;
+		$biometric_checkin_label = '';
+		$biometric_break_summary = null;
+	}
+
+	$data = [
+		'allows_updating_check_in_time' => 0,
+		'html_list' => $html_list,
+		'time_from_checkin' => $time_from_checkin,
+		'type_check_in_out' => $type_check_in_out,
+		'biometric_navbar_active' => $biometric_navbar_active,
+		'biometric_checkin_label' => $biometric_checkin_label,
+		'biometric_is_checked_out' => $biometric_is_checked_out,
+		'biometric_last_out_ts' => $biometric_last_out_ts,
+		'biometric_break_summary' => $biometric_break_summary,
+	];
+
+	if (function_exists('get_timesheets_option')) {
+		$data_allows = get_timesheets_option('allows_updating_check_in_time');
+		if ($data_allows !== null && $data_allows !== '') {
+			$data['allows_updating_check_in_time'] = $data_allows;
+		}
+	}
+
+	$CI->session->set_userdata($cache_key, [
+		'expires' => time() + 90,
+		'data'    => $data,
+	]);
+
+	return $data;
 }
 
 

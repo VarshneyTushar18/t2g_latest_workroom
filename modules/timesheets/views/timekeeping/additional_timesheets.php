@@ -17,7 +17,25 @@
 </p>
 
 <?php
+  $can_bulk_approve = function_exists('timesheets_can_final_approve_attendance')
+      && timesheets_can_final_approve_attendance();
+  $checkbox_head = '';
+  if ($can_bulk_approve) {
+      $checkbox_head = '<span class="hide"> - </span><div class="checkbox mass_select_all_wrap"><input type="checkbox" id="mass_select_all_reg" data-to-table="table_additional_timesheets"><label></label></div>';
+  }
+?>
+<?php if ($can_bulk_approve) { ?>
+<div class="t2g-reg-bulk-bar mbot15" id="t2g_reg_bulk_bar" style="display:none;">
+  <button type="button" class="btn btn-success btn-sm" id="t2g_bulk_approve_btn">
+    <i class="fa fa-check"></i> Approve selected (<span id="t2g_bulk_count">0</span>)
+  </button>
+  <button type="button" class="btn btn-default btn-sm" id="t2g_bulk_clear_btn">Clear selection</button>
+</div>
+<?php } ?>
+
+<?php
   $table_data = [
+      $checkbox_head !== '' ? $checkbox_head : '<span class="hide"> - </span>',
       _l('the_number_sign'),
       'Employee',
       'Department',

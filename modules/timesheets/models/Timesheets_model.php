@@ -9105,6 +9105,44 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Approve one pending attendance regularization request.
+	 *
+	 * @param int $request_id
+	 * @param int $approver_id
+	 * @return array{success:bool,message:string}
+	 */
+	public function approve_pending_additional_timesheet($request_id, $approver_id = 0)
+	{
+		$request_id = (int) $request_id;
+		$approver_id = (int) ($approver_id ?: get_staff_user_id());
+		if ($request_id <= 0) {
+			return ['success' => false, 'message' => 'Invalid request.'];
+		}
+
+		if (!timesheets_can_final_approve_attendance($approver_id)) {
+			return ['success' => false, 'message' => 'Not allowed to approve.'];
+		}
+
+		$row = $this->db->where('id', $request_id)->get(db_prefix() . 'timesheets_additional_timesheet')->row();
+		if (!$row) {
+			return ['success' => false, 'message' => 'Request not found.'];
+		}
+		if ((int) $row->status !== 0) {
+			return ['success' => false, 'message' => 'Not pending.'];
+		}
+
+		$this->update_approve_request($request_id, 'additional_timesheets', 1);
+		$this->edit_timesheets($row);
+		try {
+			$this->notify_regularisation_decision($request_id, true, '', $approver_id);
+		} catch (Throwable $e) {
+			log_activity('Regularization bulk approve notify failed #' . $request_id . ': ' . $e->getMessage());
+		}
+
+		return ['success' => true, 'message' => 'Approved'];
+	}
+
+	/**
 	 * Email employee + HOD when regularization is finally approved or rejected.
 	 *
 	 * @param int  $request_id
@@ -12811,6 +12849,101 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Biometric session punch analysis for one calendar day (timesheet sync).
+	 *
+	 * @return array|null Same shape as analyze_session_punches()
+	 */
+	protected function get_day_biometric_punch_for_timesheet($staff_id, $date)
+	{
+		$staff_id = (int) $staff_id;
+		$date = date('Y-m-d', strtotime((string) $date));
+		if ($staff_id <= 0 || $date === '' || $date === '1970-01-01') {
+			return null;
+		}
+
+		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $date, $date);
+		if (!empty($wfh_dates[$date])) {
+			return null;
+		}
+
+		$range_from = date('Y-m-d', strtotime($date . ' -1 day'));
+		$range_to = date('Y-m-d', strtotime($date . ' +1 day'));
+		$timeline_events = $this->collect_attendance_timeline_events($staff_id, $range_from, $range_to, $wfh_dates);
+		$attendance_sessions = $this->build_attendance_sessions($timeline_events, self::ATTENDANCE_SESSION_WINDOW_HOURS);
+		$sessions_by_start = $this->index_attendance_sessions_by_start_date($attendance_sessions);
+		$session = $sessions_by_start[$date] ?? null;
+		if (!$session || empty($session['events'])) {
+			return null;
+		}
+
+		$bio_events = $this->filter_biometric_timeline_events($session['events']);
+		if (empty($bio_events)) {
+			return null;
+		}
+
+		return $this->analyze_session_punches($bio_events, $date === date('Y-m-d'));
+	}
+
+	/**
+	 * Workroom check-in/out punch analysis for one day (fallback when no biometric session).
+	 */
+	protected function build_check_in_out_punch_analysis($staff_id, $date)
+	{
+		$data_check_in_out = $this->get_list_check_in_out($date, $staff_id);
+		$cio_rows = [];
+		foreach ($data_check_in_out as $row) {
+			$cio_rows[] = [
+				'd' => date('Y-m-d', strtotime($row['date'])),
+				'type_check' => (int) $row['type_check'],
+				't' => date('H:i:s', strtotime($row['date'])),
+				'date' => $row['date'],
+			];
+		}
+
+		return $this->analyze_day_punches($cio_rows, [], 'Workroom');
+	}
+
+	/**
+	 * Upsert tbltimesheets_timesheet row from span classification.
+	 */
+	protected function upsert_timesheet_from_span_classification($staff_id, $date_work, $total_work_hours, $ts_type)
+	{
+		$staff_id = (int) $staff_id;
+		$date_work = date('Y-m-d', strtotime((string) $date_work));
+		if ($staff_id <= 0 || $date_work === '' || $date_work === '1970-01-01' || $ts_type === null) {
+			return false;
+		}
+
+		$data_ts = $this->get_ts_staff($staff_id, $date_work, 'P');
+		$payload = [
+			'value' => $total_work_hours,
+			'type' => $ts_type,
+		];
+
+		if ($data_ts) {
+			$this->db->where('id', $data_ts->id);
+			$this->db->update(db_prefix() . 'timesheets_timesheet', $payload);
+
+			return $this->db->affected_rows() > 0;
+		}
+
+		if ($ts_type === 'AB' && $total_work_hours <= 0) {
+			return false;
+		}
+
+		$data_insert = [
+			'staff_id' => $staff_id,
+			'date_work' => $date_work,
+			'type' => $ts_type,
+			'add_from' => ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staff_id),
+			'value' => $total_work_hours,
+		];
+		$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
+
+		return (int) $this->db->insert_id() > 0;
+	}
+
+	/**
 
 	 * add check in out value to timesheet
 
@@ -12820,197 +12953,35 @@ public function add_requisition_ajax($data)
 
 	public function add_check_in_out_value_to_timesheet($staff_id, $date)
 	{
-
-		$data_check_in_out = $this->get_list_check_in_out($date, $staff_id);
-
-		$check_in_date = '';
-
-		$check_out_date = '';
-
-		$total_work_hours = 0;
-
-		$next_key = '';
-
-		foreach ($data_check_in_out as $key => $value) {
-
-			if ((int) $value['type_check'] === 2) {
-
-				$check_out_date = $value['date'];
-
-				if ($next_key !== '' && (int) $next_key === (int) $key) {
-
-					if ($check_out_date != '' && $check_in_date != '') {
-
-						$data_hour = $this->get_hour($check_in_date, $check_out_date);
-
-						$total_work_hours += $data_hour;
-					}
-				}
-			}
-
-			if ((int) $value['type_check'] === 1) {
-
-				$check_in_date = $value['date'];
-
-				$next_key = $key + 1;
-			}
-		}
-
-		$data_ts = $this->get_ts_staff($staff_id, $date, 'P');
-
 		$date_work = date('Y-m-d', strtotime($date));
 		if (!$date_work || $date_work === '1970-01-01') {
 			$date_work = $date;
 		}
 
 		$this->load->helper('timesheets/timesheets');
-		$present_min = timesheets_present_min_hours();
-		$half_day_min = timesheets_half_day_min_hours();
 
-		if ($total_work_hours + 0.001 >= $present_min) {
-			if ($data_ts) {
-
-				$this->db->where('id', $data_ts->id);
-
-				$this->db->update(db_prefix() . 'timesheets_timesheet', [
-
-					'value' => $total_work_hours,
-
-					// 'type' => 'W',
-					'type' => 'P',
-
-
-				]);
-
-				if ($this->db->affected_rows() > 0) {
-
-					return true;
-				}
-			} else {
-
-				$data_insert['staff_id'] = $staff_id;
-
-				// Prefer the attendance date being processed (not a raw punch datetime).
-				$data_insert['date_work'] = $date_work;
-
-				// $data_insert['type'] = 'W';
-				$data_insert['type'] = 'P';
-
-
-				$data_insert['add_from'] = ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staff_id);
-
-				$data_insert['value'] = $total_work_hours;
-
-				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
-
-				$insert_id = $this->db->insert_id();
-
-				if ($insert_id) {
-
-					return true;
-				}
-			}
-		} else if ($total_work_hours + 0.001 >= $half_day_min && $total_work_hours + 0.001 < $present_min) {
-			if ($data_ts) {
-
-				$this->db->where('id', $data_ts->id);
-
-				$this->db->update(db_prefix() . 'timesheets_timesheet', [
-
-					'value' => $total_work_hours,
-
-					// 'type' => 'W',
-					'type' => 'HD',
-
-
-				]);
-
-				if ($this->db->affected_rows() > 0) {
-
-					return true;
-				}
-			} else {
-
-				$data_insert['staff_id'] = $staff_id;
-
-				$data_insert['date_work'] = $date_work;
-
-				// $data_insert['type'] = 'W';
-				$data_insert['type'] = 'HD';
-
-
-				$data_insert['add_from'] = ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staff_id);
-
-				$data_insert['value'] = $total_work_hours;
-
-				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
-
-				$insert_id = $this->db->insert_id();
-				// Attendance short-day only — do NOT invent leave applications.
-				if ($insert_id) {
-
-					return true;
-				}
-			}
-		} else if ($total_work_hours + 0.001 < $half_day_min && $total_work_hours > 0) {
-			if ($data_ts) {
-
-				$this->db->where('id', $data_ts->id);
-
-				$this->db->update(db_prefix() . 'timesheets_timesheet', [
-
-					'value' => $total_work_hours,
-
-					// 'type' => 'W',
-					'type' => 'AB',
-
-
-				]);
-
-				if ($this->db->affected_rows() > 0) {
-
-					return true;
-				}
-			} else {
-
-				$data_insert['staff_id'] = $staff_id;
-
-				$data_insert['date_work'] = $date_work;
-
-				// $data_insert['type'] = 'W';
-				$data_insert['type'] = 'AB';
-
-
-				$data_insert['add_from'] = ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staff_id);
-
-				$data_insert['value'] = $total_work_hours;
-
-				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
-
-				// Attendance code only — do NOT invent leave applications against EL.
-				$insert_id = $this->db->insert_id();
-
-				if ($insert_id) {
-
-					return true;
-				}
-			}
-		} else {
-
-			if ($data_ts) {
-
-				$this->db->where('id', $data_ts->id);
-
-				$this->db->delete(db_prefix() . 'timesheets_timesheet');
-
-				if ($this->db->affected_rows() > 0) {
-
-					return true;
-				}
-			}
+		$punch = $this->get_day_biometric_punch_for_timesheet($staff_id, $date_work);
+		if ($punch === null) {
+			$punch = $this->build_check_in_out_punch_analysis($staff_id, $date);
 		}
 
-		return false;
+		if (!empty($punch['punch_missing'])) {
+			return false;
+		}
+
+		$span_minutes = isset($punch['span_minutes']) ? (int) $punch['span_minutes'] : null;
+		$total_work_hours = (float) ($punch['hours'] ?? 0);
+		$classified = timesheets_classify_span_minutes($span_minutes, false);
+		$ts_type = $classified['type'] ?? null;
+		if ($ts_type === null) {
+			return false;
+		}
+
+		if ($ts_type === 'P' && $span_minutes !== null && $span_minutes >= timesheets_required_span_minutes()) {
+			$total_work_hours = max($total_work_hours, timesheets_present_min_hours());
+		}
+
+		return $this->upsert_timesheet_from_span_classification($staff_id, $date_work, $total_work_hours, $ts_type);
 	}
 
 
@@ -19069,19 +19040,43 @@ public function add_requisition_ajax($data)
 		$year = (int) $year;
 		$month = (int) $month;
 		if ($staff_id <= 0 || $month < 1 || $month > 12) {
-			return ['days' => [], 'required_hours' => 9, 'month' => sprintf('%04d-%02d', $year, $month)];
+			$this->load->helper('timesheets/timesheets');
+
+			return [
+				'days' => [],
+				'required_hours' => timesheets_required_work_hours(),
+				'required_span_minutes' => timesheets_required_span_minutes(),
+				'present_target_minutes' => timesheets_present_target_minutes(),
+				'present_grace_minutes' => timesheets_present_grace_minutes(),
+				'half_day_min_span_minutes' => timesheets_half_day_min_span_minutes(),
+				'month' => sprintf('%04d-%02d', $year, $month),
+			];
 		}
 
 		$this->ensure_additional_timesheet_rejection_column();
 
 		$this->load->helper('timesheets/timesheets');
 		$required_hours = timesheets_required_work_hours();
+		$required_span_minutes = timesheets_required_span_minutes();
+		$present_target_minutes = timesheets_present_target_minutes();
+		$present_grace_minutes = timesheets_present_grace_minutes();
+		$half_day_min_span_minutes = timesheets_half_day_min_span_minutes();
 		$present_min_hours = timesheets_present_min_hours();
 		$half_day_min_hours = timesheets_half_day_min_hours();
 		$from = sprintf('%04d-%02d-01', $year, $month);
 		$to = date('Y-m-t', strtotime($from));
 		$days_in_month = (int) date('t', strtotime($from));
 		$today = date('Y-m-d');
+
+		static $attendance_calendar_cache = [];
+		$calendar_cache_key = $staff_id . ':' . $year . '-' . sprintf('%02d', $month);
+		if (isset($attendance_calendar_cache[$calendar_cache_key])) {
+			return $attendance_calendar_cache[$calendar_cache_key];
+		}
+
+		$range_from = date('Y-m-d', strtotime($from . ' -1 day'));
+		$range_to = date('Y-m-d', strtotime($to . ' +1 day'));
+		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $from, $to);
 
 		// Leave codes only (HD = half-day attendance, not leave — must stay regularisable).
 		$leave_types = ['AL', 'PL', 'SL', 'UHL', 'PHL', 'UL', 'ML', 'CO', 'LOP', 'EL', 'L', 'WFH'];
@@ -19126,14 +19121,15 @@ public function add_requisition_ajax($data)
 
 		$bio_by_date = [];
 		$bio_daily_by_date = [];
+		$bio_swipes = [];
 		if (file_exists(APPPATH . 'models/Biometric_model.php')) {
 			$this->load->model('biometric_model');
-			$swipes = $this->biometric_model->get_swipes([
-				'from' => $from,
-				'to' => $to,
+			$bio_swipes = $this->biometric_model->get_swipes([
+				'from' => $range_from,
+				'to' => $range_to,
 				'staff' => $staff_id,
 			]);
-			foreach ($swipes as $sw) {
+			foreach ($bio_swipes as $sw) {
 				if (empty($sw['swipe_sort'])) {
 					continue;
 				}
@@ -19192,7 +19188,7 @@ public function add_requisition_ajax($data)
 
 		$present_types = ['P', 'W', 'SI', 'B', 'ME', 'NS', 'E'];
 
-		$month_shift_info = $this->get_info_hour_shift_staff($staff_id, $from);
+		$shift_cache = [];
 
 		$sat_dates = [];
 		$sat_rows = $this->db->select('saturday_date')
@@ -19217,19 +19213,12 @@ public function add_requisition_ajax($data)
 			$off_dates[$row['break_date']] = $row;
 		}
 
-		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $from, $to);
-
-		$range_from = date('Y-m-d', strtotime($from . ' -1 day'));
-		$range_to = date('Y-m-d', strtotime($to . ' +1 day'));
-		$timeline_events = $this->collect_attendance_timeline_events($staff_id, $range_from, $range_to, $wfh_dates);
+		$timeline_events = $this->collect_attendance_timeline_events($staff_id, $range_from, $range_to, $wfh_dates, $bio_swipes);
+		// Night shift: anchor on first IN, collect punches for 13h, then reset at next IN.
+		// e.g. IN Mon 6pm → OUT Tue 4am counts on Monday only; Tue 4am is NOT shown on Tuesday.
 		$attendance_sessions = $this->build_attendance_sessions($timeline_events, self::ATTENDANCE_SESSION_WINDOW_HOURS);
 		$sessions_by_start = $this->index_attendance_sessions_by_start_date($attendance_sessions);
-		$session_event_at = [];
-		foreach ($attendance_sessions as $att_session) {
-			foreach ($att_session['events'] as $ev) {
-				$session_event_at[(int) ($ev['at'] ?? 0)] = true;
-			}
-		}
+		$carryover_dates = $this->index_attendance_carryover_dates($attendance_sessions, $from, $to);
 
 		$days = [];
 		for ($d = 1; $d <= $days_in_month; $d++) {
@@ -19253,36 +19242,18 @@ public function add_requisition_ajax($data)
 				$attendance_source = 'wfh';
 				$punch = $this->analyze_day_punches($cio_for_day, [], 'WFH');
 			} elseif ($session && !empty($session['events'])) {
-				$has_bio = false;
-				foreach ($session['events'] as $ev) {
-					if (($ev['source'] ?? '') === 'Biometric') {
-						$has_bio = true;
-						break;
-					}
-				}
-				$attendance_source = $has_bio ? 'biometric' : 'workroom';
-				$punch = $this->analyze_session_punches($session['events']);
-			} else {
-				$cio_for_day = array_values(array_filter($cio_for_day, function ($row) use ($session_event_at) {
-					$at = strtotime($row['date'] ?? '');
-					return $at && empty($session_event_at[$at]);
-				}));
-				$day_bio = $this->build_calendar_biometric_events_for_date($date, $bio_by_date, $bio_daily_by_date);
-				$day_bio = array_values(array_filter($day_bio, function ($row) use ($date, $session_event_at) {
-					$at = strtotime($date . ' ' . substr($row['time'] ?? '00:00:00', 0, 8));
-					return $at && empty($session_event_at[$at]);
-				}));
-				if (!empty($day_bio)) {
-					$cio_for_day = [];
+				$bio_events = $this->filter_biometric_timeline_events($session['events']);
+				if (!empty($bio_events)) {
 					$attendance_source = 'biometric';
-				} elseif (!empty($cio_for_day)) {
-					$attendance_source = 'workroom';
+					$punch = $this->analyze_session_punches($bio_events, $date === $today);
+				} else {
+					$attendance_source = 'none';
+					$punch = $this->analyze_day_punches([], [], 'Workroom');
 				}
-				$punch = $this->analyze_day_punches(
-					$cio_for_day,
-					$day_bio,
-					'Workroom'
-				);
+			} else {
+				// No session starting this day — do not show date-wise orphan punches (e.g. 4am OUT from prior night).
+				$attendance_source = 'none';
+				$punch = $this->analyze_day_punches([], [], 'Workroom');
 			}
 			$day_swipes = $punch['swipes'];
 			$hours = $punch['hours'];
@@ -19296,6 +19267,11 @@ public function add_requisition_ajax($data)
 
 			if ($is_future) {
 				$status = 'future';
+			} elseif ($dow === 7) {
+				// Company policy: every Sunday is weekly holiday (ignore punches / AB timesheet).
+				$status = 'holiday';
+				$can_regularise = false;
+				$issues = [];
 			} elseif (isset($sat_dates[$date])) {
 				$status = 'saturday_leave';
 			} elseif (isset($off_dates[$date])) {
@@ -19410,20 +19386,51 @@ public function add_requisition_ajax($data)
 				}
 			}
 
-			$shift_info = $month_shift_info;
+			if (!isset($shift_cache[$date])) {
+				$shift_cache[$date] = $this->get_info_hour_shift_staff($staff_id, $date);
+			}
+			$shift_info = $shift_cache[$date];
 			$detail = $this->build_attendance_day_detail($punch, $shift_info, $hours, $required_hours);
 			$work_hours = (float) ($detail['actual_work_hrs_num'] ?? $hours);
+			$span_hrs = (float) ($punch['span_hrs'] ?? 0);
+			if ($span_hrs <= 0) {
+				$span_hrs = (float) ($detail['span_hrs_num'] ?? 0);
+			}
 			$has_in = !empty($punch['check_in']) || !empty($punch['ins']);
 			$has_out = !empty($punch['check_out']) || !empty($punch['outs']);
-			// Final hour bands on actual working hours: <5 Absent, 5–7.99 Half day, 8.0+ Present.
-			// Today with any IN: never force Absent/HD mid-day (day still open).
-			if (!in_array($status, ['future', 'weekend', 'holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)) {
-				if ($date === $today && $has_in) {
+			// Biometric: first-IN→last-OUT span >= 8h55m = Present; >=5h half day; else absent.
+			$span_minutes = isset($punch['span_minutes']) ? (int) $punch['span_minutes'] : null;
+			if ($span_minutes === null && $span_hrs > 0) {
+				$span_minutes = intdiv((int) round($span_hrs * 3600), 60);
+			}
+			$carryover_parent = $carryover_dates[$date] ?? null;
+			$is_night_carryover = (
+				$carryover_parent
+				&& !$session
+				&& !$is_future
+				&& $attendance_source === 'none'
+				&& empty($punch['swipes'])
+				&& $hours <= 0
+				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)
+			);
+			if ($is_night_carryover) {
+				$status = 'night_carryover';
+				$issues = [
+					'Night shift hours counted on ' . date('d M', strtotime($carryover_parent))
+						. ' (session spans past midnight)',
+				];
+				$can_regularise = false;
+			} elseif (!in_array($status, ['future', 'weekend', 'holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)) {
+				if ($date === $today && $has_in && !$has_out) {
 					$status = 'ok';
-					$issues = $has_out ? [] : ['Checked in — out punch pending'];
+					$issues = ['Checked in — out punch pending'];
 					$can_regularise = false;
+				} elseif (!empty($punch['punch_missing'])) {
+					$status = 'punch_missing';
+					$issues = ['Punch in/out incomplete'];
+					$can_regularise = !$weekend_blocks_reg;
 				} else {
-					$classified = $this->classify_attendance_by_hours($work_hours, $present_min_hours, $half_day_min_hours);
+					$classified = $this->classify_attendance_by_hours($span_minutes);
 					if ($classified !== null) {
 						$status = $classified['status'];
 						if (!empty($classified['issue'])) {
@@ -19435,7 +19442,11 @@ public function add_requisition_ajax($data)
 					}
 				}
 			}
-			$code = $this->map_attendance_display_code($status, $ts_type, $work_hours);
+			$calendar_hours = $work_hours;
+			if ($span_minutes !== null && $span_minutes >= $required_span_minutes && $attendance_source === 'biometric') {
+				$calendar_hours = max($work_hours, $present_min_hours);
+			}
+			$code = $this->map_attendance_display_code($status, $ts_type, $calendar_hours);
 
 			// Regularization window: current month + previous month only.
 			$current_ym = date('Y-m');
@@ -19453,10 +19464,18 @@ public function add_requisition_ajax($data)
 				'status' => $status,
 				'code' => $code,
 				'status_label' => $this->map_attendance_status_label($status, $ts_type, $code),
-				'hours' => round($work_hours, 2),
+				'hours' => round($calendar_hours, 2),
+				'span_hrs' => round($span_hrs, 2),
+				'span_minutes' => $span_minutes,
+				'actual_work_hrs_num' => round($work_hours, 2),
 				'required_hours' => $required_hours,
+				'required_span_minutes' => $required_span_minutes,
+				'present_target_minutes' => $present_target_minutes,
+				'present_grace_minutes' => $present_grace_minutes,
+				'half_day_min_span_minutes' => $half_day_min_span_minutes,
 				'present_min_hours' => $present_min_hours,
 				'half_day_min_hours' => $half_day_min_hours,
+				'night_carryover_parent' => $is_night_carryover ? $carryover_parent : null,
 				'check_in' => $punch['check_in'],
 				'check_out' => $punch['check_out'],
 				'punch_missing' => $punch['punch_missing'],
@@ -19490,14 +19509,21 @@ public function add_requisition_ajax($data)
 			];
 		}
 
-		return [
+		$result = [
 			'days' => $days,
 			'required_hours' => $required_hours,
+			'required_span_minutes' => $required_span_minutes,
+			'present_target_minutes' => $present_target_minutes,
+			'present_grace_minutes' => $present_grace_minutes,
+			'half_day_min_span_minutes' => $half_day_min_span_minutes,
 			'present_min_hours' => $present_min_hours,
 			'half_day_min_hours' => $half_day_min_hours,
 			'month' => sprintf('%04d-%02d', $year, $month),
 			'staff_id' => $staff_id,
 		];
+		$attendance_calendar_cache[$calendar_cache_key] = $result;
+
+		return $result;
 	}
 
 	/**
@@ -19718,12 +19744,12 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
-	 * Merge workroom + biometric punches into a single timeline (full datetime).
+	 * Biometric API punches only (swipes + sheet fallback). Workroom check-in/out is excluded.
 	 *
 	 * @param array<string, true> $wfh_dates
 	 * @return array<int, array{at:int,time:string,type:string,source:string,door:string}>
 	 */
-	protected function collect_attendance_timeline_events($staff_id, $range_from, $range_to, array $wfh_dates)
+	protected function collect_attendance_timeline_events($staff_id, $range_from, $range_to, array $wfh_dates, array $preloaded_swipes = null)
 	{
 		$staff_id = (int) $staff_id;
 		$events = [];
@@ -19731,11 +19757,13 @@ public function add_requisition_ajax($data)
 		if (file_exists(APPPATH . 'models/Biometric_model.php')) {
 			$this->load->model('biometric_model');
 			$bio_swipe_count_by_date = [];
-			$swipes = $this->biometric_model->get_swipes([
-				'from' => $range_from,
-				'to' => $range_to,
-				'staff' => $staff_id,
-			]);
+			$swipes = is_array($preloaded_swipes)
+				? $preloaded_swipes
+				: $this->biometric_model->get_swipes([
+					'from' => $range_from,
+					'to' => $range_to,
+					'staff' => $staff_id,
+				]);
 			foreach ($swipes as $sw) {
 				if (empty($sw['swipe_sort'])) {
 					continue;
@@ -19829,13 +19857,14 @@ public function add_requisition_ajax($data)
 								$punch_rows[] = ['time' => $out_time, 'type' => 'OUT', 'source' => 'Biometric', 'door' => 'Biometrics summary'];
 							}
 						}
+						$punch_rows = $this->biometric_model->attach_punch_timestamps($ymd, $punch_rows);
 						foreach ($punch_rows as $pr) {
 							$type = strtoupper((string) ($pr['type'] ?? ''));
 							if ($type !== 'IN' && $type !== 'OUT') {
 								continue;
 							}
-							$at = strtotime($ymd . ' ' . substr($pr['time'], 0, 8));
-							if (!$at) {
+							$at = (int) ($pr['at'] ?? 0);
+							if ($at <= 0) {
 								continue;
 							}
 							$events[] = [
@@ -19849,36 +19878,6 @@ public function add_requisition_ajax($data)
 					}
 				}
 			}
-		}
-
-		$bio_calendar_dates = [];
-		foreach ($events as $ev) {
-			$bio_calendar_dates[date('Y-m-d', $ev['at'])] = true;
-		}
-
-		$cio_rows = $this->db->query(
-			'SELECT date, type_check
-			FROM ' . db_prefix() . 'check_in_out
-			WHERE staff_id = ? AND DATE(date) BETWEEN ? AND ?
-			ORDER BY date ASC',
-			[$staff_id, $range_from, $range_to]
-		)->result_array();
-		foreach ($cio_rows as $row) {
-			$at = strtotime($row['date']);
-			if (!$at) {
-				continue;
-			}
-			$d = date('Y-m-d', $at);
-			if (!empty($wfh_dates[$d]) || !empty($bio_calendar_dates[$d])) {
-				continue;
-			}
-			$events[] = [
-				'at' => $at,
-				'time' => date('H:i:s', $at),
-				'type' => ((int) $row['type_check'] === 2) ? 'OUT' : 'IN',
-				'source' => 'Workroom',
-				'door' => 'Workroom check-in/out',
-			];
 		}
 
 		usort($events, function ($a, $b) {
@@ -19896,12 +19895,7 @@ public function add_requisition_ajax($data)
 			if (!empty($deduped)) {
 				$prev = $deduped[count($deduped) - 1];
 				if (($prev['type'] ?? '') === $type && abs(($ev['at'] ?? 0) - ($prev['at'] ?? 0)) <= 120) {
-					if (($ev['source'] ?? '') === 'Biometric' && ($prev['source'] ?? '') === 'Workroom') {
-						$deduped[count($deduped) - 1] = $ev;
-						$keep = false;
-					} else {
-						$keep = false;
-					}
+					$keep = false;
 				}
 			}
 			if ($keep) {
@@ -19910,6 +19904,17 @@ public function add_requisition_ajax($data)
 		}
 
 		return $deduped;
+	}
+
+	/**
+	 * @param array<int, array{at:int,time:string,type:string,source:string,door:string}> $events
+	 * @return array<int, array{at:int,time:string,type:string,source:string,door:string}>
+	 */
+	protected function filter_biometric_timeline_events(array $events)
+	{
+		return array_values(array_filter($events, function ($ev) {
+			return ($ev['source'] ?? '') === 'Biometric';
+		}));
 	}
 
 	/**
@@ -19924,6 +19929,7 @@ public function add_requisition_ajax($data)
 		$i = 0;
 
 		while ($i < $n) {
+			// Skip stray OUT punches between sessions (e.g. 4am checkout already tied to prior night's IN).
 			while ($i < $n && ($events[$i]['type'] ?? '') !== 'IN') {
 				$i++;
 			}
@@ -19948,6 +19954,8 @@ public function add_requisition_ajax($data)
 					'events' => $session_events,
 				];
 			}
+
+			// After 13h window closes, loop finds the next IN (e.g. same day 6pm) and starts a fresh session.
 		}
 
 		return $sessions;
@@ -19974,11 +19982,193 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Calendar dates covered by a night session that started on a prior day.
+	 *
+	 * @param array<int, array{start_at:int,start_date:string,end_at:int,events:array}> $sessions
+	 * @return array<string, string> date => parent session start date
+	 */
+	protected function index_attendance_carryover_dates(array $sessions, $from, $to)
+	{
+		$from = date('Y-m-d', strtotime($from));
+		$to = date('Y-m-d', strtotime($to));
+		$carryover = [];
+		foreach ($sessions as $session) {
+			$start_date = $session['start_date'] ?? '';
+			if ($start_date === '') {
+				continue;
+			}
+			$end_date = date('Y-m-d', (int) ($session['end_at'] ?? 0));
+			if ($end_date <= $start_date) {
+				continue;
+			}
+			$d = date('Y-m-d', strtotime($start_date . ' +1 day'));
+			while ($d <= $end_date) {
+				if ($d >= $from && $d <= $to) {
+					$carryover[$d] = $start_date;
+				}
+				$d = date('Y-m-d', strtotime($d . ' +1 day'));
+			}
+		}
+
+		return $carryover;
+	}
+
+	/**
+	 * Drop duplicate IN swipes while already checked in (e.g. midnight IN before OUT).
+	 *
+	 * @param array<int, array{type?:string}> $events
+	 * @return array<int, array{type?:string}>
+	 */
+	protected function collapse_duplicate_open_in_punches(array $events)
+	{
+		$collapsed = [];
+		$open_in = false;
+		foreach ($events as $ev) {
+			$type = strtoupper((string) ($ev['type'] ?? ''));
+			if ($type !== 'IN' && $type !== 'OUT') {
+				$collapsed[] = $ev;
+				continue;
+			}
+			if ($type === 'IN') {
+				if ($open_in) {
+					continue;
+				}
+				$open_in = true;
+				$collapsed[] = $ev;
+				continue;
+			}
+			$open_in = false;
+			$collapsed[] = $ev;
+		}
+
+		return $collapsed;
+	}
+
+	/**
+	 * Unix timestamp for a punch event (session uses at; day punches use time).
+	 *
+	 * @param array{at?:int,time?:string} $ev
+	 * @return int|null
+	 */
+	protected function punch_event_timestamp(array $ev)
+	{
+		if (isset($ev['at']) && (int) $ev['at'] > 0) {
+			return (int) $ev['at'];
+		}
+		$time = trim((string) ($ev['time'] ?? ''));
+		if ($time === '') {
+			return null;
+		}
+		$ts = strtotime('1970-01-01 ' . substr($time, 0, 8));
+
+		return $ts === false ? null : $ts;
+	}
+
+	/**
+	 * Drop a trailing IN that is likely a mistaken exit swipe (IN instead of OUT)
+	 * shortly after the real last OUT. Span already uses first IN → last OUT.
+	 *
+	 * @param array<int, array{type?:string,at?:int,time?:string}> $events
+	 * @param int $max_gap_secs
+	 * @return array<int, array{type?:string,at?:int,time?:string}>
+	 */
+	protected function drop_trailing_exit_mistake_in(array $events, $max_gap_secs = 120)
+	{
+		if (count($events) < 2) {
+			return $events;
+		}
+
+		$last = $events[count($events) - 1];
+		if (strtoupper((string) ($last['type'] ?? '')) !== 'IN') {
+			return $events;
+		}
+
+		$last_out_ts = null;
+		for ($i = count($events) - 2; $i >= 0; $i--) {
+			if (strtoupper((string) ($events[$i]['type'] ?? '')) === 'OUT') {
+				$last_out_ts = $this->punch_event_timestamp($events[$i]);
+				break;
+			}
+		}
+		if ($last_out_ts === null) {
+			return $events;
+		}
+
+		$last_in_ts = $this->punch_event_timestamp($last);
+		if ($last_in_ts === null || $last_in_ts <= $last_out_ts) {
+			return $events;
+		}
+
+		if (($last_in_ts - $last_out_ts) <= (int) $max_gap_secs) {
+			return array_slice($events, 0, -1);
+		}
+
+		return $events;
+	}
+
+	/**
+	 * Normalize biometric punch list before span / incomplete checks.
+	 *
+	 * @param array<int, array{type?:string,at?:int,time?:string}> $events
+	 * @return array<int, array{type?:string,at?:int,time?:string}>
+	 */
+	protected function normalize_biometric_punch_events(array $events, $preserve_trailing_in = false)
+	{
+		$events = $this->collapse_duplicate_open_in_punches($events);
+		if ($preserve_trailing_in) {
+			return $events;
+		}
+
+		return $this->drop_trailing_exit_mistake_in($events);
+	}
+
+	/**
+	 * True when punch sequence should block span classification (Incomplete).
+	 *
+	 * @param array<int, array{type?:string}> $events
+	 */
+	protected function biometric_punch_sequence_incomplete(array $events, $in_count, $out_count)
+	{
+		if (count($events) === 0) {
+			return false;
+		}
+		if (($in_count > 0 && $out_count === 0) || ($out_count > 0 && $in_count === 0)) {
+			return true;
+		}
+		if ($in_count === $out_count) {
+			return false;
+		}
+
+		$last = $events[count($events) - 1];
+		$last_type = strtoupper((string) ($last['type'] ?? ''));
+		if ($last_type === 'OUT' && $in_count > 0 && $out_count > 0) {
+			return false;
+		}
+
+		if ($last_type === 'IN' && $in_count === $out_count + 1 && $out_count > 0) {
+			$last_out_ts = null;
+			for ($i = count($events) - 2; $i >= 0; $i--) {
+				if (strtoupper((string) ($events[$i]['type'] ?? '')) === 'OUT') {
+					$last_out_ts = $this->punch_event_timestamp($events[$i]);
+					break;
+				}
+			}
+			$last_in_ts = $this->punch_event_timestamp($last);
+			if ($last_out_ts !== null && $last_in_ts !== null && $last_in_ts > $last_out_ts
+				&& ($last_in_ts - $last_out_ts) <= 3600) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Hours/break from a 13h attendance session (first IN anchor, break = OUT→IN gaps).
 	 *
 	 * @param array<int, array{at:int,time:string,type:string,source:string,door:string}> $events
 	 */
-	protected function analyze_session_punches(array $events)
+	protected function analyze_session_punches(array $events, $preserve_trailing_in = false)
 	{
 		if (empty($events)) {
 			return $this->analyze_day_punches([], [], 'Workroom');
@@ -20006,7 +20196,7 @@ public function add_requisition_ajax($data)
 				$deduped[] = $ev;
 			}
 		}
-		$events = $deduped;
+		$events = $this->normalize_biometric_punch_events($deduped, $preserve_trailing_in);
 
 		$first_in_at = null;
 		foreach ($events as $ev) {
@@ -20034,39 +20224,56 @@ public function add_requisition_ajax($data)
 			}
 		}
 
+		$last_type = '';
+		if (!empty($events)) {
+			$last_type = strtoupper((string) ($events[count($events) - 1]['type'] ?? ''));
+		}
+
 		$check_in = $ins ? date('H:i', (int) $ins[0]['at']) : '';
-		$check_out = $outs ? date('H:i', (int) $outs[count($outs) - 1]['at']) : '';
+		$check_out = ($outs && $last_type === 'OUT')
+			? date('H:i', (int) $outs[count($outs) - 1]['at'])
+			: '';
 
 		$break_hrs = 0.0;
+		$work_hrs = 0.0;
 		for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
-			if (($events[$j]['type'] ?? '') === 'OUT' && ($events[$j + 1]['type'] ?? '') === 'IN') {
+			$cur = $events[$j]['type'] ?? '';
+			$nxt = $events[$j + 1]['type'] ?? '';
+			if ($cur === 'OUT' && $nxt === 'IN') {
 				$break_hrs += max(0, ((int) $events[$j + 1]['at'] - (int) $events[$j]['at']) / 3600);
+			}
+			if ($cur === 'IN' && $nxt === 'OUT') {
+				$work_hrs += max(0, ((int) $events[$j + 1]['at'] - (int) $events[$j]['at']) / 3600);
 			}
 		}
 
 		$span_hrs = 0.0;
-		if ($check_in && $check_out && !empty($ins[0]['at']) && !empty($outs[count($outs) - 1]['at'])) {
+		$span_minutes = null;
+		if ($check_in && !empty($ins[0]['at'])) {
 			$in_at = (int) $ins[0]['at'];
-			$out_at = (int) $outs[count($outs) - 1]['at'];
-			if ($out_at > $in_at) {
-				$span_hrs = ($out_at - $in_at) / 3600;
+			// Span for P/HD/AB uses first IN → last OUT even when final swipe is an open IN.
+			if (!empty($outs)) {
+				$out_at = (int) $outs[count($outs) - 1]['at'];
+				if ($out_at > $in_at) {
+					$span_minutes = intdiv($out_at - $in_at, 60);
+					$span_hrs = ($out_at - $in_at) / 3600;
+				}
+			} elseif ($last_type === 'IN' && $preserve_trailing_in) {
+				$now_at = time();
+				if ($now_at > $in_at) {
+					$span_minutes = intdiv($now_at - $in_at, 60);
+					$span_hrs = ($now_at - $in_at) / 3600;
+				}
 			}
 		}
 
-		$hours = max(0, $span_hrs - $break_hrs);
+		$hours = max(0, $work_hrs > 0 ? $work_hrs : ($span_hrs - $break_hrs));
 		if ($hours > 16) {
 			$hours = 16;
 			$span_hrs = min($span_hrs, 16 + $break_hrs);
 		}
 
-		$punch_missing = false;
-		if (count($events) > 0) {
-			if ((count($ins) > 0 && count($outs) === 0) || (count($outs) > 0 && count($ins) === 0)) {
-				$punch_missing = true;
-			} elseif (count($ins) !== count($outs)) {
-				$punch_missing = true;
-			}
-		}
+		$punch_missing = $this->biometric_punch_sequence_incomplete($events, count($ins), count($outs));
 
 		$swipes = [];
 		foreach ($events as $ev) {
@@ -20093,6 +20300,7 @@ public function add_requisition_ajax($data)
 			'hours' => $hours,
 			'break_hrs' => round($break_hrs, 2),
 			'span_hrs' => round($span_hrs, 2),
+			'span_minutes' => $span_minutes,
 			'break_from_punches' => true,
 			'punch_missing' => $punch_missing,
 			'swipes' => $swipes,
@@ -20158,7 +20366,7 @@ public function add_requisition_ajax($data)
 				$deduped[] = $ev;
 			}
 		}
-		$events = $deduped;
+		$events = $this->normalize_biometric_punch_events($deduped);
 
 		$ins = [];
 		$outs = [];
@@ -20221,33 +20429,50 @@ public function add_requisition_ajax($data)
 			$check_out = $events[0]['time'];
 		}
 
-		// Card / status hours: ONLY first IN → last OUT (ignore intermediate punches).
+		$break_from_punches = !empty($bio_rows);
 		$hours = 0.0;
 		$span_hrs = 0.0;
+		$span_minutes = null;
 		$break_hrs = 0.0;
+		$work_hrs = 0.0;
 		if ($check_in && $check_out) {
 			$in_ts = strtotime('1970-01-01 ' . substr($check_in, 0, 8));
 			$out_ts = strtotime('1970-01-01 ' . substr($check_out, 0, 8));
-			if ($out_ts > $in_ts) {
+			if ($in_ts !== false && $out_ts !== false && $out_ts > $in_ts) {
+				$span_minutes = intdiv($out_ts - $in_ts, 60);
 				$span_hrs = ($out_ts - $in_ts) / 3600;
-				$hours = $span_hrs;
 			}
+		}
+		for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
+			$cur = $events[$j]['type'] ?? '';
+			$nxt = $events[$j + 1]['type'] ?? '';
+			$ts1 = strtotime('1970-01-01 ' . substr($events[$j]['time'], 0, 8));
+			$ts2 = strtotime('1970-01-01 ' . substr($events[$j + 1]['time'], 0, 8));
+			if ($ts1 === false || $ts2 === false) {
+				continue;
+			}
+			if ($cur === 'OUT' && $nxt === 'IN') {
+				$break_hrs += max(0, ($ts2 - $ts1) / 3600);
+			}
+			if ($cur === 'IN' && $nxt === 'OUT') {
+				$work_hrs += max(0, ($ts2 - $ts1) / 3600);
+			}
+		}
+		if ($break_from_punches) {
+			$hours = max(0, $work_hrs > 0 ? $work_hrs : ($span_hrs - $break_hrs));
+		} elseif ($span_hrs > 0) {
+			$hours = $span_hrs;
 		}
 
 		// Guard against absurd values from bad punch data.
 		if ($hours > 16) {
 			$hours = 16;
-			$span_hrs = min($span_hrs, 16);
+		}
+		if ($span_hrs > 16) {
+			$span_hrs = 16;
 		}
 
-		$punch_missing = false;
-		if (count($events) > 0) {
-			if ((count($ins) > 0 && count($outs) === 0) || (count($outs) > 0 && count($ins) === 0)) {
-				$punch_missing = true;
-			} elseif (count($ins) !== count($outs)) {
-				$punch_missing = true;
-			}
-		}
+		$punch_missing = $this->biometric_punch_sequence_incomplete($events, count($ins), count($outs));
 
 		$swipes = [];
 		foreach ($events as $ev) {
@@ -20267,6 +20492,8 @@ public function add_requisition_ajax($data)
 			'hours' => $hours,
 			'break_hrs' => round($break_hrs, 2),
 			'span_hrs' => round($span_hrs, 2),
+			'span_minutes' => $span_minutes,
+			'break_from_punches' => $break_from_punches,
 			'punch_missing' => $punch_missing,
 			'swipes' => $swipes,
 		];
@@ -20380,6 +20607,9 @@ public function add_requisition_ajax($data)
 		if ($status === 'weekend') {
 			return 'O';
 		}
+		if ($status === 'night_carryover') {
+			return 'NC';
+		}
 		// Hour-based status wins over stale timesheet AB / rejected regularization.
 		if ($status === 'half_day') {
 			return 'HD';
@@ -20397,7 +20627,7 @@ public function add_requisition_ajax($data)
 			return 'AB';
 		}
 		if ($status === 'punch_missing') {
-			return timesheets_attendance_code_from_hours($hours);
+			return 'INC';
 		}
 		// Rejected regularization: still show real hours result, not forced Absent.
 		if ($status === 'rejected') {
@@ -20414,51 +20644,25 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
-	 * Company rule: >= present min = Present, >= half-day min = Half day, below = Absent.
+	 * Biometric calendar rule: first-IN→last-OUT span in whole minutes.
 	 *
-	 * @param float $hours
-	 * @param float $present_min_hours
-	 * @param float $half_day_min_hours
+	 * @param int|null $span_minutes
 	 * @return array|null
 	 */
-	protected function classify_attendance_by_hours($hours, $present_min_hours = 8.0, $half_day_min_hours = 5.0)
+	protected function classify_attendance_by_hours($span_minutes = null)
 	{
-		$hours = (float) $hours;
-		$present_min_hours = (float) $present_min_hours;
-		$half_day_min_hours = (float) $half_day_min_hours;
-		if ($hours <= 0) {
-			return [
-				'status' => 'absent',
-				'issue' => 'No attendance recorded',
-				'can_regularise' => true,
-			];
-		}
-		if ($hours + 0.001 >= $present_min_hours) {
-			return [
-				'status' => 'ok',
-				'issue' => '',
-				'can_regularise' => false,
-			];
-		}
-		if ($hours + 0.001 >= $half_day_min_hours) {
-			return [
-				'status' => 'half_day',
-				'issue' => 'Half day (' . round($hours, 2) . 'h — present needs ' . $present_min_hours . 'h)',
-				'can_regularise' => true,
-			];
-		}
+		$this->load->helper('timesheets/timesheets');
 
-		return [
-			'status' => 'absent',
-			'issue' => 'Less than ' . $half_day_min_hours . 'h (' . round($hours, 2) . 'h) — counted as Absent',
-			'can_regularise' => true,
-		];
+		return timesheets_classify_span_minutes($span_minutes, false);
 	}
 
 	protected function map_attendance_status_label($status, $ts_type = '', $code = '')
 	{
+		if ($status === 'night_carryover') {
+			return 'Night carryover';
+		}
 		if ($status === 'punch_missing') {
-			return 'Incomplete punch';
+			return 'Incomplete';
 		}
 		if ($status === 'short_hours' && $code === 'P') {
 			return 'Present (check hours)';
@@ -20502,6 +20706,8 @@ public function add_requisition_ajax($data)
 
 	protected function build_attendance_day_detail($punch, $shift_info, $hours, $required_hours)
 	{
+		$this->load->helper('timesheets/timesheets');
+		$in_grace_mins = timesheets_present_grace_minutes();
 		$shift_start = $this->normalize_shift_time($shift_info->start_working ?? '', '09:30');
 		$shift_end = $this->normalize_shift_time($shift_info->end_working ?? '', '18:30');
 		$lunch_start = $this->normalize_shift_time($shift_info->start_lunch_break ?? '', '13:00');
@@ -20526,20 +20732,35 @@ public function add_requisition_ajax($data)
 		$early_out = '—';
 
 		if ($punch['check_in'] && strtotime($punch['check_in']) > strtotime($shift_start)) {
-			$late_mins = round((strtotime($punch['check_in']) - strtotime($shift_start)) / 60);
-			$late_in = $late_mins . ' min';
+			$late_mins = (int) round((strtotime($punch['check_in']) - strtotime($shift_start)) / 60);
+			if ($late_mins <= $in_grace_mins) {
+				$late_in = 'On time (' . $in_grace_mins . ' min grace)';
+			} else {
+				$late_in = $late_mins . ' min';
+			}
 		}
 		if ($punch['check_out'] && strtotime($punch['check_out']) < strtotime($shift_end)) {
 			$early_mins = round((strtotime($shift_end) - strtotime($punch['check_out'])) / 60);
 			$early_out = $early_mins . ' min';
 		}
 
-		// Total = first IN → last OUT. Actual = total − lunch break.
+		// Total = first IN → last OUT. Actual = sum of IN→OUT work segments (biometric) or span − break.
 		$span = (float) ($punch['span_hrs'] ?? 0);
+		if ($span <= 0 && $punch['check_in'] && $punch['check_out']) {
+			$in_ts = strtotime($punch['check_in']);
+			$out_ts = strtotime($punch['check_out']);
+			if ($in_ts !== false && $out_ts !== false && $out_ts > $in_ts) {
+				$span = ($out_ts - $in_ts) / 3600;
+			}
+		}
 		if ($span <= 0) {
 			$span = max(0, (float) $hours);
 		}
-		$actual = max(0, $span - $break_hrs);
+		if (!empty($punch['break_from_punches'])) {
+			$actual = max(0, (float) ($punch['hours'] ?? ($span - $break_hrs)));
+		} else {
+			$actual = max(0, $span - $break_hrs);
+		}
 
 		$sessions = [
 			[
@@ -20563,6 +20784,7 @@ public function add_requisition_ajax($data)
 			'late_in' => $late_in,
 			'early_out' => $early_out,
 			'actual_work_hrs_num' => round($actual, 2),
+			'span_hrs_num' => round($span, 2),
 			'total_work_hrs' => $span > 0 ? round($span, 2) . 'h' : '—',
 			'break_hrs' => $break_hrs > 0 ? round($break_hrs, 2) . 'h' : '—',
 			'actual_work_hrs' => $actual > 0 ? round($actual, 2) . 'h' : '—',

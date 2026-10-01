@@ -509,7 +509,7 @@ function timesheets_add_head_components() {
 	}
 	if ($load_hrms_ui) {
 		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
-		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '"></script>';
+		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '" defer></script>';
 	}
 
 	if (!(strpos($viewuri, '/admin/timesheets/timekeeping') === false)) {

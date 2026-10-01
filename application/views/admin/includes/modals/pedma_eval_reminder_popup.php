@@ -3,10 +3,6 @@
 if (!is_staff_logged_in() || !function_exists('can_evaluate_pedma') || !can_evaluate_pedma()) {
     return;
 }
-$dayOfMonth = (int) date('j');
-if ($dayOfMonth <= 10) {
-    return; // Popup only after the 10th
-}
 ?>
 <style>
 #pedmaEvalReminderModal .modal-dialog {
@@ -48,7 +44,7 @@ if ($dayOfMonth <= 10) {
                     <ul id="pedmaEvalReminderList"></ul>
                 </div>
                 <p class="text-muted" style="margin-top:12px;margin-bottom:0;">
-                    This reminder appears every 30 minutes after the 10th until evaluations are published.
+                    This reminder appears once per day on Workroom until evaluations are published (emails stop after the 10th).
                 </p>
             </div>
             <div class="modal-footer" style="text-align:center;">
@@ -70,16 +66,16 @@ if (!function_exists('pedma_eval_reminder_popup_script')) {
 (function () {
     var STAFF_ID = <?php echo (int) get_staff_user_id(); ?>;
     var STORAGE_KEY = 'pedma_eval_reminder_last_shown_' + STAFF_ID;
-    var INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
     var ENDPOINT = <?php echo json_encode(admin_url('staff/pedma_eval_pending_reminder')); ?>;
+
+    function todayKey() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
 
     function shouldShowNow() {
         try {
-            var last = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
-            if (!last) {
-                return true;
-            }
-            return (Date.now() - last) >= INTERVAL_MS;
+            return localStorage.getItem(STORAGE_KEY) !== todayKey();
         } catch (e) {
             return true;
         }
@@ -87,7 +83,7 @@ if (!function_exists('pedma_eval_reminder_popup_script')) {
 
     function markShown() {
         try {
-            localStorage.setItem(STORAGE_KEY, String(Date.now()));
+            localStorage.setItem(STORAGE_KEY, todayKey());
         } catch (e) {}
     }
 
@@ -134,7 +130,6 @@ if (!function_exists('pedma_eval_reminder_popup_script')) {
             $('#pedmaEvalReminderModal').modal('hide');
         });
         setTimeout(checkPending, 2500);
-        setInterval(checkPending, INTERVAL_MS);
     });
 })();
 </script>

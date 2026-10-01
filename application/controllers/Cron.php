@@ -197,7 +197,7 @@ class Cron extends App_Controller
 	}
 
     /**
-     * PEDMA evaluation reminders for managers (days 1/5/10 + daily after 10th).
+     * PEDMA evaluation email reminders for managers (days 1, 5, and 10 only).
      * Example: /cron/send_pedma_evaluation_reminders/YOUR_CRON_KEY
      */
     public function send_pedma_evaluation_reminders($key = '')

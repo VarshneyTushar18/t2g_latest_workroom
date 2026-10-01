@@ -4,6 +4,7 @@
   "workroom_token": "PASTE_BIOMETRIC_SYNC_TOKEN_HERE",
   "poll_interval_seconds": 120,
   "lookback_days": 14,
+  "session_window_hours": 13,
   "chunk_days": 7,
   "push_batch_size": 300,
   "biometric_api_url": "http://127.0.0.1:82/api/v2/WebAPI/GetDeviceLogs",

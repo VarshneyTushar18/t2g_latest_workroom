@@ -95,7 +95,17 @@ $rResult = $result['rResult'];
 
 foreach ($rResult as $aRow) {
     $row = [];
-    $row[] = (int) $aRow['id'];
+    $row_id = (int) $aRow['id'];
+    $user_id = get_staff_user_id();
+    $creator_id = (int) ($aRow['creator_id'] ?? $aRow['creator'] ?? 0);
+    $can_bulk_approve = (int) $aRow['status'] === 0 && timesheets_can_final_approve_attendance($user_id);
+    if ($can_bulk_approve) {
+        $row[] = '<div class="checkbox"><input type="checkbox" class="reg-approve-check" value="' . $row_id . '"><label></label></div>';
+    } else {
+        $row[] = '';
+    }
+
+    $row[] = $row_id;
 
     $_data = '<a href="' . admin_url('staff/profile/' . $aRow['creator']) . '">' . staff_profile_image($aRow['creator'], [
         'staff-profile-image-small',
@@ -171,9 +181,6 @@ foreach ($rResult as $aRow) {
     }
 
     $rel_type = 'additional_timesheets';
-    $row_id = (int) $aRow['id'];
-    $user_id = get_staff_user_id();
-    $creator_id = (int) ($aRow['creator_id'] ?? $aRow['creator'] ?? 0);
     $options = '<div class="tw-flex tw-flex-wrap tw-items-center tw-gap-1">';
 
     if ((int) $aRow['status'] === 0) {

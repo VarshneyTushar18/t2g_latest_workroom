@@ -1275,7 +1275,7 @@ class Staff extends AdminController
     }
 
     /**
-     * Manager PEDMA evaluation reminder payload (after 10th of month).
+     * Manager PEDMA evaluation reminder payload for Workroom daily popup.
      */
     public function pedma_eval_pending_reminder()
     {
@@ -1293,12 +1293,6 @@ class Staff extends AdminController
                 'pending' => [],
                 'reason'  => 'starts_' . (function_exists('pedma_eval_reminders_start_date') ? pedma_eval_reminders_start_date() : '2026-09-01'),
             ]);
-            return;
-        }
-
-        $day = (int) date('j');
-        if ($day <= 10) {
-            echo json_encode(['success' => true, 'show' => false, 'pending' => [], 'reason' => 'before_10th']);
             return;
         }
 
