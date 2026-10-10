@@ -319,19 +319,26 @@ class Cron_model extends App_Model
             return false;
         }
 
-        $thirteenHoursAgo = time() - (13 * 60 * 60);
-        $thirteenHoursAgoFormatted = date('Y-m-d H:i:s', $thirteenHoursAgo);
-
         $latest = $this->db->query(
             "SELECT MAX(date) AS latest_checkin FROM " . db_prefix() . "check_in_out WHERE type_check = 1 AND staff_id = ?",
             [$staffId]
         )->row();
 
-        if ($latest && !empty($latest->latest_checkin) && $latest->latest_checkin < $thirteenHoursAgoFormatted) {
+        if ($latest && !empty($latest->latest_checkin)) {
+            $this->load->helper('timesheets/timesheets');
+            $work_date = date('Y-m-d', strtotime($latest->latest_checkin));
+            $grace_hours = function_exists('timesheets_workroom_auto_checkout_hours')
+                ? (int) timesheets_workroom_auto_checkout_hours($staffId, $work_date)
+                : 13;
+            $grace_hours = max(13, min(24, $grace_hours));
+            $cutoffFormatted = date('Y-m-d H:i:s', time() - ($grace_hours * 3600));
+        }
+
+        if ($latest && !empty($latest->latest_checkin) && !empty($cutoffFormatted) && $latest->latest_checkin < $cutoffFormatted) {
             if (!$this->isUserCheckedOut($staffId, $latest->latest_checkin)) {
                 $work_date = date('Y-m-d', strtotime($latest->latest_checkin));
-                // Per-person: auto-out at check-in + 13 hours (not shared midnight/19:00).
-                $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (13 * 3600));
+                // Per-person: auto-out at check-in + grace window (24h WFH/remote, 13h office).
+                $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + ($grace_hours * 3600));
                 if (strtotime($auto_out) <= strtotime($latest->latest_checkin)) {
                     $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (9 * 3600));
                 }

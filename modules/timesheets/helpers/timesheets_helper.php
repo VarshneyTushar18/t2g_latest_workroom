@@ -1412,11 +1412,62 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 }
 
 /**
+ * Latest Workroom punch is an open check-in (no matching checkout yet).
+ */
+function timesheets_staff_has_open_workroom_checkin($staff_id)
+{
+	$staff_id = (int) $staff_id;
+	if ($staff_id <= 0) {
+		return false;
+	}
+	$CI = &get_instance();
+	$row = $CI->db->query(
+		'SELECT type_check FROM ' . db_prefix() . 'check_in_out
+		 WHERE staff_id = ? ORDER BY date DESC, id DESC LIMIT 1',
+		[$staff_id]
+	)->row_array();
+
+	return $row && (int) ($row['type_check'] ?? 0) === 1;
+}
+
+/**
+ * Hours before cron auto-check-out for an open Workroom session (WFH / remote = longer).
+ */
+function timesheets_workroom_auto_checkout_hours($staff_id, $checkin_date_ymd = null)
+{
+	$staff_id = (int) $staff_id;
+	$checkin_date_ymd = $checkin_date_ymd ?: date('Y-m-d');
+	if (timesheets_is_staff_wfh_on_date($staff_id, $checkin_date_ymd)) {
+		return 24;
+	}
+	$CI = &get_instance();
+	if ($CI->db->table_exists(db_prefix() . 'biometric_attendance')) {
+		$bio = $CI->db->query(
+			'SELECT id FROM ' . db_prefix() . 'biometric_attendance
+			 WHERE staff_id = ? AND punch_date = ? LIMIT 1',
+			[$staff_id, $checkin_date_ymd]
+		)->row();
+		if (!$bio) {
+			return 24;
+		}
+	}
+
+	return 13;
+}
+
+/**
  * WFH staff must use Workroom web check-in/out (never office biometric gate).
+ * Also true while a Workroom check-in session is still open (remote / WFH de facto).
  */
 function timesheets_staff_uses_workroom_attendance($staff_id, $date = null)
 {
-	return timesheets_is_staff_wfh_on_date((int) $staff_id, $date ?: date('Y-m-d'));
+	$staff_id = (int) $staff_id;
+	$date = $date ?: date('Y-m-d');
+	if (timesheets_is_staff_wfh_on_date($staff_id, $date)) {
+		return true;
+	}
+
+	return timesheets_staff_has_open_workroom_checkin($staff_id);
 }
 
 /**
@@ -1794,15 +1845,10 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 
 		if ($last_type === 1) {
 			$hours = (time() - $last_ts) / 3600;
-			if ($hours >= 0 && $hours < $cooldown_hours) {
-				$type_check_in_out = 1;
-				$time_from_checkin = $hours;
-				$html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . date('H:i:s', $last_ts) . '</span>';
-			} else {
-				$type_check_in_out = 2;
-				$time_from_checkin = 999;
-				$html_list = '';
-			}
+			// Keep Check out visible until user checks out (no 13h cutoff).
+			$type_check_in_out = 1;
+			$time_from_checkin = $hours >= 0 ? $hours : 0;
+			$html_list = '<span class="header-workroom-pill header-source-pill" title="Workroom web check-in"><span class="header-source-tag">Workroom</span> Check in : ' . date('H:i:s', $last_ts) . '</span>';
 		} elseif ($last_type === 2) {
 			$in_date = !empty($data_check_in_out[1]['date']) ? $data_check_in_out[1]['date'] : $last_date;
 			$in_ts = strtotime($in_date);
@@ -1831,13 +1877,14 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$biometric_break_summary = null;
 	$on_wfh_today = function_exists('timesheets_staff_uses_workroom_attendance')
 		&& timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'));
+	$workroom_open_checkin = ($type_check_in_out === 1 || $type_check_in_out === '1');
 
 	try {
 		$CI->load->model('biometric_model');
 		$biometric_row = null;
-		if (!$on_wfh_today && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
+		if (!$on_wfh_today && !$workroom_open_checkin && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
 			$biometric_row = $CI->biometric_model->get_staff_active_punch($staff_id, $cooldown_hours);
-		} elseif (!$on_wfh_today) {
+		} elseif (!$on_wfh_today && !$workroom_open_checkin) {
 			$biometric_row = $CI->biometric_model->get_staff_today_punch($staff_id);
 		}
 		if (is_array($biometric_row)) {
@@ -1876,6 +1923,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 		'biometric_last_out_ts' => $biometric_last_out_ts,
 		'biometric_break_summary' => $biometric_break_summary,
 		'on_wfh_today' => $on_wfh_today,
+		'workroom_open_checkin' => $workroom_open_checkin,
 	];
 
 	if (function_exists('get_timesheets_option')) {

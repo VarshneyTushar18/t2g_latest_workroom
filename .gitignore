@@ -24,6 +24,8 @@ backups/
 db_backup/
 database_backup/
 google-client/*.json
+google-client/vendor/
+application/config/app-config.php
 _quarantine*/
 *.hacked.bak
 _t2g-live-sync.tar.gz

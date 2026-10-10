@@ -6117,7 +6117,6 @@ public function add_requisition_ajax($data)
 
 			$type_check = (int) ($data['type_check'] ?? 0);
 			$staff_id = (int) $data['staff_id'];
-			$cooldown_hours = 13;
 			$latest = $this->db->query(
 				'SELECT type_check, date FROM ' . db_prefix() . 'check_in_out
 				 WHERE staff_id = ? ORDER BY date DESC, id DESC LIMIT 1',
@@ -6125,12 +6124,11 @@ public function add_requisition_ajax($data)
 			)->row_array();
 			if ($latest) {
 				$last_type = (int) ($latest['type_check'] ?? 0);
-				$last_ts = strtotime((string) ($latest['date'] ?? ''));
-				$hours_since = $last_ts > 0 ? (time() - $last_ts) / 3600 : 999;
-				if ($type_check === 1 && $last_type === 1 && $hours_since >= 0 && $hours_since < $cooldown_hours) {
+				// Block duplicate check-in while session is open; allow check-out any time after check-in.
+				if ($type_check === 1 && $last_type === 1) {
 					return false;
 				}
-				if ($type_check === 2 && ($last_type !== 1 || $hours_since < 0 || $hours_since >= $cooldown_hours)) {
+				if ($type_check === 2 && $last_type !== 1) {
 					return false;
 				}
 			} elseif ($type_check === 2) {

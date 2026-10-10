@@ -94,7 +94,8 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     $biometric_last_out_ts = (int) ($navbar_punch['biometric_last_out_ts'] ?? 0);
     $biometric_break_summary = $navbar_punch['biometric_break_summary'] ?? null;
     $on_wfh_today = !empty($navbar_punch['on_wfh_today']);
-    if ($on_wfh_today) {
+    $workroom_open_checkin = !empty($navbar_punch['workroom_open_checkin']);
+    if ($on_wfh_today || $workroom_open_checkin || $type_check_in_out == 1) {
         $biometric_navbar_active = false;
     }
 
