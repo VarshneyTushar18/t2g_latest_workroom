@@ -281,7 +281,14 @@
   }
 
   function isGapDay(day) {
-    return day && day.can_regularise && day.status !== 'pending' && day.status !== 'future';
+    if (!day || day.status === 'pending' || day.status === 'future') return false;
+    if (day.can_regularise) return true;
+    if (day.within_reg_window && (day.status === 'absent' || day.status === 'punch_missing' || day.status === 'half_day'
+        || day.status === 'short_hours'
+        || day.code === 'AB' || day.code === 'INC' || day.code === 'HD')) {
+      return true;
+    }
+    return false;
   }
 
   function updateGapCount() {

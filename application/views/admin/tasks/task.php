@@ -108,49 +108,7 @@
                            } ?>>
                             <label for="task_visible_to_client"><?php echo _l('task_visible_to_client'); ?></label>
                         </div>-->
-                        <?php if (!isset($task)) {
-                            if (!isset($taskTemplates)) {
-                                $taskTemplates = [];
-                            }
-                            if (can_manage_task_templates()) { ?>
-                        <div class="well well-sm tw-mb-3">
-                            <label class="control-label tw-font-semibold"><?php echo _l('select_task_template'); ?></label>
-                            <select name="task_template_id[]" id="task_template_id" class="selectpicker" data-width="100%"
-                                data-none-selected-text="<?php echo _l('select_task_template'); ?>" data-live-search="true" data-actions-box="true" multiple>
-                                <?php foreach ($taskTemplates as $taskTemplate) {
-                                    $taskCount = total_rows(db_prefix() . 'task_template_items', ['template_id' => $taskTemplate['id']]); ?>
-                                <option value="<?php echo $taskTemplate['id']; ?>">
-                                    <?php echo $taskTemplate['name'] . ' (' . $taskCount . ' ' . _l('als_tasks') . ')'; ?>
-                                </option>
-                                <?php } ?>
-                            </select>
-                            <p class="text-muted tw-mb-0 tw-mt-2"><?php echo _l('task_template_create_help'); ?>
-                                <a href="<?php echo admin_url('task_templates'); ?>" target="_blank"><?php echo _l('task_templates'); ?></a>
-                            </p>
-                            <div id="task-template-info" class="alert alert-info hide tw-mt-2 tw-mb-0"></div>
-                            <div id="task-template-preview" class="hide tw-mt-3">
-                                <label class="control-label tw-font-semibold"><?php echo _l('task_template_preview_tasks'); ?></label>
-                                <div class="table-responsive">
-                                    <table class="table table-bordered table-striped tw-mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th><?php echo _l('task_template'); ?></th>
-                                                <th><?php echo _l('task_add_edit_subject'); ?></th>
-                                                <th><?php echo _l('Quantity'); ?></th>
-                                                <th><?php echo _l('Task hours(AHT)'); ?></th>
-                                                <th><?php echo _l('task_add_edit_priority'); ?></th>
-                                                <th><?php echo _l('department'); ?></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="task-template-preview-body"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <?php }
-                        } ?>
-						<div class="row manual-task-only">						 
+						<div class="row">						 
 						<div class="col-md-6">
                         
 						<?php echo render_input('qty', 'Quantity', isset($task->qty) ? $task->qty : (isset($qty) ? $qty : '')); ?>
@@ -158,7 +116,7 @@
 						</div>						 
 						<div class="col-md-6">                           
 						<?php $value = (isset($task) ? $task->hourly_rate : ''); ?>                           
-						<?php echo render_input('hourly_rate', 'Task hours(AHT)', $value, 'number', ['required' => true, 'step' => '0.01', 'min' => '0']); ?>                        
+						<?php echo render_input('hourly_rate', 'Task hours(AHT)', $value); ?>                        
 						</div>                        
 						<div class="project-details<?php if ($rel_type != 'project') {                     
 						echo ' show';                  } ?>">				  
@@ -166,7 +124,6 @@
 						</div>
                         <!--<hr class="-tw-mx-3.5" />-->				
                         <?php $value = (isset($task) ? $task->name : ''); ?>
-                        <div class="manual-task-only">
                         <?php echo render_input('name', 'Task Name', $value); ?>
                         <div class="required task-hourss<?php if (isset($task) && $task->rel_type == 'project' && total_rows(db_prefix() . 'projects', ['id' => $task->rel_id, 'billing_type' => 3]) == 0) {
                       echo 'show';
@@ -183,7 +140,6 @@
                                     <?php } ?>
                                 </select>
                             </div>-->
-                        </div>
                         </div>
 						
                         <div class="row">
@@ -320,9 +276,11 @@
                                     <select name="rel_type" class="selectpicker" id="rel_type" data-width="100%"
                                         data-none-selected-text="<?php echo _l('dropdown_non_selected_tex'); ?>">
                                        <!-- <option value=""></option>-->
-                                        <option value="project" <?php if ($rel_type == 'project' || $rel_type == '') {
+                                        <option value="project" <?php if (isset($task) || $this->input->get('rel_type')) {
+                            if ($rel_type == 'project') {
                                 echo 'selected';
-                            } ?>><?php echo _l('project'); ?></option>
+                            }
+                        } ?>><?php echo _l('project'); ?></option>
                                       <!--  <option value="invoice" <?php if (isset($task) || $this->input->get('rel_type')) {
                             if ($rel_type == 'invoice') {
                                 echo 'selected';
@@ -391,7 +349,7 @@
                             } ?>" id="rel_id_wrapper">
                                     <label for="rel_id" class="control-label"><span class="rel_id_label"></span></label>
                                     <div id="rel_id_select">
-                                        <select name="rel_id" id="rel_id" class="ajax-search" data-width="100%"
+                                        <select name="rel_id" id="rel_id" class="ajax-sesarch" data-width="100%"
                                             data-live-search="true"
                                             data-none-selected-text="<?php echo _l('dropdown_non_selected_tex'); ?>">
                                             <?php if ($rel_id != '' && $rel_type != '') {
@@ -482,17 +440,10 @@
                         </div>-->						
 						
                        <!-- <hr />-->
-                        <div class="manual-task-only">
                         <p class="bold"><?php echo _l('task_add_edit_description'); ?></p>
                         <?php
                // onclick and onfocus used for convert ticket to task too
                echo render_textarea('description', '', (isset($task) ? $task->description : ''), ['rows' => 6, 'placeholder' => _l('task_add_description'), 'data-task-ae-editor' => true, !is_mobile() ? 'onclick' : 'onfocus' => (!isset($task) || isset($task) && $task->description == '' ? 'init_editor(\'.tinymce-task\', {height:100, auto_focus: true});' : '')], [], 'no-mbot', 'tinymce-task'); ?>
-                        <?php if (!isset($task) && can_manage_task_templates()) { ?>
-                        <hr />
-                        <?php echo render_select('save_to_template_id', $taskTemplates, ['id', 'name'], 'task_template_save_to', '', ['data-none-selected-text' => _l('task_template_save_to_none'), 'data-live-search' => 'true']); ?>
-                        <p class="text-muted"><?php echo _l('task_template_save_to_help'); ?></p>
-                        <?php } ?>
-                        </div>
                     </div>					    <?php if (!isset($task)) { ?>                        <a href="#" class="pull-right tw-pt-2 attachfile"                            onclick="slideToggle('#new-task-attachments'); return false;">                            <?php echo _l('attach_files'); ?>                        </a>                        <div id="new-task-attachments" class="hide">                            <hr class="-tw-mx-3.5" />                            <div class="row attachments">                                <div class="attachment">                                    <div class="col-md-12">                                        <div class="form-group">                                            <label for="attachment"                                                class="control-label"><?php echo _l('add_task_attachments'); ?></label>                                            <div class="input-group">                                                <input type="file"                                                    extension="<?php echo str_replace('.', '', get_option('allowed_files')); ?>"                                                    filesize="<?php echo file_upload_max_size(); ?>"                                                    class="form-control" name="attachments[0]">                                                <span class="input-group-btn">                                                    <button class="btn btn-default add_more_attachments"                                                        type="button"><i class="fa fa-plus"></i></button>                                                </span>                                            </div>                                        </div>                                    </div>                                </div>                            </div>                        </div>                        <?php                     if ($this->input->get('ticket_to_task')) {                         echo form_hidden('ticket_to_task', $rel_id);                     }                  } ?>
                 </div>
             </div>
@@ -540,114 +491,10 @@
 
         custom_fields_hyperlink();
 
-        <?php if (can_manage_task_templates()) { ?>
-        var departmentMap = {
-            <?php
-            $this->load->model('departments_model');
-            foreach ($this->departments_model->get() as $department) { ?>
-            '<?php echo $department['departmentid']; ?>': '<?php echo html_escape($department['name']); ?>',
-            <?php } ?>
-        };
-
-        function taskTemplatesSelected() {
-            var selected = $('#task_template_id').val();
-            return selected && selected.length > 0;
-        }
-
-        $('#task_template_id').on('change', function() {
-            var templateIds = $(this).val();
-            var $info = $('#task-template-info');
-            var $preview = $('#task-template-preview');
-            var $previewBody = $('#task-template-preview-body');
-            var $manual = $('.manual-task-only');
-
-            if (!templateIds || templateIds.length === 0) {
-                $info.addClass('hide').html('');
-                $preview.addClass('hide');
-                $previewBody.html('');
-                $manual.removeClass('hide');
-                return;
-            }
-
-            $manual.addClass('hide');
-
-            var priorityMap = {
-                <?php foreach (get_tasks_priorities() as $priority) { ?>
-                '<?php echo $priority['id']; ?>': '<?php echo $priority['name']; ?>',
-                <?php } ?>
-            };
-
-            var loaded = 0;
-            var allItems = [];
-
-            templateIds.forEach(function(templateId) {
-                $.get(admin_url + 'task_templates/get/' + templateId, function(response) {
-                    if (response.success && response.items && response.items.length) {
-                        $.each(response.items, function(i, item) {
-                            item._templateName = response.template.name;
-                            allItems.push(item);
-                        });
-                    }
-
-                    loaded++;
-                    if (loaded === templateIds.length) {
-                        if (!allItems.length) {
-                            $info.addClass('hide').html('');
-                            $preview.addClass('hide');
-                            $previewBody.html('');
-                            return;
-                        }
-
-                        var rows = '';
-                        $.each(allItems, function(i, item) {
-                            rows += '<tr>' +
-                                '<td>' + (i + 1) + '</td>' +
-                                '<td>' + (item._templateName || '-') + '</td>' +
-                                '<td>' + (item.name || '') + '</td>' +
-                                '<td>' + (item.qty !== null && item.qty !== '' ? item.qty : '-') + '</td>' +
-                                '<td>' + (item.hourly_rate !== null && item.hourly_rate !== '' ? item.hourly_rate : '-') + '</td>' +
-                                '<td>' + (priorityMap[item.priority] || '-') + '</td>' +
-                                '<td>' + (departmentMap[item.task_deptid] || '-') + '</td>' +
-                                '</tr>';
-                        });
-
-                        $previewBody.html(rows);
-                        $preview.removeClass('hide');
-                        $info.removeClass('hide').html(
-                            '<?php echo _l('task_template_select_info', '%s'); ?>'.replace('%s', allItems.length)
-                        );
-                    }
-                }, 'json');
-            });
-        });
-
-        load_task_template_options('#task_template_id');
-        <?php } ?>
-
         appValidateForm($('#task-form'), {
-            name: {
-                required: {
-                    depends: function() {
-                        return !taskTemplatesSelected() || !$('#task_template_id').length;
-                    }
-                }
-            },
-            startdate: 'required',
-            qty: {
-                required: {
-                    depends: function() {
-                        return !taskTemplatesSelected() || !$('#task_template_id').length;
-                    }
-                }
-            },
-            hourly_rate: {
-                required: {
-                    depends: function() {
-                        return !taskTemplatesSelected() || !$('#task_template_id').length;
-                    }
-                }
-            },
-            rel_id: 'required',
+            name: 'required',
+            startdate: 'required',			ṁ: 'required',
+			qty: 'required',
             repeat_every_custom: {
                 min: 1
             },
@@ -756,21 +603,6 @@
         serverData.rel_id = _rel_id.val();
         data.type = _rel_type.val();
         init_ajax_search(_rel_type.val(), _rel_id, serverData);
-        // Show projects as soon as the dropdown opens (don't require typing first)
-        var $rel = $('#rel_id');
-        if ($rel.length && $rel.data('AjaxBootstrapSelect')) {
-            $rel.data('AjaxBootstrapSelect').options.emptyRequest = true;
-        }
-        $rel.off('shown.bs.select.loadProjects').on('shown.bs.select.loadProjects', function () {
-            var plugin = $(this).data('AjaxBootstrapSelect');
-            if (plugin && plugin.selectpicker && plugin.selectpicker.$searchbox) {
-                plugin.options.emptyRequest = true;
-                // Trigger an empty search so projects appear immediately
-                plugin.selectpicker.$searchbox.val('');
-                plugin.query = '';
-                plugin.selectpicker.$searchbox.trigger($.Event('keyup', { which: 8, keyCode: 8 }));
-            }
-        });
     }
 
     function init_project_details(type, tasks_visible_to_customer) {
@@ -806,29 +638,6 @@
         $duedate.removeAttr('data-date-end-date');
         $duedate.datetimepicker('destroy');
         init_datepicker($duedate);
-    }
-
-    function load_task_template_options(selector) {
-        var $select = $(selector);
-        if (!$select.length) {
-            return;
-        }
-
-        if ($select.find('option').length > 0) {
-            $select.selectpicker('refresh');
-            return;
-        }
-
-        $.get(admin_url + 'task_templates/list_all', function(response) {
-            if (!response.success || !response.templates || !response.templates.length) {
-                return;
-            }
-
-            $.each(response.templates, function(i, template) {
-                $select.append('<option value="' + template.id + '">' + template.name + '</option>');
-            });
-            $select.selectpicker('refresh');
-        }, 'json');
     }
     </script>
 	

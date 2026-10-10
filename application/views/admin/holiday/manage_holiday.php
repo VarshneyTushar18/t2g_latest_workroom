@@ -65,14 +65,14 @@
 </style>
 
 <div id="wrapper">
-    <div class="content">
-        <div class="row">
-            <div class="col-md-12">
+  <div class="content">
+    <div class="row">
+      <div class="col-md-12">
         <div class="tw-flex tw-items-center tw-justify-between tw-mb-3">
           <h4 class="tw-mt-0"><i class="fa fa-calendar"></i> Manage Saturday Leaves</h4>
         </div>
-			
-                <div class="panel_s">
+
+        <div class="panel_s">
           <div class="panel-body">
             <p class="sat-cal-hint">
               <strong>One place to assign and view Saturday leaves.</strong>
@@ -80,10 +80,10 @@
               When multiple employees are selected, the same Saturdays are applied to all of them.
             </p>
 
-                        <div class="row">
+            <div class="row">
               <div class="col-md-4">
-                        <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
-						  </div>
+                <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
+              </div>
               <div class="col-md-4">
                 <?php echo render_select('staffid[]', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee(s)', '', array('multiple' => true, 'data-live-search' => true, 'data-actions-box' => true), [], '', '', 'selectpicker', false); ?>
               </div>
@@ -91,16 +91,16 @@
                 <div class="form-group">
                   <label for="sat_month">Month</label>
                   <select id="sat_month" class="form-control"></select>
-						 </div>
-							</div>
+                </div>
+              </div>
               <div class="col-md-2">
                 <div class="form-group">
                   <label for="sat_year">Year</label>
                   <select id="sat_year" class="form-control"></select>
-							</div>
-							</div>
-						</div>
-						
+                </div>
+              </div>
+            </div>
+
             <div id="sat_calendar" class="sat-cal-wrap sat-cal-disabled">
               <div class="sat-cal-toolbar">
                 <button type="button" class="btn btn-default" id="sat_prev_month">&larr; Prev</button>
@@ -108,8 +108,8 @@
                   <strong id="sat_month_label">—</strong>
                 </div>
                 <button type="button" class="btn btn-default" id="sat_next_month">Next &rarr;</button>
-                </div>
-				
+              </div>
+
               <div class="sat-cal-presets">
                 <span class="sat-cal-presets-hint">Quick select:</span>
                 <label>
@@ -120,7 +120,7 @@
                   <input type="checkbox" id="sat_preset_24" aria-label="2nd and 4th Saturday">
                   2nd &amp; 4th Saturday
                 </label>
-                </div>
+              </div>
 
               <div class="sat-cal-actions">
                 <button type="button" class="btn btn-info" id="sat_select_all">Select all Saturdays</button>
@@ -135,29 +135,29 @@
                 <span><span class="sat-cal-swatch selected" aria-hidden="true"></span> Selected for leave</span>
               </div>
               <div id="sat_cal_status"></div>
-                        </div>
-                        
+            </div>
+
             <hr>
             <h5>Assigned leaves — <span id="sat_table_month_label">this month</span></h5>
             <table class="table table-striped table-bordered">
-                            <thead>
-                            <tr>
+              <thead>
+                <tr>
                   <th>S.No.</th>
                   <th>Month</th>
                   <th>Department</th>
                   <th>Staff</th>
                   <th>Saturday Leave</th>
-                            </tr>
-                            </thead>
-                            <tbody id="sat_data">
+                </tr>
+              </thead>
+              <tbody id="sat_data">
                 <tr><td colspan="5" class="text-center text-muted">Select employee(s) to view</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+              </tbody>
+            </table>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <?php init_tail(); ?>

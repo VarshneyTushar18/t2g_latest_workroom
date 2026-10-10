@@ -211,15 +211,33 @@ $( "#select_file" ).each(function(index) {
 });
 });
 
+function snapshotImgUrl(fileId) {
+	return '<?php echo base_url('admin/Emt/viewImg/'); ?>' + encodeURIComponent(fileId);
+}
+
+function snapshotTimeLabel(name) {
+	try {
+		var parts = String(name || '').split('_');
+		if (parts.length < 3) {
+			return name || '';
+		}
+		var timedata = parts[parts.length - 1].split('.')[0];
+		var chunks = timedata.match(/.{1,2}/g);
+		return chunks ? chunks.join(':') : timedata;
+	} catch (e) {
+		return name || '';
+	}
+}
+
 $( "#select_file_child" ).each(function(index) {	
 
 $("#select_file_child").change(function(event){
 	event.preventDefault();
 	$( "#display_img" ).empty();
         var boolKey = $(this).children("option:selected").val();
-		// var boolKey = $(this).v("name");
-		  // alert(boolKey);
-		console.log("empty");
+		if (!boolKey || boolKey === 'Select Menu') {
+			return;
+		}
 		$( "#img_model" ).empty();
         $.ajax({
                 url: '<?php echo base_url('admin/Emt/getImg');?>',
@@ -228,53 +246,41 @@ $("#select_file_child").change(function(event){
 				data: {date: boolKey},
 				 cache: false,
                 success: function(res) {
-				//	$("#display_img").remove();
-				
-						var emp = JSON.parse(res);
-						
-						var i = 0;
-					if(i == 0){
-						let str=emp[i]['name'];
-						let string_data = str.split("_");
-						let timedata = string_data[2];
-						let timedata_con = timedata.split(".");
-						let string_match = timedata_con[0].match(/.{1,2}/g);
-						let string_value = string_match.join(":");
-						let empid_local = emp[0]['id'];
-							//$('#download').append('<a href="https://drive.usercontent.google.com/uc?id='+emp[0]['id']+'&authuser=0&export=download">Download</a>');
-							$('#img_model').append(`<div class="item active"><i class="fa fa-download" aria-hidden="true"></i><button class="download" onClick=ImageidData('${emp[0]['id']}','${string_value}')>Download</button><h4>${string_value}</h4><img src="https://lh3.googleusercontent.com/d/${emp[0]['id']}=w1000?authuser=0" alt="item0" style="height:400px;width:600px;"><div class="carousel-caption"></div></div>`);
-						}
-						
-					for(var i = 1; i < emp.length; i++) {
-						//console.log(emp[i]['name']);
-						let str=emp[i]['name'];
-						let string_data = str.split("_");
-						let timedata = string_data[2];
-						let timedata_con = timedata.split(".");
-						let string_match = timedata_con[0].match(/.{1,2}/g);
-						let string_value = string_match.join(":");
-						//console.log("loop");
-						//var empid_loop = 'fgfgfgf';
-						let empids = emp[i]['id'];
+					var emp = [];
+					try {
+						emp = (typeof res === 'string') ? JSON.parse(res) : res;
+					} catch (e) {
+						$('#display_img').html('<li class="text-danger">Could not load images.</li>');
+						return;
+					}
+					if (!emp || !emp.length) {
+						$('#display_img').html('<li class="text-muted">No screenshots found for this date.</li>');
+						return;
+					}
 
-					//if(emp[i]['nextPageToken']==''){
-						//$('#download').append('<a href="https://drive.usercontent.google.com/uc?id='+emp[0]['id']+'&authuser=0&export=download">Download</a>');
-					$('#display_img').append('<li><a href="#myGallery"data-slide-to="'+i+'"><img class="img-thumbnail"  src="https://lh3.googleusercontent.com/d/'+emp[i]['id']+'=w1000?authuser=0" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a><span class="date_class">'+string_value+'</span></li>');
-					$('#img_model').append(`<div class="item"><button class="download" onClick=ImageidDataVal('${emp[i]['id']}','${string_value}')><i class="fa fa-download" aria-hidden="true"></i></button><h4>${string_value}</h4><img src="https://lh3.googleusercontent.com/d/${emp[i]['id']}=w1000?authuser=0" alt="item${i}"><div class="carousel-caption"></div></div>`);
-					
-					//}else{
-					
-					//$('#display_img').append('<li><a href="#myGallery"data-slide-to="'+i+'"><img class="img-thumbnail"  src="https://lh3.googleusercontent.com/d/'+emp[i]['id']+'=w1000?authuser=0" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a><span class="date_class">'+string_value+'</span></li>');
-					//}
-					
-					//$( "select_file_child" ).selectmenu( "refresh" );
-                }
-				//$('#pagination').append('<input type="text" value="~!!~AI9FV7SeDD7_KlYO6MiXIrAOlG93m4rLaC4Ywrc7kRrrD2zUqgHFVQmpByXIv8GJtt-OpYrc3Izj9HqviO_sVfxW6j4lHMsdEyEcy1qHLJCF6CpalxovTAJFG1N3dOoPAuzfsxXEYIS0R9s4hGIw2yyY6v9ms8BnT1C8aeadpaonrDTS2DPzxDiCWBWem65taMO-z-IFGTulwHA7ir1c03xZT3TPUU2tNf0xbiSN499d50TWvqJg3XpINXvNDByrhvtzxn0iX3kYMOZNi-8BtHYCEB32Yo62A7W_sxcItiojzhoj0OkOMScWYDTC08cCUJm7h1vmkMJvggF3MN07ZuOZCbD3z9DHnQO7Kyf-rOvBw2hKgON2Dxk1D8wcfulRv8sTFVZr7iVMEoJh0x29LNy4Dihn-sHARQ=="><button id="next">Next</button>');	
-				//	$('.loader').removeClass('hidden'); // Show loader
-					// top.location.href="/admin/Emt/getEmployeeDate?date="+boolKey;//redirection
-                    // window.location.href = '<?php base_url('admin/Emt/getChildId');?>';
-					//$('#emdata').append('<tr><td>' + res[0][i]['name'] + '</td></tr>');
-                }
+					for (var i = 0; i < emp.length; i++) {
+						var fileId = emp[i]['id'];
+						var string_value = snapshotTimeLabel(emp[i]['name']);
+						var src = snapshotImgUrl(fileId);
+						var activeClass = (i === 0) ? ' active' : '';
+
+						$('#display_img').append(
+							'<li><a href="#myGallery" data-slide-to="'+i+'">' +
+							'<img class="img-thumbnail" src="'+src+'" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a>' +
+							'<span class="date_class">'+string_value+'</span></li>'
+						);
+						$('#img_model').append(
+							'<div class="item'+activeClass+'">' +
+							'<button class="download" onClick="ImageidDataVal(\''+fileId+'\',\''+string_value+'\')"><i class="fa fa-download" aria-hidden="true"></i></button>' +
+							'<h4>'+string_value+'</h4>' +
+							'<img src="'+src+'" alt="item'+i+'" style="height:400px;width:600px;">' +
+							'<div class="carousel-caption"></div></div>'
+						);
+					}
+                },
+				error: function() {
+					$('#display_img').html('<li class="text-danger">Failed to load images from Drive.</li>');
+				}
             });
  
 });

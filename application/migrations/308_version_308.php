@@ -21,7 +21,7 @@ class Migration_Version_308 extends CI_Migration
             `date_updated` DATETIME NOT NULL,
             PRIMARY KEY (`id`),
             UNIQUE KEY `staff_month_year` (`staff_id`, `month`, `year`),
-            KEY `idx_year_month` (`year`, `month`)
+            KEY `year_month` (`year`, `month`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
     }
 }

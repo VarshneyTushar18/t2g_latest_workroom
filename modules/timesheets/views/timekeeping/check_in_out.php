@@ -238,7 +238,7 @@
 
                                 //                    if($data_length < 2 && ($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin())){
 
-                                if (($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin()) && $time_from_checkin >= 13) {
+                                if ($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin() || $time_from_checkin >= 13) {
                                     echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()')); ?>
 
                                     <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">

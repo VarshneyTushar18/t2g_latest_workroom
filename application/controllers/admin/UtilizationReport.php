@@ -25,9 +25,8 @@ class UtilizationReport extends AdminController
 	public function getDeptemp()
     {	
 		$deptid = $_POST['department'];
-		$active = isset($_POST['staff_active']) ? $_POST['staff_active'] : 1;
 	
-		$data['emp'] = $this->utilization_model->getDepartmentemp($deptid, $active);
+		$data['emp'] = $this->utilization_model->getDepartmentemp($deptid);
 	
 		echo json_encode($data['emp']);
     }

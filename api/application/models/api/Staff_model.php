@@ -18,6 +18,9 @@ class Staff_model extends CI_Model{
     $this->db->where('email', $email);
     $query = $this->db->get('tblstaff');
     $row = $query->row();
+    if (!$row) {
+        return false;
+    }
     $staff_id = $row->staffid;
    // print_r($row);die;
   // $password_hash = password_hash($password, PASSWORD_BCRYPT);

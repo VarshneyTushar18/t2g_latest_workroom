@@ -1654,8 +1654,8 @@ class timesheets extends AdminController
 
 			// Enforce sandwich leave policy on day count (weekends + company holidays).
 			$leave_type = $data['type_of_leave'] ?? '';
-			if (in_array($leave_type, ['comp-off', 'work-from-home'], true)) {
-				set_alert('warning', 'Comp - Off and Work From Home are no longer available.');
+			if ($leave_type === 'comp-off') {
+				set_alert('warning', 'Comp - Off is no longer available.');
 				redirect(admin_url('timesheets/requisition_manage'));
 			}
 			if (!in_array($leave_type, ['present', 'half-days', 'unpaid-half-days'], true)) {
@@ -8385,7 +8385,7 @@ class timesheets extends AdminController
 				$staff_id = (int) ($this->input->post('staff_id') ?: get_staff_user_id());
 				if (
 					$staff_id > 0
-					&& !timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'))
+					&& !timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'))
 					&& method_exists($this->biometric_model, 'staff_biometric_available')
 					&& $this->biometric_model->staff_biometric_available($staff_id, 13)
 				) {
@@ -8484,6 +8484,14 @@ class timesheets extends AdminController
 						$checkInDataArray = $checkInData->result_array();
 						$checkOutDataArray = $lastCheckOutData->result_array();
 
+						if (empty($checkInDataArray[0]['date']) || empty($checkOutDataArray[0]['date'])) {
+							if (function_exists('timesheets_invalidate_navbar_punch_cache')) {
+								timesheets_invalidate_navbar_punch_cache($currentUserStaffid);
+							}
+							redirect(admin_url());
+							return;
+						}
+
 						$curentCheckinTime = new DateTime($checkInDataArray[0]['date']);
 						$lastCheckoutTime = new DateTime($checkOutDataArray[0]['date']);
 
@@ -8537,6 +8545,13 @@ class timesheets extends AdminController
 						$queryleave_priorty = "SELECT * FROM tbltimesheets_requisition_leave WHERE type_of_leave in('present', 'planned_leaves','saturday-leaves','holiday-leaves') AND status=1  AND staff_id = ?  ORDER BY end_time DESC LIMIT 1";
 						$queryleave_priorty_staff = $this->db->query($queryleave_priorty, [$currentUserStaffid]);
 						$queryleave_priortyArray = $queryleave_priorty_staff->result_array();
+						if (empty($staffShiftTimeArray[0]) || empty($queryleave_priortyArray[0])) {
+							if (function_exists('timesheets_invalidate_navbar_punch_cache')) {
+								timesheets_invalidate_navbar_punch_cache($currentUserStaffid);
+							}
+							redirect(admin_url());
+							return;
+						}
 						$start_time = date("Y-m-d", strtotime($queryleave_priortyArray[0]['start_time']));
 						$end_time = date("Y-m-d", strtotime($queryleave_priortyArray[0]['end_time']));
 						$curr_date = date("Y-m-d");
@@ -8621,6 +8636,10 @@ class timesheets extends AdminController
 
 
 						set_alert('success', _l('check_out_successfull'));
+					}
+
+					if (function_exists('timesheets_invalidate_navbar_punch_cache')) {
+						timesheets_invalidate_navbar_punch_cache((int) ($data['staff_id'] ?? get_staff_user_id()));
 					}
 				} else {
 

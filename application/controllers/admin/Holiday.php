@@ -634,4 +634,253 @@ class Holiday extends AdminController
 		exit;
 	}
 
+	/**
+	 * Manage WFH allotment — same UX as Manage Saturday (department, multi-staff, calendar).
+	 */
+	public function manageWfh()
+	{
+		if (!attendance_permission()) {
+			access_denied('timesheets');
+		}
+
+		$this->holiday_model->ensure_staff_wfh_day_table();
+		$data['departments'] = $this->departments_model->get_staff_departments();
+		$data['staffs'] = $this->holiday_model->get_staff_based_on_department();
+		$this->load->view('admin/holiday/manage_wfh', $data);
+	}
+
+	/**
+	 * Assigned WFH dates for staff in a month (intersection when multiple staff selected).
+	 */
+	public function get_calendar_wfh_days()
+	{
+		if (!attendance_permission()) {
+			ajax_access_denied();
+		}
+
+		$this->holiday_model->ensure_staff_wfh_day_table();
+		$staff_ids = $this->parse_staff_ids_from_request();
+		$month = trim((string) $this->input->post('month'));
+
+		if (empty($staff_ids) || !preg_match('/^\d{4}-\d{2}$/', $month)) {
+			echo json_encode(['ok' => false, 'dates' => [], 'error' => 'staff and month required']);
+			return;
+		}
+
+		$from = $month . '-01';
+		$to = date('Y-m-t', strtotime($from));
+		$intersection = null;
+
+		foreach ($staff_ids as $staff_id) {
+			$set = $this->holiday_model->get_staff_wfh_allotment_dates($staff_id, $from, $to);
+			if ($intersection === null) {
+				$intersection = $set;
+			} else {
+				foreach ($intersection as $date => $_) {
+					if (!isset($set[$date])) {
+						unset($intersection[$date]);
+					}
+				}
+			}
+		}
+
+		echo json_encode([
+			'ok' => true,
+			'dates' => $intersection ? array_keys($intersection) : [],
+			'from' => $from,
+			'to' => $to,
+			'staff_count' => count($staff_ids),
+		]);
+	}
+
+	/**
+	 * Sync WFH allotment for one/many staff in a month (posted dates = final set).
+	 */
+	public function save_wfh_days()
+	{
+		if (!attendance_permission()) {
+			ajax_access_denied();
+		}
+
+		$this->holiday_model->ensure_staff_wfh_day_table();
+		$staff_ids = $this->parse_staff_ids_from_request();
+		$department_id = (int) $this->input->post('department_id');
+		$month = trim((string) $this->input->post('month'));
+		$dates = $this->input->post('dates');
+
+		if (empty($staff_ids) || $department_id <= 0 || !preg_match('/^\d{4}-\d{2}$/', $month)) {
+			echo json_encode(['ok' => false, 'error' => 'Invalid staff, department or month']);
+			return;
+		}
+
+		if (!is_array($dates)) {
+			$dates = [];
+		}
+
+		$from = $month . '-01';
+		$to = date('Y-m-t', strtotime($from));
+		$wanted = [];
+
+		foreach ($dates as $date) {
+			$date = trim((string) $date);
+			if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+				continue;
+			}
+			if ($date < $from || $date > $to) {
+				continue;
+			}
+			// Sunday is weekly off — not assignable as WFH workday.
+			if ((int) date('N', strtotime($date)) === 7) {
+				continue;
+			}
+			$wanted[$date] = true;
+		}
+
+		$assigned_by = (int) get_staff_user_id();
+		$now = date('Y-m-d H:i:s');
+		$total_added = 0;
+		$total_removed = 0;
+
+		foreach ($staff_ids as $staff_id) {
+			$existing_rows = $this->db->select('id, wfh_date')
+				->from(db_prefix() . 'staff_wfh_day')
+				->where('staffid', $staff_id)
+				->where('wfh_date >=', $from)
+				->where('wfh_date <=', $to)
+				->get()
+				->result_array();
+
+			$existing = [];
+			foreach ($existing_rows as $row) {
+				$existing[$row['wfh_date']] = (int) $row['id'];
+			}
+
+			foreach ($existing as $date => $id) {
+				if (!isset($wanted[$date])) {
+					$this->db->where('id', $id)->delete(db_prefix() . 'staff_wfh_day');
+					$this->remove_wfh_timesheet_marker($staff_id, $date);
+					$total_removed++;
+				}
+			}
+
+			foreach ($wanted as $date => $_) {
+				if (isset($existing[$date])) {
+					continue;
+				}
+				$this->db->insert(db_prefix() . 'staff_wfh_day', [
+					'staffid' => $staff_id,
+					'department_id' => $department_id,
+					'wfh_date' => $date,
+					'status' => 1,
+					'assigned_by' => $assigned_by,
+					'date_added' => $now,
+				]);
+				$this->upsert_wfh_timesheet_marker($staff_id, $date);
+				$total_added++;
+			}
+		}
+
+		$staff_label = count($staff_ids) === 1
+			? '1 employee'
+			: count($staff_ids) . ' employees';
+
+		echo json_encode([
+			'ok' => true,
+			'added' => $total_added,
+			'removed' => $total_removed,
+			'dates' => array_keys($wanted),
+			'staff_count' => count($staff_ids),
+			'message' => 'WFH days saved for ' . $staff_label . ' (' . $total_added . ' added, ' . $total_removed . ' removed)',
+		]);
+	}
+
+	public function getWfhStaffData()
+	{
+		if (!attendance_permission()) {
+			ajax_access_denied();
+		}
+
+		$this->holiday_model->ensure_staff_wfh_day_table();
+		$data = [];
+		$staff_ids = $this->parse_staff_ids_from_request();
+		$month = (int) $this->input->post('month');
+		$year = (int) $this->input->post('year');
+
+		if (empty($staff_ids) || $month < 1 || $month > 12 || $year < 2000) {
+			echo json_encode([]);
+			return;
+		}
+
+		$from = sprintf('%04d-%02d-01', $year, $month);
+		$to = date('Y-m-t', strtotime($from));
+
+		$this->db->select('w.staffid, w.department_id, w.wfh_date, w.status, d.name as department_name, s.firstname as staff_firstname, s.lastname as staff_lastname');
+		$this->db->from(db_prefix() . 'staff_wfh_day w');
+		$this->db->join(db_prefix() . 'departments d', 'w.department_id = d.departmentid', 'left');
+		$this->db->join(db_prefix() . 'staff s', 'w.staffid = s.staffid', 'left');
+		$this->db->where('w.wfh_date >=', $from);
+		$this->db->where('w.wfh_date <=', $to);
+		$this->db->where_in('w.staffid', $staff_ids);
+		$this->db->where('w.status', 1);
+		$this->db->order_by('w.wfh_date', 'ASC');
+		$query = $this->db->get();
+
+		foreach ($query->result_array() as $row) {
+			$data[] = [
+				'staffid' => $row['staffid'],
+				'department_id' => $row['department_id'],
+				'wfh_date' => $row['wfh_date'],
+				'status' => $row['status'],
+				'department_name' => $row['department_name'],
+				'staff_firstname' => $row['staff_firstname'],
+				'staff_lastname' => $row['staff_lastname'],
+			];
+		}
+
+		echo json_encode($data);
+	}
+
+	protected function upsert_wfh_timesheet_marker($staff_id, $date)
+	{
+		$staff_id = (int) $staff_id;
+		$date = date('Y-m-d', strtotime((string) $date));
+		if ($staff_id <= 0 || $date === '' || $date === '1970-01-01') {
+			return;
+		}
+
+		$row = $this->db->where('staff_id', $staff_id)
+			->where('date_work', $date)
+			->get(db_prefix() . 'timesheets_timesheet')
+			->row();
+		if ($row && !in_array(strtoupper(trim((string) $row->type)), ['', 'AB', 'WFH'], true)) {
+			return;
+		}
+		if ($row) {
+			$this->db->where('id', $row->id)->update(db_prefix() . 'timesheets_timesheet', ['type' => 'WFH']);
+			return;
+		}
+		$this->db->insert(db_prefix() . 'timesheets_timesheet', [
+			'staff_id' => $staff_id,
+			'date_work' => $date,
+			'type' => 'WFH',
+			'add_from' => (int) get_staff_user_id(),
+			'value' => 0,
+		]);
+	}
+
+	protected function remove_wfh_timesheet_marker($staff_id, $date)
+	{
+		$staff_id = (int) $staff_id;
+		$date = date('Y-m-d', strtotime((string) $date));
+		if ($staff_id <= 0 || $date === '') {
+			return;
+		}
+
+		$this->db->where('staff_id', $staff_id)
+			->where('date_work', $date)
+			->where('type', 'WFH')
+			->where('value', 0)
+			->delete(db_prefix() . 'timesheets_timesheet');
+	}
+
 }

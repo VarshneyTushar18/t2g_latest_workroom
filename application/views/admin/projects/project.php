@@ -47,10 +47,6 @@
                         ?>
                                 <?php $value = (isset($project) ? $project->name : ''); ?>
                                 <?php echo render_input('name', 'project_name', $value); ?>
-                                <?php if (!isset($project) && can_manage_task_templates()) { ?>
-                                <?php echo render_select('task_template_id[]', $taskTemplates, ['id', 'name'], 'select_task_template', '', ['data-none-selected-text' => _l('select_task_template'), 'data-live-search' => 'true', 'multiple' => true, 'data-actions-box' => true], [], '', '', false); ?>
-                                <p class="text-muted"><?php echo _l('task_template_project_help'); ?></p>
-                                <?php } ?>
                                 <div class="form-group select-placeholder">
                                     <label for="clientid"
                                         class="control-label"><?php echo _l('project_customer'); ?></label>
@@ -637,34 +633,8 @@ $(function() {
     $("#view_tasks").trigger('change');
     <?php if (!isset($project)) { ?>
     $('#available_features').trigger('change');
-    <?php if (can_manage_task_templates()) { ?>
-    load_task_template_options('select[name="task_template_id[]"]');
-    <?php } ?>
     <?php } ?>
 });
-
-function load_task_template_options(selector) {
-    var $select = $(selector);
-    if (!$select.length) {
-        return;
-    }
-
-    if ($select.find('option').length > 0) {
-        $select.selectpicker('refresh');
-        return;
-    }
-
-    $.get(admin_url + 'task_templates/list_all', function(response) {
-        if (!response.success || !response.templates || !response.templates.length) {
-            return;
-        }
-
-        $.each(response.templates, function(i, template) {
-            $select.append('<option value="' + template.id + '">' + template.name + '</option>');
-        });
-        $select.selectpicker('refresh');
-    }, 'json');
-}
 </script>
 </body>
 

@@ -64,14 +64,19 @@ FROM tblstaff s
 JOIN tblstaff_departments sd ON s.staffid = sd.staffid
 JOIN tbldepartments d ON sd.departmentid = d.departmentid
 LEFT JOIN (
-    SELECT staff_id, 
-           MAX(date_time) AS date_time,
-           file_id, 
-           directory_id, 
-           parent_directory_id,
-           status
-    FROM tblstaff_drive_data
-    GROUP BY staff_id
+    SELECT sdd1.staff_id,
+           sdd1.date_time,
+           sdd1.file_id,
+           sdd1.directory_id,
+           sdd1.parent_directory_id,
+           sdd1.status
+    FROM tblstaff_drive_data sdd1
+    INNER JOIN (
+        SELECT staff_id, MAX(date_time) AS max_dt
+        FROM tblstaff_drive_data
+        GROUP BY staff_id
+    ) latest ON latest.staff_id = sdd1.staff_id
+           AND latest.max_dt = sdd1.date_time
 ) sdd ON s.staffid = sdd.staff_id
 WHERE 
     s.active = 1
@@ -83,6 +88,10 @@ WHERE
     )
 ORDER BY d.name, s.firstname, s.lastname;";    
 		$query = $this->db->query($sql);
+		if (!$query) {
+			log_message('error', 'Emt_model::getDepartment query failed: ' . $this->db->error()['message']);
+			return [];
+		}
 		return $query->result(); 
 	}
 	

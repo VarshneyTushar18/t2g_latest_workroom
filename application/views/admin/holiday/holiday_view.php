@@ -56,18 +56,18 @@
         </div>
 
         <div class="panel_s">
-        <div class="panel-body"> 
+          <div class="panel-body">
             <p class="sat-cal-hint">
               Select department and employee, pick month/year, tick Saturdays (or <strong>Select all</strong>), then click <strong>Save</strong>. Not auto-saved.
             </p>
-				  
-						<div class="row">
+
+            <div class="row">
               <div class="col-md-4">
-                        <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
-						  </div>
+                <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
+              </div>
               <div class="col-md-4">
                 <?php echo render_select('staffid', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee'); ?>
-						 </div>
+              </div>
               <div class="col-md-2">
                 <div class="form-group">
                   <label for="sat_month">Month</label>
@@ -80,21 +80,21 @@
                   <select id="sat_year" class="form-control"></select>
                 </div>
               </div>
-                </div>
-				
+            </div>
+
             <div id="sat_calendar" class="sat-cal-wrap sat-cal-disabled">
               <div class="sat-cal-toolbar">
                 <button type="button" class="btn btn-default" id="sat_prev_month">&larr; Prev</button>
                 <strong id="sat_month_label">—</strong>
                 <button type="button" class="btn btn-default" id="sat_next_month">Next &rarr;</button>
-				</div>
-				
+              </div>
+
               <div class="sat-cal-actions">
                 <button type="button" class="btn btn-info" id="sat_select_all">Select all Saturdays</button>
                 <button type="button" class="btn btn-default" id="sat_clear_all">Clear all</button>
                 <button type="button" class="btn btn-primary" id="sat_save_btn" disabled>Save Saturday Leaves</button>
-					</div>
-				
+              </div>
+
               <div class="sat-cal-grid" id="sat_dow"></div>
               <div class="sat-cal-grid" id="sat_days"></div>
               <div class="sat-cal-legend">
@@ -106,8 +106,8 @@
           </div>
         </div>
       </div>
-            </div>
     </div>
+  </div>
 </div>
 
 <?php init_tail(); ?>

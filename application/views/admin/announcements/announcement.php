@@ -20,80 +20,6 @@
                         <?php $value = (isset($announcement) ? $announcement->name : ''); ?>
                         <?php echo render_input('name', 'announcement_name', $value); ?>
 
-                        <?php
-                        $selected_departments = [];
-                        if (isset($announcement) && !empty($announcement->email_departments)) {
-                            $selected_departments = array_filter(explode(',', (string) $announcement->email_departments));
-                        }
-                        $department_options = [
-                            ['departmentid' => 'all', 'name' => _l('announcement_email_all_departments')],
-                        ];
-                        if (!empty($departments)) {
-                            foreach ($departments as $department) {
-                                $department_options[] = [
-                                    'departmentid' => $department['departmentid'],
-                                    'name'         => $department['name'],
-                                ];
-                            }
-                        }
-                        echo render_select(
-                            'email_departments[]',
-                            $department_options,
-                            ['departmentid', 'name'],
-                            'announcement_email_departments',
-                            $selected_departments,
-                            [
-                                'multiple'                => true,
-                                'data-actions-box'        => true,
-                                'data-live-search'        => true,
-                                'data-width'              => '100%',
-                                'data-none-selected-text' => _l('dropdown_non_selected_tex'),
-                            ],
-                            [],
-                            '',
-                            '',
-                            false
-                        );
-                        ?>
-                        <p class="text-muted tw-mb-4"><?php echo _l('announcement_email_departments_help'); ?></p>
-
-                        <?php
-                        $selected_roles = [];
-                        if (isset($announcement) && !empty($announcement->email_roles)) {
-                            $selected_roles = array_filter(explode(',', (string) $announcement->email_roles));
-                        }
-                        $role_options = [
-                            ['roleid' => 'all', 'name' => _l('announcement_email_all_employees')],
-                        ];
-                        if (!empty($roles)) {
-                            foreach ($roles as $role) {
-                                $role_options[] = [
-                                    'roleid' => $role['roleid'],
-                                    'name'   => $role['name'],
-                                ];
-                            }
-                        }
-                        echo render_select(
-                            'email_roles[]',
-                            $role_options,
-                            ['roleid', 'name'],
-                            'announcement_email_roles',
-                            $selected_roles,
-                            [
-                                'multiple'                => true,
-                                'data-actions-box'        => true,
-                                'data-live-search'        => true,
-                                'data-width'              => '100%',
-                                'data-none-selected-text' => _l('dropdown_non_selected_tex'),
-                            ],
-                            [],
-                            '',
-                            '',
-                            false
-                        );
-                        ?>
-                        <p class="text-muted tw-mb-4"><?php echo _l('announcement_email_roles_help'); ?></p>
-
                         <p class="bold"><?php echo _l('announcement_message'); ?></p>
                         <?php $contents = ''; if (isset($announcement)) {
     $contents                           = $announcement->message;
@@ -121,7 +47,7 @@
                                     <label for="showname"><?php echo _l('announcement_show_my_name'); ?></label>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-primary"><?php echo _l('announcement_send'); ?></button>
+                            <button type="submit" class="btn btn-primary"><?php echo _l('submit'); ?></button>
                         </div>
 
 
@@ -136,26 +62,7 @@
 <script>
 $(function() {
     appValidateForm($('form'), {
-        name: 'required',
-        'email_departments[]': 'required',
-        'email_roles[]': 'required',
-        message: 'required'
-    });
-
-    $('select[name="email_departments[]"]').on('changed.bs.select', function () {
-        var $el = $(this);
-        var vals = $el.val() || [];
-        if (vals.indexOf('all') !== -1 && vals.length > 1) {
-            $el.selectpicker('val', ['all']);
-        }
-    });
-
-    $('select[name="email_roles[]"]').on('changed.bs.select', function () {
-        var $el = $(this);
-        var vals = $el.val() || [];
-        if (vals.indexOf('all') !== -1 && vals.length > 1) {
-            $el.selectpicker('val', ['all']);
-        }
+        name: 'required'
     });
 });
 </script>

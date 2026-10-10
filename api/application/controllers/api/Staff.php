@@ -25,33 +25,47 @@ public function index_post(){
     
    $staff = $this->staff_model->login_check_password($email,$password);
   // print_r($staff);die;
-   if($staff){
-           if(!empty($staff[1]['type_check'])){
-                      $this->response(array(
-                    "check-in"=>false,
-                    "success" => 1,
-                    "message" => "Checkout Successfully"
-                  ), REST_Controller::HTTP_OK);
-                    }elseif($staff[0]['type_check'] && !empty($staff[1]['type_check'])){
-                         $this->response(array(
-                         "check-in"=>false,
-                        "success" => 0,
-                        "message" => "Wrong Details"
-                      ) , REST_Controller::HTTP_NOT_FOUND); 
-                    }else{
-                         $this->response(array(
-                         "check-in"=>true,
-                        "success" => 1,
-                        "message" => "Login Successfully"
-                      ) , REST_Controller::HTTP_OK);
-                    }
-               
-               }else{
-                   $this->response(array(
-                        "success" => 1,
-                         "message" => "Checkout Successfully"
-                      ) , REST_Controller::HTTP_OK);
-               }
+   if ($staff === false) {
+       $this->response(array(
+           "check-in" => false,
+           "success" => 0,
+           "message" => "Wrong email or password"
+       ), REST_Controller::HTTP_NOT_FOUND);
+       return;
+   }
+
+   if (empty($staff)) {
+       $this->response(array(
+           "check-in" => false,
+           "success" => 1,
+           "message" => "Please check in on T2G Workroom or biometric device first."
+       ), REST_Controller::HTTP_OK);
+       return;
+   }
+
+   if (!empty($staff[1]['type_check'])) {
+       $this->response(array(
+           "check-in" => false,
+           "success" => 1,
+           "message" => "Checkout Successfully"
+       ), REST_Controller::HTTP_OK);
+       return;
+   }
+
+   if (!empty($staff[0]['type_check']) && !empty($staff[1]['type_check'])) {
+       $this->response(array(
+           "check-in" => false,
+           "success" => 0,
+           "message" => "Wrong Details"
+       ), REST_Controller::HTTP_NOT_FOUND);
+       return;
+   }
+
+   $this->response(array(
+       "check-in" => true,
+       "success" => 1,
+       "message" => "Login Successfully"
+   ), REST_Controller::HTTP_OK);
                 
     
  /*  if($staff == TRUE){

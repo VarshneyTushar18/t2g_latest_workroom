@@ -183,6 +183,17 @@ class Cron extends App_Controller
 		$this->load->model('cron_model');
 		$this->cron_model->get_attendance_summary_table();
 	}
+	public function send_daily_late_arrival_report(){
+		$this->load->model('cron_model');
+		$this->cron_model->send_daily_late_arrival_report();
+	}
+	public function send_monthly_late_arrival_summary($year = null, $month = null){
+		$this->load->model('cron_model');
+		$this->cron_model->send_monthly_late_arrival_summary(
+			$year !== null && $year !== '' ? (int) $year : null,
+			$month !== null && $month !== '' ? (int) $month : null
+		);
+	}
 	public function check_deadline_missed_projects(){
 		$this->load->model('cron_model');
 		$this->cron_model->weekly_deadline_missed_projects_report();

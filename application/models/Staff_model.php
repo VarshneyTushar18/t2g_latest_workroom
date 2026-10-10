@@ -2586,10 +2586,15 @@ class Staff_model extends App_Model
         $categories = $staff_ctx_cache[$ctx_key]['categories'];
         $as_of = sprintf('%04d-%02d-%02d', $year, $month, min(28, (int) date('j')));
 
+        $timesheets_model = null;
+        if ($year === 2026 && is_dir(module_dir_path('timesheets'))) {
+            $CI = &get_instance();
+            $CI->load->model('timesheets/timesheets_model');
+            $timesheets_model = $CI->timesheets_model;
+        }
+
         foreach ($rows as &$leaveData) {
             $sid = (int) $leaveData['staffid'];
-            // True opening = prev closing (earned − EL taken), not stale application column.
-            $leaveData['carry_forward'] = $this->carryForward($sid, $leaveData['doj'] ?? null, $month, $year);
             $default_earned = $this->calculateEarnedLeavesFast(
                 $leaveData['doj'] ?? null,
                 $sid,
@@ -2599,20 +2604,42 @@ class Staff_model extends App_Model
                 $categories[$sid] ?? 'fte',
                 $as_of
             );
-            $leaveData['earned_leave'] = isset($earned_overrides[$sid])
-                ? (float) $earned_overrides[$sid]
-                : $default_earned;
+
+            $seeded = null;
+            if ($timesheets_model && method_exists($timesheets_model, 'resolve_excel_seeded_earned_leave_month')) {
+                $seeded = $timesheets_model->resolve_excel_seeded_earned_leave_month($sid, $year, $month, [
+                    'doj'              => $leaveData['doj'] ?? null,
+                    'resigned'         => !empty($resigned[$sid]),
+                    'category'         => $categories[$sid] ?? 'fte',
+                    'earned_override'  => $earned_overrides[$sid] ?? null,
+                    'taken_this_month' => $leave_taken[$sid] ?? 0,
+                ]);
+            }
+
+            if ($seeded !== null) {
+                $leaveData['carry_forward'] = $seeded['carry_forward'];
+                $leaveData['earned_leave'] = $seeded['monthly_earn'];
+                $leaveData['leave_taken'] = $seeded['consumed'];
+                $leaveData['leave_balance'] = $seeded['balance'];
+            } else {
+                // True opening = prev closing (earned − EL taken), not stale application column.
+                $leaveData['carry_forward'] = $this->carryForward($sid, $leaveData['doj'] ?? null, $month, $year);
+                $leaveData['earned_leave'] = isset($earned_overrides[$sid])
+                    ? (float) $earned_overrides[$sid]
+                    : $default_earned;
+                $leaveData['leave_taken'] = $leave_taken[$sid] ?? 0;
+                $leaveData['leave_balance'] = $this->compute_monthly_leave_balance(
+                    $leaveData['carry_forward'],
+                    $leaveData['earned_leave'],
+                    $leaveData['leave_taken']
+                );
+            }
+
             $leaveData['earned_leave_is_override'] = isset($earned_overrides[$sid]);
             $leaveData['earned_leave_default'] = $default_earned;
             $leaveData['monthly_leaves'] = $leave_balance[$sid] ?? 0;
-            $leaveData['leave_taken'] = $leave_taken[$sid] ?? 0;
             $leaveData['status'] = $absent_status[$sid] ?? 0;
             $leaveData['status_approve'] = $status_approve[$sid] ?? 0;
-            $leaveData['leave_balance'] = $this->compute_monthly_leave_balance(
-                $leaveData['carry_forward'],
-                $leaveData['earned_leave'],
-                $leaveData['leave_taken']
-            );
         }
         unset($leaveData);
 
@@ -2736,6 +2763,13 @@ class Staff_model extends App_Model
             $opening[$sid] = (float) $this->carryForward($sid, $doj, max(1, $start_m), $year);
         }
 
+        $timesheets_model = null;
+        if ($year === 2026 && is_dir(module_dir_path('timesheets'))) {
+            $CI = &get_instance();
+            $CI->load->model('timesheets/timesheets_model');
+            $timesheets_model = $CI->timesheets_model;
+        }
+
         $out = [];
         $running = $opening;
         for ($month = 1; $month <= $through_month; $month++) {
@@ -2747,13 +2781,6 @@ class Staff_model extends App_Model
                     continue; // before DOJ — omit so CF/Balance don't look "blank"
                 }
                 $leaveData = $base_row;
-                $cf = (float) ($running[$sid] ?? 0);
-                if ($month === 4) {
-                    $cap = $this->get_leave_carry_forward_cap($sid);
-                    if ($cf > $cap) {
-                        $cf = $cap;
-                    }
-                }
                 $default_earned = $this->calculateEarnedLeavesFast(
                     $base_row['doj'] ?? null,
                     $sid,
@@ -2763,11 +2790,38 @@ class Staff_model extends App_Model
                     $categories[$sid] ?? 'fte',
                     $as_of
                 );
-                $earned = isset($overrides[$sid][$month])
-                    ? (float) $overrides[$sid][$month]
-                    : $default_earned;
                 $taken = (float) ($taken_by_staff_month[$sid][$month] ?? 0);
-                $balance = $this->compute_monthly_leave_balance($cf, $earned, $taken);
+
+                $seeded = null;
+                if ($timesheets_model && method_exists($timesheets_model, 'resolve_excel_seeded_earned_leave_month')) {
+                    $seeded = $timesheets_model->resolve_excel_seeded_earned_leave_month($sid, $year, $month, [
+                        'doj'              => $base_row['doj'] ?? null,
+                        'resigned'         => !empty($resigned[$sid]),
+                        'category'         => $categories[$sid] ?? 'fte',
+                        'earned_overrides' => $overrides[$sid] ?? [],
+                        'taken_by_month'   => $taken_by_staff_month[$sid] ?? [],
+                        'taken_this_month' => $taken,
+                    ]);
+                }
+
+                if ($seeded !== null) {
+                    $cf = (float) $seeded['carry_forward'];
+                    $earned = (float) $seeded['monthly_earn'];
+                    $taken = (float) $seeded['consumed'];
+                    $balance = (float) $seeded['balance'];
+                } else {
+                    $cf = (float) ($running[$sid] ?? 0);
+                    if ($month === 4) {
+                        $cap = $this->get_leave_carry_forward_cap($sid);
+                        if ($cf > $cap) {
+                            $cf = $cap;
+                        }
+                    }
+                    $earned = isset($overrides[$sid][$month])
+                        ? (float) $overrides[$sid][$month]
+                        : $default_earned;
+                    $balance = $this->compute_monthly_leave_balance($cf, $earned, $taken);
+                }
 
                 $leaveData['carry_forward'] = $cf;
                 $leaveData['earned_leave'] = $earned;

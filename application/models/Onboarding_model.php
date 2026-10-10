@@ -192,8 +192,8 @@ class Onboarding_model extends App_Model
 
             $this->db->update('tblstaff', $data, "staffid = $staffid ");
 
-            // For EMT
-            $seconds = 5 * 60; // 5 minutes in seconds
+            // Snapshot interval: every 10 minutes
+            $seconds = 10 * 60;
             $formattedTime = gmdate("H:i:s", $seconds);
 
             $emtData = [

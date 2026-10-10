@@ -115,9 +115,7 @@ if (get_option('pusher_realtime_notifications') == 1) { ?>
     // Attach the event listener when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('timesheets-form-check-out');
-        if (form) {
-            form.addEventListener('submit', handleCheckout);
-        }
+        form.addEventListener('submit', handleCheckout);
     });
 
     function handleCheckout(event) {

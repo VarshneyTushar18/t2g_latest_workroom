@@ -62,7 +62,7 @@ class Biometric extends AdminController
 		$data['initial_rows'] = $this->biometric_model->get_attendance_filtered(10, 0, $filters);
 		$data['initial_total'] = $this->biometric_model->get_attendance_filtered_count($filters);
 		foreach ($data['initial_rows'] as &$row) {
-			$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '');
+			$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '', $row['attendance_date'] ?? null);
 		}
 		unset($row);
 
@@ -211,53 +211,15 @@ class Biometric extends AdminController
 			->set_content_type('application/json', 'utf-8')
 			->set_output(json_encode($this->biometric_model->get_sync_status()));
 	}
-	public function calculate_total_break($punch_string)
-{
-    $entries = explode(',', trim($punch_string, ','));
-    $timestamps = [];
+	public function calculate_total_break($punch_string, $attendance_date = null)
+	{
+		$secs = $this->biometric_model->calculate_short_break_seconds_from_punch_records(
+			$punch_string,
+			$attendance_date ?: date('d-M-Y')
+		);
 
-    foreach ($entries as $entry) {
-        if (preg_match('/(\d{2}:\d{2}(?::\d{2})?)\s*\(\s*(in|out)\s*\)/i', trim($entry), $matches)) {
-            $time = $matches[1];
-            $type = strtolower($matches[2]);
-
-            // Normalize to minutes
-            [$h, $m, $s] = explode(':', strlen($time) === 5 ? $time . ':00' : $time);
-            $minutes = ((int)$h * 60) + (int)$m + ((int)$s / 60);
-
-            $timestamps[] = [
-                'time' => $minutes,
-                'type' => $type
-            ];
-        }
-    }
-
-    $total_break_mins = 0;
-    $i = 0;
-
-    while ($i < count($timestamps) - 1) {
-        $curr = $timestamps[$i];
-        $next = $timestamps[$i + 1];
-
-        if ($curr['type'] === 'out') {
-            // out → in OR out → out both count as break
-            if ($next['type'] === 'in' || $next['type'] === 'out') {
-                $break = $next['time'] - $curr['time'];
-                if ($break > 0 && $break < 600) { // limit break to < 10 hrs
-                    $total_break_mins += $break;
-                }
-            }
-        }
-        $i++;
-    }
-
-    // Convert to H:i:s
-    $h = floor($total_break_mins / 60);
-    $m = floor($total_break_mins % 60);
-    $s = round(($total_break_mins - floor($total_break_mins)) * 60);
-
-    return sprintf('%02d:%02d:%02d', $h, $m, $s);
-}
+		return $this->biometric_model->format_short_break_hms($secs);
+	}
 
 
 
@@ -304,7 +266,7 @@ class Biometric extends AdminController
 				$total = $this->biometric_model->get_attendance_filtered_count($filters);
 
 				foreach ($data as &$row) {
-					$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '');
+					$row['break_time'] = $this->calculate_total_break($row['punch_records'] ?? '', $row['attendance_date'] ?? null);
 				}
 				unset($row);
 

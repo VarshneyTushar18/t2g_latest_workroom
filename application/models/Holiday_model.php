@@ -4,6 +4,60 @@ defined('BASEPATH') or exit('No direct script access allowed');
 
 class Holiday_model extends App_Model
 {
+    /**
+     * Manager-assigned WFH days (per staff, per date) — like tblholiday for Saturdays.
+     */
+    public function ensure_staff_wfh_day_table()
+    {
+        $table = db_prefix() . 'staff_wfh_day';
+        if ($this->db->table_exists($table)) {
+            return;
+        }
+
+        $this->db->query('CREATE TABLE `' . $table . '` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `staffid` int(11) NOT NULL,
+            `department_id` int(11) NOT NULL DEFAULT 0,
+            `wfh_date` date NOT NULL,
+            `status` tinyint(1) NOT NULL DEFAULT 1,
+            `assigned_by` int(11) NOT NULL DEFAULT 0,
+            `date_added` datetime NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `staff_wfh_date` (`staffid`,`wfh_date`),
+            KEY `wfh_date` (`wfh_date`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8;');
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    public function get_staff_wfh_allotment_dates($staff_id, $from, $to)
+    {
+        $this->ensure_staff_wfh_day_table();
+        $staff_id = (int) $staff_id;
+        $from = date('Y-m-d', strtotime($from));
+        $to = date('Y-m-d', strtotime($to));
+        $dates = [];
+        if ($staff_id <= 0 || $from === '' || $to === '') {
+            return $dates;
+        }
+
+        $rows = $this->db->select('wfh_date')
+            ->from(db_prefix() . 'staff_wfh_day')
+            ->where('staffid', $staff_id)
+            ->where('status', 1)
+            ->where('wfh_date >=', $from)
+            ->where('wfh_date <=', $to)
+            ->get()
+            ->result_array();
+
+        foreach ($rows as $row) {
+            $dates[$row['wfh_date']] = true;
+        }
+
+        return $dates;
+    }
+
     // custom function to get staff with their department id
     public function get_staff_based_on_department($id = '')
     {

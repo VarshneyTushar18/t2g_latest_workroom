@@ -76,34 +76,12 @@ class Projects extends AdminController
         if ($this->input->post()) {
             $data                = $this->input->post();
             $data['description'] = html_purify($this->input->post('description', false));
-            $task_template_ids   = isset($data['task_template_id']) ? $data['task_template_id'] : [];
-            unset($data['task_template_id']);
-
-            if (!is_array($task_template_ids)) {
-                $task_template_ids = $task_template_ids ? [$task_template_ids] : [];
-            }
-            $task_template_ids = array_values(array_filter($task_template_ids));
             if ($id == '') {
                 if (!staff_can('create', 'projects')) {
                     access_denied('Projects');
                 }
                 $id = $this->projects_model->add($data);
                 if ($id) {
-                    if (count($task_template_ids) > 0) {
-                        if (!can_manage_task_templates()) {
-                            access_denied('Task Templates');
-                        }
-
-                        $this->load->model('task_templates_model');
-                        $created = $this->task_templates_model->create_tasks_from_templates($task_template_ids, [
-                            'rel_type'  => 'project',
-                            'rel_id'    => $id,
-                            'startdate' => $this->input->post('start_date') ?: _d(date('Y-m-d')),
-                        ]);
-                        if ($created > 0) {
-                            set_alert('success', _l('task_template_tasks_created', $created));
-                        }
-                    }
                     set_alert('success', _l('added_successfully', _l('project')));
                     redirect(admin_url('projects/view/' . $id));
                 }
@@ -154,19 +132,7 @@ class Projects extends AdminController
             $data['staff'] = $this->staff_model->get_staff_based_on_department();
         }
 
-        $data['title']         = $title;
-        $data['taskTemplates'] = [];
-        if (can_manage_task_templates()) {
-            $this->load->model('task_templates_model');
-            $data['taskTemplates'] = $this->task_templates_model->get();
-            if (!is_array($data['taskTemplates'])) {
-                $data['taskTemplates'] = [];
-            }
-            foreach ($data['taskTemplates'] as $key => $template) {
-                $count = total_rows(db_prefix() . 'task_template_items', ['template_id' => $template['id']]);
-                $data['taskTemplates'][$key]['name'] = $template['name'] . ' (' . $count . ' ' . _l('als_tasks') . ')';
-            }
-        }
+        $data['title'] = $title;
         $this->load->view('admin/projects/project', $data);
     }
 

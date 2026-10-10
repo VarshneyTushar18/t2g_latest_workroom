@@ -3935,6 +3935,7 @@ $lang['Dashboard']                       = 'Dashboard';
 $lang['Evaluation']                      = 'Evaluation';
 $lang['Manage KRA']                      = 'Manage KRA';
 $lang['Snapshot dashboard']              = 'Snapshot dashboard';
+$lang['Snapshot Interval']               = 'Snapshot Interval';
 $lang['Document Mgmt']                   = 'Document Mgmt';
 $lang['Escalation']                      = 'Escalation';
 $lang['Ultimate Theme Config']           = 'Ultimate Theme Config';

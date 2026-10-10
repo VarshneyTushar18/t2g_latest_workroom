@@ -44,7 +44,6 @@ class Suggestions_model extends App_Model
 
         if ($id) {
             log_activity('New Staff Suggestion [ID: ' . $id . ', StaffID: ' . $insert['staffid'] . ']');
-            $this->notify_suggestion_recipients($id, $insert);
         }
 
         return $id;
@@ -103,10 +102,10 @@ class Suggestions_model extends App_Model
         return $this->db->affected_rows() > 0;
     }
 
-    private function notify_suggestion_recipients($id, $suggestion)
+    private function notify_admins($id, $suggestion)
     {
         $staff_name = get_staff_full_name($suggestion['staffid']);
-        $subject    = 'New Staff Suggestion - ' . $suggestion['subject'];
+        $subject    = 'New Suggestion from ' . $staff_name;
         $link       = admin_url('suggestions');
 
         $message = '<p><b>New suggestion submitted</b></p>';
@@ -115,59 +114,32 @@ class Suggestions_model extends App_Model
         $message .= '<p><b>Message:</b><br>' . nl2br(html_escape($suggestion['message'])) . '</p>';
         $message .= '<p><a href="' . $link . '">View in Workroom</a></p>';
 
-        $recipients = [
-            'it.support@tech2globe.net',
-            'sarabjeet@tech2globe.net',
-            'hr@tech2globe.com',
-        ];
-
-        // Active staff on HR role (role id 24)
         $this->db->select('email');
         $this->db->from(db_prefix() . 'staff');
+        $this->db->where('admin', 1);
         $this->db->where('active', 1);
-        $this->db->where('role', 24);
-        $this->db->where('email !=', '');
-        $hr_staff = $this->db->get()->result_array();
-        foreach ($hr_staff as $row) {
-            if (!empty($row['email'])) {
-                $recipients[] = trim($row['email']);
-            }
-        }
+        $admins = $this->db->get()->result_array();
 
-        $recipients = array_values(array_unique(array_filter($recipients, function ($email) {
-            return filter_var($email, FILTER_VALIDATE_EMAIL);
-        })));
-
-        if (empty($recipients)) {
-            return false;
+        if (empty($admins)) {
+            return;
         }
-
-        $from_email = get_option('smtp_email');
-        if (empty($from_email) || !filter_var($from_email, FILTER_VALIDATE_EMAIL)) {
-            $from_email = 'noreply@t2gworkroom.com';
-        }
-        $from_name = get_option('companyname') ?: 'Tech2globe Workroom';
 
         $this->load->library('email');
-        $this->email->clear(true);
         $this->email->initialize();
         $this->email->set_mailtype('html');
-        $this->email->from($from_email, $from_name);
-        $this->email->to($from_email);
-        $this->email->bcc($recipients);
-        $this->email->subject($subject);
-        $this->email->message($message);
+        $this->email->from(get_option('smtp_email') ?: 'noreply@tech2globe.com', get_option('companyname') ?: 'Workroom');
 
-        $ok = (bool) $this->email->send(false);
-        if (!$ok) {
-            log_activity('Suggestion email failed [ID: ' . $id . '] ' . $this->email->print_debugger(['headers']));
+        foreach ($admins as $admin) {
+            if (empty($admin['email'])) {
+                continue;
+            }
+            $this->email->clear(true);
+            $this->email->set_mailtype('html');
+            $this->email->from(get_option('smtp_email') ?: 'noreply@tech2globe.com', get_option('companyname') ?: 'Workroom');
+            $this->email->to($admin['email']);
+            $this->email->subject($subject);
+            $this->email->message($message);
+            @$this->email->send();
         }
-
-        return $ok;
-    }
-
-    private function notify_admins($id, $suggestion)
-    {
-        return $this->notify_suggestion_recipients($id, $suggestion);
     }
 }

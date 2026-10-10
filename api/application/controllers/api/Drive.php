@@ -84,7 +84,7 @@ class Drive extends REST_Controller
 
     // ---- 1️⃣ Authenticate Google Drive Service ----
     $client = new Google\Client();
-    $client->setAuthConfig('/var/www/html/t2gworkroom/google-client/t2gemt-monitoring-c3fa0b6cc3dc.json');
+    $client->setAuthConfig('/var/www/html/t2gworkroom/google-client/t2g-monitoring-37bb12065f7f.json');
     $client->addScope(Google\Service\Drive::DRIVE);
     $service = new Google\Service\Drive($client);
 

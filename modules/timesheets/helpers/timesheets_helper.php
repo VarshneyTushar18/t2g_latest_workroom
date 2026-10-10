@@ -1367,6 +1367,12 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 	}
 
 	$CI = &get_instance();
+	$CI->load->model('staff_model');
+	if (method_exists($CI->staff_model, 'get_employment_category')
+		&& $CI->staff_model->get_employment_category($staff_id) === 'wfh') {
+		return true;
+	}
+
 	$row = $CI->db->query(
 		'SELECT id FROM ' . db_prefix() . 'timesheets_requisition_leave
 		 WHERE staff_id = ?
@@ -1387,8 +1393,43 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 		 LIMIT 1',
 		[$staff_id, $date]
 	)->row();
+	if ($ts) {
+		return true;
+	}
 
-	return $ts ? true : false;
+	if ($CI->db->table_exists(db_prefix() . 'staff_wfh_day')) {
+		$allot = $CI->db->query(
+			'SELECT id FROM ' . db_prefix() . 'staff_wfh_day
+			 WHERE staffid = ? AND wfh_date = ? AND status = 1 LIMIT 1',
+			[$staff_id, $date]
+		)->row();
+		if ($allot) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * WFH staff must use Workroom web check-in/out (never office biometric gate).
+ */
+function timesheets_staff_uses_workroom_attendance($staff_id, $date = null)
+{
+	return timesheets_is_staff_wfh_on_date((int) $staff_id, $date ?: date('Y-m-d'));
+}
+
+/**
+ * Clear cached navbar punch state after check-in/out so buttons update immediately.
+ */
+function timesheets_invalidate_navbar_punch_cache($staff_id = null)
+{
+	$CI = &get_instance();
+	$staff_id = (int) ($staff_id ?: get_staff_user_id());
+	if ($staff_id <= 0) {
+		return;
+	}
+	$CI->session->unset_userdata('ts_navbar_punch_' . $staff_id);
 }
 
 /**
@@ -1788,11 +1829,10 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$biometric_is_checked_out = false;
 	$biometric_last_out_ts = 0;
 	$biometric_break_summary = null;
+	$on_wfh_today = function_exists('timesheets_staff_uses_workroom_attendance')
+		&& timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'));
 
 	try {
-		$on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
-			&& timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'));
-
 		$CI->load->model('biometric_model');
 		$biometric_row = null;
 		if (!$on_wfh_today && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
@@ -1835,6 +1875,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 		'biometric_is_checked_out' => $biometric_is_checked_out,
 		'biometric_last_out_ts' => $biometric_last_out_ts,
 		'biometric_break_summary' => $biometric_break_summary,
+		'on_wfh_today' => $on_wfh_today,
 	];
 
 	if (function_exists('get_timesheets_option')) {

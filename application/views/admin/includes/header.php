@@ -93,8 +93,12 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     $biometric_is_checked_out = !empty($navbar_punch['biometric_is_checked_out']);
     $biometric_last_out_ts = (int) ($navbar_punch['biometric_last_out_ts'] ?? 0);
     $biometric_break_summary = $navbar_punch['biometric_break_summary'] ?? null;
+    $on_wfh_today = !empty($navbar_punch['on_wfh_today']);
+    if ($on_wfh_today) {
+        $biometric_navbar_active = false;
+    }
 
-    // Biometric available → show Biometric pill only. No biometric today → Workroom check in/out.
+    // Biometric available → show Biometric pill only. WFH / no biometric today → Workroom check in/out.
     ?>
 
     <nav>
@@ -249,7 +253,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             <?php } ?>
                         <?php } else { ?>
                             <?php
-                            if ($type_check_in_out != 1 && ($time_from_checkin >= 13 || $allows_updating_check_in_time == 1)) {
+                            if ($type_check_in_out != 1 && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
                                 echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
                                 <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
                                 <input type="hidden" name="type_check" value="1">
@@ -593,7 +597,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </li>-->
 				<li class="icon header-todo">
-				<a href="/Snapshot.zip" download style="color:#fff; text-decoration: underline !important;font-size: 14px;"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
+				<a href="/Snapshot.zip" download title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)" style="color:#fff; text-decoration: underline !important;font-size: 14px;"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
 				</li>	
                 <li class="icon header-user-profile" data-toggle="tooltip" title="<?php echo get_staff_full_name(); ?>" data-placement="bottom">
 

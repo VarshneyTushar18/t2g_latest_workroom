@@ -8,8 +8,6 @@ class Announcements extends AdminController
     {
         parent::__construct();
         $this->load->model('announcements_model');
-        $this->load->model('roles_model');
-        $this->load->model('departments_model');
     }
 
     /* List all announcements */
@@ -25,58 +23,23 @@ class Announcements extends AdminController
     /* Edit announcement or add new if passed id */
     public function announcement($id = '')
     {
+        // commenting so that non admin can do the announcement
+        // if (!is_admin()) {
+        //     access_denied('Announcement');
+        // }
         if ($this->input->post()) {
             $data            = $this->input->post();
             $data['message'] = html_purify($this->input->post('message', false));
-
-            $email_roles = [];
-            if (isset($data['email_roles'])) {
-                $email_roles = is_array($data['email_roles']) ? $data['email_roles'] : [$data['email_roles']];
-                unset($data['email_roles']);
-            }
-            $email_roles = array_values(array_filter(array_map('strval', $email_roles)));
-
-            $email_departments = [];
-            if (isset($data['email_departments'])) {
-                $email_departments = is_array($data['email_departments']) ? $data['email_departments'] : [$data['email_departments']];
-                unset($data['email_departments']);
-            }
-            $email_departments = array_values(array_filter(array_map('strval', $email_departments)));
-
-            if (empty($email_departments)) {
-                set_alert('warning', _l('announcement_email_departments_required'));
-                redirect($this->uri->uri_string());
-            }
-
-            if (empty($email_roles)) {
-                set_alert('warning', _l('announcement_email_roles_required'));
-                redirect($this->uri->uri_string());
-            }
-
-            if (trim(strip_tags((string) $data['message'])) === '') {
-                set_alert('warning', _l('announcement_message') . ' is required.');
-                redirect($this->uri->uri_string());
-            }
-
-            $data['email_roles'] = in_array('all', $email_roles, true) ? 'all' : implode(',', $email_roles);
-            $data['email_departments'] = in_array('all', $email_departments, true) ? 'all' : implode(',', $email_departments);
-
             if ($id == '') {
                 $id = $this->announcements_model->add($data);
                 if ($id) {
-                    $announcement = $this->announcements_model->get($id);
-                    $send_result  = $this->announcements_model->send_announcement_emails($announcement, $email_roles, $email_departments);
-                    $this->_set_send_alert($send_result, true);
+                    set_alert('success', _l('added_successfully', _l('announcement')));
                     redirect(admin_url('announcements/view/' . $id));
                 }
             } else {
                 $success = $this->announcements_model->update($data, $id);
-                $announcement = $this->announcements_model->get($id);
-                $send_result  = $this->announcements_model->send_announcement_emails($announcement, $email_roles, $email_departments);
                 if ($success) {
-                    $this->_set_send_alert($send_result, false);
-                } else {
-                    $this->_set_send_alert($send_result, false);
+                    set_alert('success', _l('updated_successfully', _l('announcement')));
                 }
                 redirect(admin_url('announcements/view/' . $id));
             }
@@ -87,23 +50,8 @@ class Announcements extends AdminController
             $data['announcement'] = $this->announcements_model->get($id);
             $title                = _l('edit', _l('announcement_lowercase'));
         }
-        $data['roles']       = $this->roles_model->get();
-        $data['departments'] = $this->departments_model->get();
-        $data['title']       = $title;
+        $data['title'] = $title;
         $this->load->view('admin/announcements/announcement', $data);
-    }
-
-    private function _set_send_alert($send_result, $is_new)
-    {
-        if (!empty($send_result['sent']) && (int) $send_result['sent'] > 0) {
-            set_alert('success', sprintf(_l('announcement_email_sent'), (int) $send_result['sent']));
-            return;
-        }
-        if (!empty($send_result['no_recipients'])) {
-            set_alert('warning', _l('announcement_email_none'));
-            return;
-        }
-        set_alert('warning', _l('announcement_email_failed'));
     }
 
     public function view($id)

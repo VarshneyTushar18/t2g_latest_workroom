@@ -23,3 +23,13 @@ backup/
 backups/
 db_backup/
 database_backup/
+google-client/*.json
+_quarantine*/
+*.hacked.bak
+_t2g-live-sync.tar.gz
+_tmp_*.php
+_verify_*.php
+_sync_*.php
+_check_*.php
+_ensure_*.php
+Timesheets_model.php

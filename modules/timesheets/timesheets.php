@@ -283,6 +283,13 @@ function timesheets_module_init_menu_items() {
 					'icon' => 'fa fa-calendar',
 					'position' => 4,
 				]);
+				$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+					'slug' => 'timesheets_manage_wfh',
+					'name' => 'Manage WFH',
+					'href' => admin_url('holiday/manageWfh'),
+					'icon' => 'fa fa-home',
+					'position' => 4.5,
+				]);
 			}
 
 			if (is_admin() || is_super_admin() || is_HR() || is_super_hr()) {

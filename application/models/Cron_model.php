@@ -8487,11 +8487,24 @@ public function send_break_report_to_staff()
 				// Generate yesterday's date in d-M-Y format
 				$date = date('d-M-Y', strtotime('-1 day')); 
 			}
-			$this->db->select('*');
+
+			$table = db_prefix() . 'biometric_report';
+			$staff = db_prefix() . 'staff';
+			$this->db->select($table . '.*, ' . $staff . '.firstname AS staff_firstname, ' . $staff . '.lastname AS staff_lastname', false);
+			$this->db->from($table);
+			$this->db->join(
+				$staff,
+				'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code) AND ' . $staff . '.active = 1',
+				'inner',
+				false
+			);
 			if ($date) {
-				$this->db->where('attendance_date', $date);
+				$this->db->where($table . '.attendance_date', $date);
 			}
-			$query = $this->db->get('tblbiometric_report'); // Use your actual table name
+			// Lowest / oldest employee code first (e.g. 1007 Sarabjeet before 1806 Manisha).
+			$this->db->order_by('CAST(TRIM(' . $table . '.employee_code) AS UNSIGNED)', 'ASC', false);
+			$this->db->order_by('TRIM(' . $table . '.employee_code)', 'ASC', false);
+			$query = $this->db->get();
 			
 			$result = $query->result();
 			
@@ -8543,11 +8556,16 @@ public function send_break_report_to_staff()
         ? 'background-color: #f8d7da; color: #721c24;' // light red bg, dark red text
         : 'background-color: #fff; color: #333;';
 
+				$employee_name = trim((string) $row->employee_name);
+				if ($employee_name === '') {
+					$employee_name = trim(trim((string) ($row->staff_firstname ?? '')) . ' ' . trim((string) ($row->staff_lastname ?? '')));
+				}
+
 				$html .= '
     <tr style="' . $row_style . '">
         <td style="border: 1px solid #ddd; text-align: center;">' . $count . '</td>
-        <td style="border: 1px solid #ddd; text-align: center;">' . $row->employee_code . '</td>
-        <td style="border: 1px solid #ddd;">' . $row->employee_name . '</td>
+        <td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($row->employee_code, ENT_QUOTES, 'UTF-8') . '</td>
+        <td style="border: 1px solid #ddd;">' . htmlspecialchars($employee_name, ENT_QUOTES, 'UTF-8') . '</td>
         <td style="border: 1px solid #ddd; text-align: center;">' . count($ins) . '</td>
         <td style="border: 1px solid #ddd; text-align: center;">' . count($outs) . '</td>
         <td style="border: 1px solid #ddd; text-align: center;">' . $first_in . '</td>
@@ -8581,6 +8599,411 @@ public function send_break_report_to_staff()
 				$this->email->clear();
 			//return $html;
 		}
+
+	/**
+	 * Daily late-arrival report from biometric first IN vs assigned shift (15 min grace).
+	 * Grace is used only to decide late vs on-time; "Late By" shows actual time after shift start.
+	 * Active staff only, sorted by employee code. Includes monthly late-day counter.
+	 */
+	public function send_daily_late_arrival_report($date = null)
+	{
+		$grace_mins = 15;
+
+		if (!$date) {
+			$date = date('d-M-Y', strtotime('-1 day'));
+		}
+
+		$date_obj = DateTime::createFromFormat('d-M-Y', $date);
+		if (!$date_obj) {
+			echo 'Invalid date: ' . $date;
+			return;
+		}
+		$date_ymd = $date_obj->format('Y-m-d');
+		$month_suffix = $date_obj->format('M-Y');
+
+		$table = db_prefix() . 'biometric_report';
+		$staff = db_prefix() . 'staff';
+		$this->db->select($table . '.*, ' . $staff . '.staffid, ' . $staff . '.firstname AS staff_firstname, ' . $staff . '.lastname AS staff_lastname', false);
+		$this->db->from($table);
+		$this->db->join(
+			$staff,
+			'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code) AND ' . $staff . '.active = 1',
+			'inner',
+			false
+		);
+		$this->db->where($table . '.attendance_date', $date);
+		$this->db->order_by('CAST(TRIM(' . $table . '.employee_code) AS UNSIGNED)', 'ASC', false);
+		$this->db->order_by('TRIM(' . $table . '.employee_code)', 'ASC', false);
+		$result = $this->db->get()->result();
+
+		if (!$result) {
+			echo "<p>No attendance data for {$date}.</p>";
+			return;
+		}
+
+		$this->load->model('timesheets/timesheets_model');
+		$monthly_late_counts = $this->build_monthly_late_arrival_counts($month_suffix, $date_ymd, $grace_mins);
+		$late_rows = [];
+
+		foreach ($result as $row) {
+			$late_info = $this->evaluate_late_arrival_for_row($row, $date_ymd, $grace_mins);
+			if ($late_info === null) {
+				continue;
+			}
+
+			$code = trim((string) $row->employee_code);
+			$late_rows[] = [
+				'employee_code' => $code,
+				'employee_name' => $late_info['employee_name'],
+				'shift_start'   => $late_info['shift_start'],
+				'first_in'      => $late_info['first_in'],
+				'late_mins'     => $late_info['late_mins'],
+				'month_late_days' => (int) ($monthly_late_counts[$code] ?? 0),
+			];
+		}
+
+		usort($late_rows, function ($a, $b) {
+			$code_a = (int) $a['employee_code'];
+			$code_b = (int) $b['employee_code'];
+			if ($code_a !== $code_b) {
+				return $code_a <=> $code_b;
+			}
+			return strcmp($a['employee_code'], $b['employee_code']);
+		});
+
+		$html = '
+		<p style="font-family: Arial, sans-serif; font-size: 13px;">
+			Late arrivals for <strong>' . htmlspecialchars($date, ENT_QUOTES, 'UTF-8') . '</strong>
+			(based on first biometric IN vs assigned shift; <strong>' . (int) $grace_mins . ' minute grace</strong> before flagging as late).
+			<strong>Late By</strong> shows actual time after shift start (grace is not deducted). Early arrival is not flagged.
+		</p>
+		<table border="1" cellpadding="5" cellspacing="0" style="
+			border-collapse: collapse;
+			width: 100%;
+			font-family: Arial, sans-serif;
+			font-size: 13px;
+		">
+		<thead style="background-color: #f2f2f2; color: #333;">
+			<tr>
+				<th style="border: 1px solid #ccc;">S.No</th>
+				<th style="border: 1px solid #ccc;">Employee Code</th>
+				<th style="border: 1px solid #ccc;">Employee Name</th>
+				<th style="border: 1px solid #ccc;">Shift Start</th>
+				<th style="border: 1px solid #ccc;">First IN</th>
+				<th style="border: 1px solid #ccc;">Late By</th>
+				<th style="border: 1px solid #ccc;">Late Days (' . htmlspecialchars($date_obj->format('M Y'), ENT_QUOTES, 'UTF-8') . ')</th>
+			</tr>
+		</thead>
+		<tbody>';
+
+		if (empty($late_rows)) {
+			$html .= '<tr><td colspan="7" style="border: 1px solid #ddd; text-align: center; padding: 12px;">No late arrivals for this date.</td></tr>';
+		} else {
+			$count = 1;
+			foreach ($late_rows as $late) {
+				$html .= '
+			<tr style="background-color: #fff3cd; color: #856404;">
+				<td style="border: 1px solid #ddd; text-align: center;">' . $count . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($late['employee_code'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd;">' . htmlspecialchars($late['employee_name'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($late['shift_start'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($late['first_in'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . $this->format_hms($late['late_mins']) . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . (int) $late['month_late_days'] . '</td>
+			</tr>';
+				$count++;
+			}
+		}
+
+		$html .= '</tbody></table>';
+
+		$this->email->set_mailtype('html');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
+		$this->email->to('sarabjeet@tech2globe.net');
+		$this->email->cc(['hr@tech2globe.com']);
+		$this->email->subject('Late Arrival Report: ' . $date);
+		$this->email->message($html);
+		print_r($html);
+
+		if ($this->email->send()) {
+			echo 'Mail sent';
+		} else {
+			echo 'Mail not sent';
+			echo $this->email->print_debugger();
+		}
+
+		$this->email->clear();
+	}
+
+	/**
+	 * Monthly late-arrival summary for the previous calendar month.
+	 * Intended to run on the 1st of each month (e.g. 1-Oct sends September data).
+	 *
+	 * @param int|null $year  e.g. 2026
+	 * @param int|null $month e.g. 9 for September
+	 */
+	public function send_monthly_late_arrival_summary($year = null, $month = null)
+	{
+		$grace_mins = 15;
+
+		if ($year === null || $month === null) {
+			$period = new DateTime('first day of last month');
+		} else {
+			$period = DateTime::createFromFormat('Y-n-j', (int) $year . '-' . (int) $month . '-1');
+		}
+
+		if (!$period) {
+			echo 'Invalid month/year.';
+			return;
+		}
+
+		$month_suffix = $period->format('M-Y');
+		$month_label = $period->format('F');
+		$month_year_label = $period->format('F Y');
+		$last_day_ymd = $period->format('Y-m-t');
+
+		$this->load->model('timesheets/timesheets_model');
+		$summary_rows = $this->build_monthly_late_arrival_summary_rows($month_suffix, $last_day_ymd, $grace_mins, $month_label);
+
+		usort($summary_rows, function ($a, $b) {
+			$code_a = (int) $a['employee_code'];
+			$code_b = (int) $b['employee_code'];
+			if ($code_a !== $code_b) {
+				return $code_a <=> $code_b;
+			}
+			return strcmp($a['employee_code'], $b['employee_code']);
+		});
+
+		$html = '
+		<p style="font-family: Arial, sans-serif; font-size: 13px;">
+			Monthly late arrival summary for <strong>' . htmlspecialchars($month_year_label, ENT_QUOTES, 'UTF-8') . '</strong>.
+			An employee is marked late when first biometric IN is more than <strong>' . (int) $grace_mins . ' minutes</strong> after assigned shift start.
+			<strong>Total Red Marks</strong> = number of late days in the month.
+		</p>
+		<table border="1" cellpadding="5" cellspacing="0" style="
+			border-collapse: collapse;
+			width: 100%;
+			font-family: Arial, sans-serif;
+			font-size: 13px;
+		">
+		<thead style="background-color: #f2f2f2; color: #333;">
+			<tr>
+				<th style="border: 1px solid #ccc;">S.No</th>
+				<th style="border: 1px solid #ccc;">EmpId</th>
+				<th style="border: 1px solid #ccc;">Name</th>
+				<th style="border: 1px solid #ccc;">Month</th>
+				<th style="border: 1px solid #ccc;">Late Status</th>
+				<th style="border: 1px solid #ccc;">Total Red Marks</th>
+			</tr>
+		</thead>
+		<tbody>';
+
+		if (empty($summary_rows)) {
+			$html .= '<tr><td colspan="6" style="border: 1px solid #ddd; text-align: center; padding: 12px;">No late arrivals recorded for ' . htmlspecialchars($month_year_label, ENT_QUOTES, 'UTF-8') . '.</td></tr>';
+		} else {
+			$count = 1;
+			foreach ($summary_rows as $row) {
+				$html .= '
+			<tr style="background-color: #f8d7da; color: #721c24;">
+				<td style="border: 1px solid #ddd; text-align: center;">' . $count . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($row['employee_code'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd;">' . htmlspecialchars($row['employee_name'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">' . htmlspecialchars($row['month'], ENT_QUOTES, 'UTF-8') . '</td>
+				<td style="border: 1px solid #ddd; text-align: center;">Yes</td>
+				<td style="border: 1px solid #ddd; text-align: center; font-weight: bold;">' . (int) $row['red_marks'] . '</td>
+			</tr>';
+				$count++;
+			}
+		}
+
+		$html .= '</tbody></table>';
+
+		$this->email->set_mailtype('html');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
+		$this->email->to('sarabjeet@tech2globe.net');
+		$this->email->cc(['hr@tech2globe.com']);
+		$this->email->subject('Monthly Late Arrival Report: ' . $month_year_label);
+		$this->email->message($html);
+		print_r($html);
+
+		if ($this->email->send()) {
+			echo 'Mail sent';
+		} else {
+			echo 'Mail not sent';
+			echo $this->email->print_debugger();
+		}
+
+		$this->email->clear();
+	}
+
+	private function normalize_shift_time_for_report($time, $fallback = '')
+	{
+		$time = trim((string) $time);
+		if ($time === '' || $time === '00:00:00' || $time === '00:00') {
+			return $fallback;
+		}
+		if (preg_match('/(\d{1,2}:\d{2})/', $time, $m)) {
+			$parts = explode(':', $m[1]);
+			return sprintf('%02d:%02d', (int) $parts[0], (int) $parts[1]);
+		}
+
+		return $fallback;
+	}
+
+	private function actual_late_minutes($first_in, $shift_start)
+	{
+		$first_in = trim((string) $first_in);
+		$shift_start = $this->normalize_shift_time_for_report($shift_start, '');
+		if ($first_in === '' || $shift_start === '') {
+			return 0;
+		}
+
+		$in_mins = $this->time_to_minutes(strlen($first_in) === 5 ? $first_in . ':00' : $first_in);
+		$shift_mins = $this->time_to_minutes($shift_start . ':00');
+		$diff = $in_mins - $shift_mins;
+
+		return $diff > 0 ? (int) round($diff) : 0;
+	}
+
+	private function is_late_beyond_grace($first_in, $shift_start, $grace_mins)
+	{
+		return $this->actual_late_minutes($first_in, $shift_start) > (int) $grace_mins;
+	}
+
+	/**
+	 * @return array{employee_name:string,shift_start:string,first_in:string,late_mins:int}|null
+	 */
+	private function evaluate_late_arrival_for_row($row, $date_ymd, $grace_mins)
+	{
+		$punches = $this->parse_punch_records($row->punch_records ?? '');
+		$ins = array_filter($punches, fn($p) => $p['type'] === 'in');
+		if (count($ins) === 0) {
+			return null;
+		}
+
+		$first_in = $ins[array_key_first($ins)]['time'];
+		$shift_info = $this->timesheets_model->get_info_hour_shift_staff((int) $row->staffid, $date_ymd);
+		$shift_start = $this->normalize_shift_time_for_report($shift_info->start_working ?? '', '');
+		if ($shift_start === '') {
+			return null;
+		}
+
+		$late_mins = $this->actual_late_minutes($first_in, $shift_start);
+		if (!$this->is_late_beyond_grace($first_in, $shift_start, $grace_mins)) {
+			return null;
+		}
+
+		$employee_name = trim((string) ($row->employee_name ?? ''));
+		if ($employee_name === '') {
+			$employee_name = trim(trim((string) ($row->staff_firstname ?? '')) . ' ' . trim((string) ($row->staff_lastname ?? '')));
+		}
+
+		return [
+			'employee_name' => $employee_name,
+			'shift_start'   => $shift_start,
+			'first_in'      => substr($first_in, 0, 8),
+			'late_mins'     => $late_mins,
+		];
+	}
+
+	/**
+	 * Count late days in calendar month up to report date (inclusive), keyed by employee code.
+	 */
+	private function build_monthly_late_arrival_counts($month_suffix, $through_date_ymd, $grace_mins)
+	{
+		$table = db_prefix() . 'biometric_report';
+		$staff = db_prefix() . 'staff';
+		$this->db->select($table . '.employee_code, ' . $table . '.attendance_date, ' . $table . '.punch_records, ' . $staff . '.staffid', false);
+		$this->db->from($table);
+		$this->db->join(
+			$staff,
+			'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code) AND ' . $staff . '.active = 1',
+			'inner',
+			false
+		);
+		$this->db->like($table . '.attendance_date', '-' . $month_suffix, 'before');
+		$rows = $this->db->get()->result();
+
+		$counts = [];
+		foreach ($rows as $row) {
+			$day_obj = DateTime::createFromFormat('d-M-Y', (string) $row->attendance_date);
+			if (!$day_obj || $day_obj->format('Y-m-d') > $through_date_ymd) {
+				continue;
+			}
+
+			$late_info = $this->evaluate_late_arrival_for_row($row, $day_obj->format('Y-m-d'), $grace_mins);
+			if ($late_info === null) {
+				continue;
+			}
+
+			$code = trim((string) $row->employee_code);
+			if (!isset($counts[$code])) {
+				$counts[$code] = 0;
+			}
+			$counts[$code]++;
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * Monthly summary rows for employees with at least one late day.
+	 *
+	 * @return array<int, array{employee_code:string,employee_name:string,month:string,red_marks:int}>
+	 */
+	private function build_monthly_late_arrival_summary_rows($month_suffix, $through_date_ymd, $grace_mins, $month_label)
+	{
+		$table = db_prefix() . 'biometric_report';
+		$staff = db_prefix() . 'staff';
+		$this->db->select(
+			$table . '.employee_code, ' . $table . '.employee_name, ' . $table . '.attendance_date, ' . $table . '.punch_records, '
+			. $staff . '.staffid, ' . $staff . '.firstname AS staff_firstname, ' . $staff . '.lastname AS staff_lastname',
+			false
+		);
+		$this->db->from($table);
+		$this->db->join(
+			$staff,
+			'TRIM(' . $staff . '.staff_identifi) = TRIM(' . $table . '.employee_code) AND ' . $staff . '.active = 1',
+			'inner',
+			false
+		);
+		$this->db->like($table . '.attendance_date', '-' . $month_suffix, 'before');
+		$rows = $this->db->get()->result();
+
+		$summary = [];
+		foreach ($rows as $row) {
+			$day_obj = DateTime::createFromFormat('d-M-Y', (string) $row->attendance_date);
+			if (!$day_obj || $day_obj->format('Y-m-d') > $through_date_ymd) {
+				continue;
+			}
+
+			$late_info = $this->evaluate_late_arrival_for_row($row, $day_obj->format('Y-m-d'), $grace_mins);
+			if ($late_info === null) {
+				continue;
+			}
+
+			$code = trim((string) $row->employee_code);
+			if (!isset($summary[$code])) {
+				$name = trim((string) ($row->employee_name ?? ''));
+				if ($name === '') {
+					$name = trim(trim((string) ($row->staff_firstname ?? '')) . ' ' . trim((string) ($row->staff_lastname ?? '')));
+				}
+				if ($name === '' && !empty($late_info['employee_name'])) {
+					$name = $late_info['employee_name'];
+				}
+
+				$summary[$code] = [
+					'employee_code' => $code,
+					'employee_name' => $name,
+					'month'         => $month_label,
+					'red_marks'     => 0,
+				];
+			}
+			$summary[$code]['red_marks']++;
+		}
+
+		return array_values($summary);
+	}
 
 		private function parse_punch_records($punchStr)
 				{
