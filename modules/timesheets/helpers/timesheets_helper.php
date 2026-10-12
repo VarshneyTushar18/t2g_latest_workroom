@@ -1412,6 +1412,26 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 }
 
 /**
+ * Staff already completed Workroom check-out for the given date.
+ */
+function timesheets_staff_completed_workroom_today($staff_id, $date = null)
+{
+	$staff_id = (int) $staff_id;
+	if ($staff_id <= 0) {
+		return false;
+	}
+	$date = $date ?: date('Y-m-d');
+	$CI = &get_instance();
+	$row = $CI->db->query(
+		'SELECT type_check FROM ' . db_prefix() . 'check_in_out
+		 WHERE staff_id = ? AND DATE(date) = ? ORDER BY date DESC, id DESC LIMIT 1',
+		[$staff_id, $date]
+	)->row_array();
+
+	return $row && (int) ($row['type_check'] ?? 0) === 2;
+}
+
+/**
  * Latest Workroom punch is an open check-in (no matching checkout yet).
  */
 function timesheets_staff_has_open_workroom_checkin($staff_id)
@@ -1480,6 +1500,7 @@ function timesheets_invalidate_navbar_punch_cache($staff_id = null)
 	if ($staff_id <= 0) {
 		return;
 	}
+	$CI->session->unset_userdata('ts_navbar_punch_v2_' . $staff_id);
 	$CI->session->unset_userdata('ts_navbar_punch_' . $staff_id);
 }
 
@@ -1811,7 +1832,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 {
 	$CI = &get_instance();
 	$staff_id = (int) get_staff_user_id();
-	$cache_key = 'ts_navbar_punch_' . $staff_id;
+	$cache_key = 'ts_navbar_punch_v2_' . $staff_id;
 	$cached = $CI->session->userdata($cache_key);
 	if (is_array($cached) && !empty($cached['expires']) && (int) $cached['expires'] > time() && !empty($cached['data'])) {
 		return $cached['data'];
@@ -1878,6 +1899,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$on_wfh_today = function_exists('timesheets_staff_uses_workroom_attendance')
 		&& timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'));
 	$workroom_open_checkin = ($type_check_in_out === 1 || $type_check_in_out === '1');
+	$workroom_day_complete = timesheets_staff_completed_workroom_today($staff_id, date('Y-m-d'));
 
 	try {
 		$CI->load->model('biometric_model');
@@ -1924,6 +1946,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 		'biometric_break_summary' => $biometric_break_summary,
 		'on_wfh_today' => $on_wfh_today,
 		'workroom_open_checkin' => $workroom_open_checkin,
+		'workroom_day_complete' => $workroom_day_complete,
 	];
 
 	if (function_exists('get_timesheets_option')) {

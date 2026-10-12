@@ -6128,6 +6128,10 @@ public function add_requisition_ajax($data)
 				if ($type_check === 1 && $last_type === 1) {
 					return false;
 				}
+				if ($type_check === 1 && function_exists('timesheets_staff_completed_workroom_today')
+					&& timesheets_staff_completed_workroom_today($staff_id, date('Y-m-d'))) {
+					return false;
+				}
 				if ($type_check === 2 && $last_type !== 1) {
 					return false;
 				}
