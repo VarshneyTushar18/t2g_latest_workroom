@@ -2428,7 +2428,7 @@ class timesheets_model extends app_model
 
 			case 'leave':
 
-				$data_update['status'] = 0;
+				$data_update['status'] = $this->leave_requisition_status_cancelled();
 
 				$this->db->where('id', $rel_id);
 
@@ -4414,10 +4414,16 @@ public function add_requisition_ajax($data)
 			$data['number_of_leaving_day'] = $number_day_off;
 			$data['status'] = 0;
 			$this->db->insert(db_prefix() . 'timesheets_requisition_leave', $data);
-
-
-			$this->db->insert(db_prefix() . 'timesheets_timesheet', ['staff_id' => $data['staff_id'], 'date_work' => $data['end_time'], 'type' => 'HD', 'add_from' => $data['staff_id']]);
 			$insert_id = $this->db->insert_id();
+
+			$this->db->insert(db_prefix() . 'timesheets_timesheet', [
+				'staff_id' => $data['staff_id'],
+				'date_work' => $data['end_time'],
+				'type' => 'HD',
+				'add_from' => $data['staff_id'],
+				'relate_id' => (int) $insert_id,
+				'relate_type' => 'leave',
+			]);
 			//$data['number_of_days'] = $number_day_off;
 
 		} elseif ($type_of_leave == 'half-days') {
@@ -4433,7 +4439,9 @@ public function add_requisition_ajax($data)
 				'staff_id' => $staff_quit_job,
 				'type' => 'HD',
 				'date_work' => $end_datetime->format('Y-m-d'), // Insert date in 'Y-m-d' format
-				'add_from' => $staff_quit_job
+				'add_from' => $staff_quit_job,
+				'relate_id' => (int) $insert_id,
+				'relate_type' => 'leave',
 			);
 			// Insert into timesheet table
 			$this->db->insert('tbltimesheets_timesheet', $timesheet_data);
@@ -4618,7 +4626,9 @@ public function add_requisition_ajax($data)
 				'staff_id' => $staff_quit_job,
 				'type' => 'SHL',
 				'date_work' => $end_datetime->format('Y-m-d'), // Insert date in 'Y-m-d' format
-				'add_from' => $staff_quit_job
+				'add_from' => $staff_quit_job,
+				'relate_id' => (int) $insert_id,
+				'relate_type' => 'leave',
 			);
 			// Insert into timesheet table
 			$this->db->insert('tbltimesheets_timesheet', $timesheet_data);
@@ -4635,7 +4645,9 @@ public function add_requisition_ajax($data)
 				'staff_id' => $staff_quit_job,
 				'type' => 'SL',
 				'date_work' => $end_datetime->format('Y-m-d'), // Insert date in 'Y-m-d' format
-				'add_from' => $staff_quit_job
+				'add_from' => $staff_quit_job,
+				'relate_id' => (int) $insert_id,
+				'relate_type' => 'leave',
 			);
 			// Insert into timesheet table
 			$this->db->insert('tbltimesheets_timesheet', $timesheet_data);
@@ -4661,7 +4673,9 @@ public function add_requisition_ajax($data)
 					'staff_id' => $staff_quit_job,
 					'type' => 'P',
 					'date_work' => $date_timesheet->format('Y-m-d'), // Insert date in 'Y-m-d' format
-					'add_from' => $staff_quit_job
+					'add_from' => $staff_quit_job,
+					'relate_id' => (int) $insert_id,
+					'relate_type' => 'leave',
 				);
 
 
@@ -8544,6 +8558,47 @@ public function add_requisition_ajax($data)
 		update_option($opt_key, '1');
 	}
 
+	/** Leave requisition status: cancelled (not pending; do not count toward balance/overlap). */
+	public function leave_requisition_status_cancelled()
+	{
+		return 4;
+	}
+
+	/**
+	 * True when a pending row (status 0) still has an approval chain (not user-cancelled).
+	 */
+	public function leave_requisition_has_approval_chain($leave_id)
+	{
+		$leave_id = (int) $leave_id;
+		if ($leave_id <= 0) {
+			return false;
+		}
+		$this->db->from(db_prefix() . 'timesheets_approval_details');
+		$this->db->where('rel_id', $leave_id);
+
+		return $this->db->count_all_results() > 0;
+	}
+
+	/**
+	 * Pending in workflow (status 0 + approval chain) or approved (status 1).
+	 */
+	public function leave_requisition_is_active_for_overlap($requisition)
+	{
+		if (is_array($requisition)) {
+			$requisition = (object) $requisition;
+		}
+		$status = (int) ($requisition->status ?? -1);
+		$id = (int) ($requisition->id ?? 0);
+		if ($status === 1) {
+			return true;
+		}
+		if ($status === 0 && $id > 0) {
+			return $this->leave_requisition_has_approval_chain($id);
+		}
+
+		return false;
+	}
+
 	/**
 	 * Sum pending earned-leave days (status=0), any month — shared pool for available balance.
 	 */
@@ -8561,13 +8616,20 @@ public function add_requisition_ajax($data)
 			return 0.0;
 		}
 
-		$this->db->select('COALESCE(SUM(number_of_leaving_day), 0) AS total', false)
-			->from(db_prefix() . 'timesheets_requisition_leave')
-			->where('staff_id', $staff_id)
-			->where('status', 0)
-			->where_in('type_of_leave', $keys);
+		$tbl = db_prefix() . 'timesheets_requisition_leave';
+		$ad = db_prefix() . 'timesheets_approval_details';
+		$this->db->select('COALESCE(SUM(' . $tbl . '.number_of_leaving_day), 0) AS total', false)
+			->from($tbl)
+			->where($tbl . '.staff_id', $staff_id)
+			->where($tbl . '.status', 0)
+			->where_in($tbl . '.type_of_leave', $keys)
+			->where(
+				'EXISTS (SELECT 1 FROM ' . $ad . ' ad WHERE ad.rel_id = ' . $tbl . '.id)',
+				null,
+				false
+			);
 		if ($exclude_leave_id > 0) {
-			$this->db->where('id !=', $exclude_leave_id);
+			$this->db->where($tbl . '.id !=', $exclude_leave_id);
 		}
 		$row = $this->db->get()->row();
 
@@ -8638,6 +8700,9 @@ public function add_requisition_ajax($data)
 		}
 		$candidates = $this->db->get()->result();
 		foreach ($candidates as $row) {
+			if (!$this->leave_requisition_is_active_for_overlap($row)) {
+				continue;
+			}
 			$bounds = $this->leave_requisition_date_bounds($row);
 			if (!$bounds) {
 				continue;
@@ -8683,39 +8748,19 @@ public function add_requisition_ajax($data)
 			$requisition = (object) $requisition;
 		}
 		$id = (int) ($requisition->id ?? 0);
-		$staff_id = (int) ($requisition->staff_id ?? 0);
 		if ($id <= 0) {
 			return;
 		}
 
+		// Only rows written for this leave requisition — never punch-based P/HD by date alone.
 		$this->db->where('relate_id', $id)->where('relate_type', 'leave')
 			->delete(db_prefix() . 'timesheets_timesheet');
-
-		$slug = strtolower(trim((string) ($requisition->type_of_leave ?? '')));
-		$bounds = $this->leave_requisition_date_bounds($requisition);
-		if (!$bounds || $staff_id <= 0) {
-			return;
-		}
-		[$start, $end] = $bounds;
-
-		if (in_array($slug, ['half-days', 'unpaid-half-days'], true)) {
-			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'HD')
-				->delete(db_prefix() . 'timesheets_timesheet');
-		} elseif ($slug === 'present') {
-			$this->db->where('staff_id', $staff_id)
-				->where('date_work >=', $start)->where('date_work <=', $end)->where('type', 'P')
-				->delete(db_prefix() . 'timesheets_timesheet');
-		} elseif ($slug === 'short-leaves') {
-			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'SHL')
-				->delete(db_prefix() . 'timesheets_timesheet');
-		} elseif ($slug === 'saturday-leaves') {
-			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'SL')
-				->delete(db_prefix() . 'timesheets_timesheet');
-		}
 	}
 
 	/**
-	 * Undo day_off increment from an approved leave (earned / custom types using day_off table).
+	 * Undo day_off increment from an approved leave.
+	 * Only types update_requisition_after_approve writes (mapped type id, not Present).
+	 * Year is the leave start year, matching the quota row for that leave.
 	 */
 	protected function reverse_approved_leave_day_off($requisition, $type_slug = '')
 	{
@@ -8723,12 +8768,25 @@ public function add_requisition_ajax($data)
 			$requisition = (object) $requisition;
 		}
 		$type_slug = $type_slug !== '' ? $type_slug : (string) ($requisition->type_of_leave ?? '');
+		$type_key = strtolower(trim($type_slug));
+		// Present approval rewrites AB/HD to P and does not increment day_off.
+		if ($type_key === '' || $type_key === 'present') {
+			return;
+		}
+
 		$type_of_leave_data = $this->get_type_of_leave_id($type_slug);
 		if (!$type_of_leave_data || !$type_of_leave_data->type_id) {
 			return;
 		}
 
-		$day_off = $this->get_day_off((int) $requisition->staff_id, '', $type_of_leave_data->type_id);
+		$start = trim((string) ($requisition->start_time ?? ''));
+		if ($start === '') {
+			$start = trim((string) ($requisition->end_time ?? ''));
+		}
+		$start_ts = $start !== '' ? strtotime($start) : false;
+		$year = $start_ts ? (int) date('Y', $start_ts) : (int) date('Y');
+
+		$day_off = $this->get_day_off((int) $requisition->staff_id, $year, $type_of_leave_data->type_id);
 		if (!$day_off) {
 			return;
 		}
@@ -8739,7 +8797,7 @@ public function add_requisition_ajax($data)
 
 		$this->db->where('type_of_leave', $type_of_leave_data->type_id);
 		$this->db->where('staffid', (int) $requisition->staff_id);
-		$this->db->where('year', date('Y'));
+		$this->db->where('year', $year);
 		$this->db->update(db_prefix() . 'timesheets_day_off', [
 			'remain' => abs($update_remain),
 			'days_off' => $update_days_off,
@@ -8837,7 +8895,9 @@ public function add_requisition_ajax($data)
 		}
 
 		$this->db->where('id', $leave_id);
-		$this->db->update(db_prefix() . 'timesheets_requisition_leave', ['status' => 0]);
+		$this->db->update(db_prefix() . 'timesheets_requisition_leave', [
+			'status' => $this->leave_requisition_status_cancelled(),
+		]);
 		$this->refresh_leave_requisition_balance_snapshot((int) $requisition->staff_id);
 
 		return true;
@@ -8848,7 +8908,7 @@ public function add_requisition_ajax($data)
 	 */
 	public function refresh_leave_requisition_balance_snapshot($staff_id)
 	{
-		// Phase (a): balance logic uses get_synced_leave_balance only — no bulk snapshot writes.
+		// Phase (a): balance logic uses get_synced_leave_balance only — no snapshot writes.
 	}
 
 	/**

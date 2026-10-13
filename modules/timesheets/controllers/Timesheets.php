@@ -1669,10 +1669,12 @@ class timesheets extends AdminController
 				$overlap_end = $single;
 			}
 			if (!in_array($leave_type, ['comp-off'], true)) {
+				$exclude_leave_id = (int) ($this->input->post('leave_id') ?: ($this->input->post('id') ?: 0));
 				$overlap = $this->timesheets_model->find_overlapping_leave_requisition(
 					(int) $data['staff_id'],
 					$overlap_start,
-					$overlap_end
+					$overlap_end,
+					$exclude_leave_id
 				);
 				if ($overlap) {
 					echo json_encode([
