@@ -823,123 +823,56 @@ class timesheets_model extends app_model
 
 	public function update_approval_comment($data)
 	{
-
-		$staff_quit_job = $data['staff_id'];
-		$user_id = $_POST['userid'];
-		$datas['staff_id'] =   $_POST['userid'];
-		$datas['leave_id'] = $_POST['leave_id'];
-		$leave_type = $_POST['leave_type'];
-		$datas['approval_comment'] = $_POST['approval_comment'];
-		$data['start_time'] = $_POST['start_time'];
-
-		$data['end_time'] = $_POST['end_time'];
-		$data['userid'] = $_POST['userid'];
-
-		$datas['created_at'] = date('Y-m-d H:i:s');
-		$datas['updated_at'] = date('Y-m-d H:i:s');
-
-		//$data_leave['leave_id'] = $_POST['leave_id'];
-		$data_leave['status'] = 1;
-		$start_t = explode(' ', $data['start_time']);
-		$start_tt = $start_t[0];
-
-		$end_t = explode(' ', $data['end_time']);
-		$end_tt = $end_t[0];
-
-		//$datas_attd['leave_type']= $_POST['leave_type'];
-		$datas_attd['staff_id'] = $_POST['userid'];
-		$datas_attd['add_from'] = $data['staff_id'];
-		$datas_attd['type'] = 'P';
-		$datas_attd['value'] = '9.00';
-
-
-		$diff = date_diff(date_create($end_tt), date_create($start_tt));
-		$datediff = $diff->format("%a");
-		//echo 'SELECT * FROM  tbltimesheets_timesheet WHERE staff_id = '.$user_id.' AND date_work BETWEEN "'.$data['start_time'].'" AND "'.$data['end_time'].'"  AND type in("AB","HD")';die;
-		/*if($leave_type == 'present-leaves'){
-			echo 'SELECT * FROM  tbltimesheets_timesheet WHERE staff_id = '.$user_id.' AND type_of_leave = "present-leaves" AND date_work BETWEEN "'.$data['start_time'].'" AND "'.$data['end_time'].'"';die;
-		}die;*/
-
-		$query = $this->db->query('SELECT * FROM  tbltimesheets_timesheet WHERE staff_id = ' . $user_id . ' AND date_work BETWEEN "' . $data['start_time'] . '" AND "' . $data['end_time'] . '"  AND type in("AB","HD")')->result_array();
-
-		$count = count($query);
-		//print_r($_GET);
-		//print_r($data);die;
-		if ($count > 0) {
-			//echo 'update';die;
-			foreach ($query as $queryy) {
-				$id = $queryy['id'];
-				if ($leave_type == 'present') {
-					//echo 'UPDATE tbltimesheets_timesheet SET staff_id="'.$datas_attd['staff_id'].'",add_form = "'.$datas_attd['add_form'].'",type ="'.$datas_attd['type'].'" ,value="'.$datas_attd['value'].'" WHERE id='.$id;die;
-					$query = 'UPDATE tbltimesheets_timesheet SET staff_id="' . $datas_attd['staff_id'] . '",add_from = "' . $datas_attd['add_from'] . '",type ="' . $datas_attd['type'] . '" ,value="' . $datas_attd['value'] . '" WHERE id=' . $id;
-					$r = $this->db->query($query);
-					$this->db->where('id', $datas['leave_id']);
-					$test = $this->db->update(db_prefix() . 'timesheets_requisition_leave', $data_leave);
-					// $this->db->where('id', $id);
-					//	$test = $this->db->update(db_prefix() . 'tbltimesheets_timesheet', $datas_attd);	
-					//		print_r($test);die;
-					$this->db->insert(db_prefix() . 'leave_comment', $datas);
-					$insert_id = $this->db->insert_id();
-					return $insert_id;
-				} else {
-					$query = $this->db->query('Delete from tbltimesheets_timesheet WHERE id = ' . $id);
-
-					$this->db->where('id', $datas['leave_id']);
-					$test = $this->db->update(db_prefix() . 'timesheets_requisition_leave', $data_leave);
-					$this->db->insert(db_prefix() . 'leave_comment', $datas);
-
-					$insert_id = $this->db->insert_id();
-					return $insert_id;
-				}
-			}
-		} else {
-
-			//$query = $this->db->query('SELECT * FROM  tbltimesheets_requisition_leave WHERE staff_id = ' . $user_id . ' AND start_time BETWEEN "' . $data['start_time'] . '" AND "' . $data['end_time'] . '"  AND status in("4")')->result_array();
-			//	print_r($query[0]);die;
-		//	$id  = $query[0]['id'];
-		//	$query = $this->db->query('Delete from tbltimesheets_requisition_leave WHERE id = ' . $id);
-			$test = $this->db->update(db_prefix() . 'timesheets_requisition_leave', $data_leave);
-			$this->db->insert(db_prefix() . 'leave_comment', $datas);
-
-			$insert_id = $this->db->insert_id();
-			return $insert_id;
+		$leave_id = (int) ($_POST['leave_id'] ?? 0);
+		$leave_type = (string) ($_POST['leave_type'] ?? '');
+		if ($leave_id <= 0) {
+			return false;
 		}
 
+		$ok = $this->finalize_leave_decision($leave_id, 'approve', [
+			'present_leave' => ($leave_type === 'present'),
+			'staff_id' => (int) ($_POST['userid'] ?? 0),
+			'start_time' => $_POST['start_time'] ?? '',
+			'end_time' => $_POST['end_time'] ?? '',
+			'rel_type' => $leave_type,
+		]);
+		if (!$ok) {
+			return false;
+		}
 
+		$datas = [
+			'staff_id' => (int) ($_POST['userid'] ?? 0),
+			'leave_id' => $leave_id,
+			'approval_comment' => $_POST['approval_comment'] ?? '',
+			'created_at' => date('Y-m-d H:i:s'),
+			'updated_at' => date('Y-m-d H:i:s'),
+		];
+		$this->db->insert(db_prefix() . 'leave_comment', $datas);
 
-
-		//return $this->db->get(db_prefix() . 'staff_departments')->result_array();
+		return $this->db->insert_id();
 	}
 
 
 	public function update_reject_comment($data)
 	{
+		$leave_id = (int) ($_POST['leave_id'] ?? ($data['leave_id'] ?? 0));
+		if ($leave_id <= 0) {
+			return false;
+		}
 
-		$staff_quit_job = $data['staff_id'];
+		if (!$this->finalize_leave_decision($leave_id, 'reject')) {
+			return false;
+		}
 
-		$dataa['leave_id'] = $_POST['leave_id'];
-
-
-		$dataa['rejection_comment'] = $_POST['rejection_comment'];
-
-
-
-		$dataa['created_at'] = date('Y-m-d H:i:s');
-		$dataa['updated_at'] = date('Y-m-d H:i:s');
-		$data_leave['status'] = 2;
-		// Keep original day count for history/display (do not wipe to 0).
-		$this->db->where('id', $data['leave_id']);
-		$test = $this->db->update(db_prefix() . 'timesheets_requisition_leave', $data_leave);
-
-		//print_r($dataa);die;
+		$dataa = [
+			'leave_id' => $leave_id,
+			'rejection_comment' => $_POST['rejection_comment'] ?? '',
+			'created_at' => date('Y-m-d H:i:s'),
+			'updated_at' => date('Y-m-d H:i:s'),
+		];
 		$this->db->insert(db_prefix() . 'leave_comment', $dataa);
 
-		$insert_id = $this->db->insert_id();
-
-		return $insert_id;
-
-
-		//return $this->db->get(db_prefix() . 'staff_departments')->result_array();
+		return $this->db->insert_id();
 	}
 
 
@@ -2471,7 +2404,15 @@ class timesheets_model extends app_model
 
 		$data_update = [];
 
+		$leave_row = $this->db->where('id', (int) $rel_id)->get(db_prefix() . 'timesheets_requisition_leave')->row();
+		if ($leave_row) {
+			$this->db->where('rel_id', $rel_id);
+			$this->db->delete(db_prefix() . 'timesheets_approval_details');
 
+			return $this->finalize_leave_decision((int) $rel_id, 'cancel', [
+				'rel_type' => (string) ($leave_row->type_of_leave ?? $rel_type),
+			]);
+		}
 
 		$this->db->where('rel_id', $rel_id);
 
@@ -4335,6 +4276,19 @@ class timesheets_model extends app_model
 				break;
 
 			default:
+
+				if ($this->is_standard_leave_requisition_type($rel_type)) {
+					if ((int) $status === 1) {
+						return $this->finalize_leave_decision((int) $rel_id, 'approve', ['rel_type' => $rel_type]);
+					}
+					if ((int) $status === 2) {
+						return $this->finalize_leave_decision((int) $rel_id, 'reject', ['rel_type' => $rel_type]);
+					}
+					$this->db->where('id', $rel_id);
+					$this->db->update(db_prefix() . 'timesheets_requisition_leave', ['status' => (int) $status]);
+
+					return true;
+				}
 
 				$this->update_requisition_after_approve($rel_id, $status, $rel_type);
 
@@ -8562,6 +8516,339 @@ public function add_requisition_ajax($data)
 			$this->db->query('ALTER TABLE `' . $tbl . '` ADD COLUMN `leave_type_deducted` VARCHAR(50) NULL DEFAULT NULL');
 		}
 		update_option($opt_key, '1');
+	}
+
+	/**
+	 * Audit columns for EL requested vs saved-as (e.g. LOP when insufficient balance).
+	 */
+	public function ensure_leave_requisition_audit_columns()
+	{
+		static $checked = false;
+		if ($checked) {
+			return;
+		}
+		$checked = true;
+
+		$opt_key = 'ts_leave_req_has_requested_saved_as';
+		if ((string) get_option($opt_key) === '1') {
+			return;
+		}
+
+		$tbl = db_prefix() . 'timesheets_requisition_leave';
+		if (!$this->db->field_exists('requested_as', $tbl)) {
+			$this->db->query('ALTER TABLE `' . $tbl . '` ADD COLUMN `requested_as` VARCHAR(64) NULL DEFAULT NULL');
+		}
+		if (!$this->db->field_exists('saved_as', $tbl)) {
+			$this->db->query('ALTER TABLE `' . $tbl . '` ADD COLUMN `saved_as` VARCHAR(64) NULL DEFAULT NULL');
+		}
+		update_option($opt_key, '1');
+	}
+
+	/**
+	 * Sum pending earned-leave days (status=0), any month — shared pool for available balance.
+	 */
+	public function sum_pending_earned_leave_days($staff_id, $exclude_leave_id = 0)
+	{
+		$this->ensure_leave_requisition_audit_columns();
+		$staff_id = (int) $staff_id;
+		$exclude_leave_id = (int) $exclude_leave_id;
+		if ($staff_id <= 0) {
+			return 0.0;
+		}
+
+		$keys = $this->get_leave_type_storage_keys('earned-leave');
+		if (empty($keys)) {
+			return 0.0;
+		}
+
+		$this->db->select('COALESCE(SUM(number_of_leaving_day), 0) AS total', false)
+			->from(db_prefix() . 'timesheets_requisition_leave')
+			->where('staff_id', $staff_id)
+			->where('status', 0)
+			->where_in('type_of_leave', $keys);
+		if ($exclude_leave_id > 0) {
+			$this->db->where('id !=', $exclude_leave_id);
+		}
+		$row = $this->db->get()->row();
+
+		return $row ? (float) $row->total : 0.0;
+	}
+
+	/**
+	 * Calendar bounds [Y-m-d, Y-m-d] for overlap checks.
+	 *
+	 * @param object|array $requisition
+	 * @return array|null
+	 */
+	public function leave_requisition_date_bounds($requisition)
+	{
+		if (is_array($requisition)) {
+			$requisition = (object) $requisition;
+		}
+		$start = trim((string) ($requisition->start_time ?? ''));
+		$end = trim((string) ($requisition->end_time ?? ''));
+		if ($start === '' && $end === '') {
+			return null;
+		}
+		if ($start === '' && $end !== '') {
+			$d = date('Y-m-d', strtotime($end));
+			return [$d, $d];
+		}
+		if ($end === '' && $start !== '') {
+			$d = date('Y-m-d', strtotime($start));
+			return [$d, $d];
+		}
+		$s = date('Y-m-d', strtotime($start));
+		$e = date('Y-m-d', strtotime($end));
+		if (strtotime($e) < strtotime($s)) {
+			$tmp = $s;
+			$s = $e;
+			$e = $tmp;
+		}
+
+		return [$s, $e];
+	}
+
+	/**
+	 * Block overlapping pending/approved leave on same dates (incl. EL vs LOP).
+	 *
+	 * @return object|null conflicting row
+	 */
+	public function find_overlapping_leave_requisition($staff_id, $start_ymd, $end_ymd, $exclude_leave_id = 0)
+	{
+		$staff_id = (int) $staff_id;
+		$exclude_leave_id = (int) $exclude_leave_id;
+		$start_ymd = date('Y-m-d', strtotime($start_ymd));
+		$end_ymd = date('Y-m-d', strtotime($end_ymd));
+		if ($staff_id <= 0 || !$start_ymd || !$end_ymd) {
+			return null;
+		}
+		if (strtotime($end_ymd) < strtotime($start_ymd)) {
+			$tmp = $start_ymd;
+			$start_ymd = $end_ymd;
+			$end_ymd = $tmp;
+		}
+
+		$this->db->from(db_prefix() . 'timesheets_requisition_leave')
+			->where('staff_id', $staff_id)
+			->where_in('status', [0, 1])
+			->where('subject !=', 'Monthly carry forward and leave balance');
+		if ($exclude_leave_id > 0) {
+			$this->db->where('id !=', $exclude_leave_id);
+		}
+		$candidates = $this->db->get()->result();
+		foreach ($candidates as $row) {
+			$bounds = $this->leave_requisition_date_bounds($row);
+			if (!$bounds) {
+				continue;
+			}
+			[$rs, $re] = $bounds;
+			if (strtotime($re) >= strtotime($start_ymd) && strtotime($rs) <= strtotime($end_ymd)) {
+				return $row;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether rel_type is handled as a standard leave requisition (not late/early/reg).
+	 */
+	public function is_standard_leave_requisition_type($rel_type)
+	{
+		$rel_type = strtolower(trim((string) $rel_type));
+		$non_leave = [
+			'late', 'early', 'go_out', 'go_on_bussiness', 'additional_timesheets',
+		];
+		if (in_array($rel_type, $non_leave, true)) {
+			return false;
+		}
+		if ($rel_type === 'leave') {
+			return true;
+		}
+
+		return (bool) $this->get_custom_leave_by_slug($rel_type) || in_array($rel_type, [
+			'earned-leave', 'loss-of-pay', 'half-days', 'unpaid-half-days', 'present',
+			'comp-off', 'work-from-home', 'restricted-holiday', 'short-leaves', 'saturday-leaves',
+			'unplanned_leaves', 'paternity-leaves', 'maternity-leaves', 'sick_leave', 'maternity_leave',
+		], true);
+	}
+
+	/**
+	 * Remove attendance rows tied to a leave requisition (pending or approved).
+	 */
+	protected function cleanup_timesheets_for_leave_requisition($requisition)
+	{
+		if (is_array($requisition)) {
+			$requisition = (object) $requisition;
+		}
+		$id = (int) ($requisition->id ?? 0);
+		$staff_id = (int) ($requisition->staff_id ?? 0);
+		if ($id <= 0) {
+			return;
+		}
+
+		$this->db->where('relate_id', $id)->where('relate_type', 'leave')
+			->delete(db_prefix() . 'timesheets_timesheet');
+
+		$slug = strtolower(trim((string) ($requisition->type_of_leave ?? '')));
+		$bounds = $this->leave_requisition_date_bounds($requisition);
+		if (!$bounds || $staff_id <= 0) {
+			return;
+		}
+		[$start, $end] = $bounds;
+
+		if (in_array($slug, ['half-days', 'unpaid-half-days'], true)) {
+			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'HD')
+				->delete(db_prefix() . 'timesheets_timesheet');
+		} elseif ($slug === 'present') {
+			$this->db->where('staff_id', $staff_id)
+				->where('date_work >=', $start)->where('date_work <=', $end)->where('type', 'P')
+				->delete(db_prefix() . 'timesheets_timesheet');
+		} elseif ($slug === 'short-leaves') {
+			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'SHL')
+				->delete(db_prefix() . 'timesheets_timesheet');
+		} elseif ($slug === 'saturday-leaves') {
+			$this->db->where('staff_id', $staff_id)->where('date_work', $end)->where('type', 'SL')
+				->delete(db_prefix() . 'timesheets_timesheet');
+		}
+	}
+
+	/**
+	 * Undo day_off increment from an approved leave (earned / custom types using day_off table).
+	 */
+	protected function reverse_approved_leave_day_off($requisition, $type_slug = '')
+	{
+		if (is_array($requisition)) {
+			$requisition = (object) $requisition;
+		}
+		$type_slug = $type_slug !== '' ? $type_slug : (string) ($requisition->type_of_leave ?? '');
+		$type_of_leave_data = $this->get_type_of_leave_id($type_slug);
+		if (!$type_of_leave_data || !$type_of_leave_data->type_id) {
+			return;
+		}
+
+		$day_off = $this->get_day_off((int) $requisition->staff_id, '', $type_of_leave_data->type_id);
+		if (!$day_off) {
+			return;
+		}
+
+		$dd = (float) ($requisition->number_of_leaving_day ?? 0);
+		$update_days_off = max(0, (float) $day_off->days_off - $dd);
+		$update_remain = (float) $day_off->total - $update_days_off;
+
+		$this->db->where('type_of_leave', $type_of_leave_data->type_id);
+		$this->db->where('staffid', (int) $requisition->staff_id);
+		$this->db->where('year', date('Y'));
+		$this->db->update(db_prefix() . 'timesheets_day_off', [
+			'remain' => abs($update_remain),
+			'days_off' => $update_days_off,
+		]);
+	}
+
+	/**
+	 * Shared approve / reject / cancel for leave requisitions (phase a).
+	 *
+	 * @param int    $leave_id
+	 * @param string $action approve|reject|cancel
+	 * @param array  $opts
+	 * @return bool
+	 */
+	public function finalize_leave_decision($leave_id, $action, $opts = [])
+	{
+		$this->ensure_leave_requisition_audit_columns();
+		$leave_id = (int) $leave_id;
+		$action = strtolower(trim((string) $action));
+		if ($leave_id <= 0 || !in_array($action, ['approve', 'reject', 'cancel'], true)) {
+			return false;
+		}
+
+		$this->db->where('id', $leave_id);
+		$requisition = $this->db->get(db_prefix() . 'timesheets_requisition_leave')->row();
+		if (!$requisition) {
+			return false;
+		}
+
+		$prev_status = (int) ($requisition->status ?? 0);
+		$type_slug = (string) ($opts['rel_type'] ?? $requisition->type_of_leave ?? '');
+
+		if ($action === 'approve') {
+			if ($prev_status === 1) {
+				return true;
+			}
+			if ($prev_status === 2) {
+				return false;
+			}
+
+			$present_leave = !empty($opts['present_leave']);
+			if ($present_leave) {
+				$user_id = (int) ($opts['staff_id'] ?? $requisition->staff_id);
+				$start_time = $opts['start_time'] ?? $requisition->start_time;
+				$end_time = $opts['end_time'] ?? $requisition->end_time;
+				$query = $this->db->query(
+					'SELECT * FROM ' . db_prefix() . 'timesheets_timesheet WHERE staff_id = '
+					. (int) $user_id . ' AND date_work BETWEEN "' . $this->db->escape_str(date('Y-m-d', strtotime($start_time)))
+					. '" AND "' . $this->db->escape_str(date('Y-m-d', strtotime($end_time)))
+					. '" AND type IN ("AB","HD")'
+				)->result_array();
+				foreach ($query as $queryy) {
+					$this->db->where('id', (int) $queryy['id']);
+					$this->db->update(db_prefix() . 'timesheets_timesheet', [
+						'staff_id' => $user_id,
+						'add_from' => get_staff_user_id() ?: $user_id,
+						'type' => 'P',
+						'value' => '9.00',
+					]);
+				}
+				$this->db->where('id', $leave_id);
+				$this->db->update(db_prefix() . 'timesheets_requisition_leave', ['status' => 1]);
+			} else {
+				$this->update_requisition_after_approve($leave_id, 1, $type_slug);
+			}
+
+			$this->refresh_leave_requisition_balance_snapshot((int) $requisition->staff_id);
+
+			return true;
+		}
+
+		if ($action === 'reject') {
+			if ($prev_status === 2) {
+				return true;
+			}
+			if ($prev_status === 1) {
+				$this->reverse_approved_leave_day_off($requisition, $type_slug);
+				$this->cleanup_timesheets_for_leave_requisition($requisition);
+			} else {
+				$this->cleanup_timesheets_for_leave_requisition($requisition);
+			}
+			$this->db->where('id', $leave_id);
+			$this->db->update(db_prefix() . 'timesheets_requisition_leave', ['status' => 2]);
+			$this->refresh_leave_requisition_balance_snapshot((int) $requisition->staff_id);
+
+			return true;
+		}
+
+		// cancel
+		if ($prev_status === 1) {
+			$this->reverse_approved_leave_day_off($requisition, $type_slug);
+			$this->cleanup_timesheets_for_leave_requisition($requisition);
+		} elseif ($prev_status === 0) {
+			$this->cleanup_timesheets_for_leave_requisition($requisition);
+		}
+
+		$this->db->where('id', $leave_id);
+		$this->db->update(db_prefix() . 'timesheets_requisition_leave', ['status' => 0]);
+		$this->refresh_leave_requisition_balance_snapshot((int) $requisition->staff_id);
+
+		return true;
+	}
+
+	/**
+	 * Legacy leave_balance column on requisition — display/audit only, not used for logic.
+	 */
+	public function refresh_leave_requisition_balance_snapshot($staff_id)
+	{
+		// Phase (a): balance logic uses get_synced_leave_balance only — no bulk snapshot writes.
 	}
 
 	/**
@@ -16758,6 +17045,7 @@ public function add_requisition_ajax($data)
 			->where('YEAR(start_time)', $year, false);
 		$row_mc = $this->db->get()->row();
 		$month_el_consumed = $row_mc ? (float) $row_mc->consumed : 0;
+		$pending_el_all = $this->sum_pending_earned_leave_days($staff_id);
 
 		$cards = [];
 		foreach ($display_slugs as $slug => $default_label) {
@@ -16827,11 +17115,20 @@ public function add_requisition_ajax($data)
 				$progress = 100;
 			}
 
+			$pending = 0.0;
+			$available = $balance;
+			if ($slug === 'earned-leave') {
+				$pending = round($pending_el_all, 2);
+				$available = $this->floor_leave_balance_for_display(max(0, (float) $balance - $pending));
+			}
+
 			$cards[] = [
 				'slug' => $slug,
 				'label' => $type_map[$slug] ?? $default_label,
 				'granted' => $granted,
 				'balance' => $balance,
+				'available' => $available,
+				'pending' => $pending,
 				'consumed' => $consumed,
 				'progress' => $progress,
 				'carry_forward' => ($slug === 'earned-leave')
@@ -16847,7 +17144,7 @@ public function add_requisition_ajax($data)
 	/**
 	 * Resolve leave balance for apply/save — same numbers as Leave Management cards.
 	 *
-	 * @return array{balance:float,carry_forward:float,granted:float,consumed:float,slug:string}
+	 * @return array{balance:float,available:float,pending:float,carry_forward:float,granted:float,consumed:float,slug:string}
 	 */
 	public function get_synced_leave_balance($staff_id, $type_slug = 'earned-leave', $year = null, $month = null)
 	{
@@ -16894,9 +17191,19 @@ public function add_requisition_ajax($data)
 			}
 		}
 
+		$balance = (float) ($match['balance'] ?? 0);
+		$pending = (float) ($match['pending'] ?? 0);
+		$available = (float) ($match['available'] ?? $balance);
+		if ($slug === 'earned-leave' && !isset($match['available'])) {
+			$pending = $this->sum_pending_earned_leave_days($staff_id);
+			$available = $this->floor_leave_balance_for_display(max(0, $balance - $pending));
+		}
+
 		return [
 			'slug' => $slug,
-			'balance' => (float) ($match['balance'] ?? 0),
+			'balance' => $balance,
+			'available' => $available,
+			'pending' => $pending,
 			'carry_forward' => (float) ($match['carry_forward'] ?? 0),
 			'granted' => (float) ($match['granted'] ?? 0),
 			'monthly_earn' => (float) ($match['monthly_earn'] ?? 0),

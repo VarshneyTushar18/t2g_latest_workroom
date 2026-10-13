@@ -1658,6 +1658,31 @@ class timesheets extends AdminController
 				set_alert('warning', 'Comp - Off is no longer available.');
 				redirect(admin_url('timesheets/requisition_manage'));
 			}
+			$this->timesheets_model->ensure_leave_requisition_audit_columns();
+			$requested_as = $leave_type;
+
+			$overlap_start = $leave_start_ymd;
+			$overlap_end = $leave_end_ymd;
+			if (in_array($leave_type, ['half-days', 'unpaid-half-days', 'short-leaves', 'saturday-leaves'], true)) {
+				$single = date('Y-m-d', strtotime($data['end_time']));
+				$overlap_start = $single;
+				$overlap_end = $single;
+			}
+			if (!in_array($leave_type, ['comp-off'], true)) {
+				$overlap = $this->timesheets_model->find_overlapping_leave_requisition(
+					(int) $data['staff_id'],
+					$overlap_start,
+					$overlap_end
+				);
+				if ($overlap) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'Leave dates overlap an existing pending or approved request (#' . (int) $overlap->id . ').',
+					]);
+					die;
+				}
+			}
+
 			if (!in_array($leave_type, ['present', 'half-days', 'unpaid-half-days'], true)) {
 				$start_session = (int) ($this->input->post('start_session') ?: 1);
 				$end_session = (int) ($this->input->post('end_session') ?: 2);
@@ -1695,21 +1720,28 @@ class timesheets extends AdminController
 				$leave_year,
 				$leave_month
 			);
-			$earned_balance = (float) $earned_synced['balance'];
+			$earned_balance = (float) ($earned_synced['balance'] ?? 0);
+			$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
+			$earned_pending = (float) ($earned_synced['pending'] ?? 0);
 			if (($requested_synced['slug'] ?? '') === 'earned-leave') {
-				if ($earned_balance <= 0 || $days_for_balance > ($earned_balance + 0.001)) {
+				if ($earned_available <= 0 || $days_for_balance > ($earned_available + 0.001)) {
 					$data['type_of_leave'] = 'loss-of-pay';
 					$leave_type = 'loss-of-pay';
-					if ($earned_balance <= 0) {
-						set_alert('warning', 'No earned leave balance. Application saved as Loss of Pay.');
+					if ($earned_available <= 0) {
+						set_alert('warning', 'No earned leave available (after pending requests). Application saved as Loss of Pay.');
 					} else {
 						set_alert(
 							'warning',
-							'Earned leave available: ' . $earned_balance . ' day(s), but request is ' . $days_for_balance . ' day(s). Application saved as Loss of Pay.'
+							'Earned leave available: ' . $earned_available . ' day(s)'
+							. ($earned_pending > 0 ? ' (pending: ' . $earned_pending . ')' : '')
+							. ', but request is ' . $days_for_balance . ' day(s). Application saved as Loss of Pay.'
 						);
 					}
 				}
 			}
+
+			$data['requested_as'] = $requested_as;
+			$data['saved_as'] = $leave_type;
 
 			$synced = $this->timesheets_model->get_synced_leave_balance(
 				(int) $data['staff_id'],
@@ -1720,11 +1752,11 @@ class timesheets extends AdminController
 			$data['carry_forward'] = ($leave_type === 'loss-of-pay')
 				? $earned_synced['carry_forward']
 				: $synced['carry_forward'];
-			// Store remaining EL balance AFTER this application (legacy readers use this column).
+			// Legacy column — audit only; logic uses get_synced_leave_balance (available).
 			if ($leave_type === 'loss-of-pay') {
-				$data['leave_balance'] = round($earned_balance, 2);
+				$data['leave_balance'] = round($earned_available, 2);
 			} else {
-				$data['leave_balance'] = round($earned_balance - $days_for_balance, 2);
+				$data['leave_balance'] = round($earned_available - $days_for_balance, 2);
 			}
 
 			if (isset($data['according_to_the_plan'])) {
@@ -12745,7 +12777,9 @@ class timesheets extends AdminController
 
 		// Always resolve earned-leave balance for EL vs LOP enforcement on the apply form.
 		$earned_synced = $this->timesheets_model->get_synced_leave_balance($id, 'earned-leave', $year, $month);
-		$earned_balance = (float) $earned_synced['balance'];
+		$earned_balance = (float) ($earned_synced['balance'] ?? 0);
+		$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
+		$earned_pending = (float) ($earned_synced['pending'] ?? 0);
 
 		$month_label = date('F Y', mktime(0, 0, 0, $month, 1, $year));
 		$type_label = $type_of_leave !== '' ? htmlspecialchars((string) $type_of_leave) : htmlspecialchars($synced['slug']);
@@ -12754,8 +12788,12 @@ class timesheets extends AdminController
 		$html .= '<div style="margin-top:4px;"><strong>Carry forward:</strong> ' . $carry . '</div>';
 		$html .= '<div><strong>Leaves taken (this month):</strong> ' . $taken . '</div>';
 		$html .= '<div><strong>Earned leave (rate):</strong> ' . ((float) ($synced['monthly_earn'] ?? $earned)) . '</div>';
-		$html .= '<div class="' . ($earned_balance <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
-		$html .= '<strong>Current earned leave balance: ' . $earned_balance . '</strong></div>';
+		if ($earned_pending > 0) {
+			$html .= '<div><strong>Pending earned leave:</strong> ' . $earned_pending . '</div>';
+		}
+		$html .= '<div class="' . ($earned_available <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
+		$html .= '<strong>Available earned leave: ' . $earned_available . '</strong></div>';
+		$html .= '<div class="text-muted" style="font-size:12px;">Balance (approved only): ' . $earned_balance . '</div>';
 
 		if ($number_day_off > 0 || $days_off > 0) {
 			$html .= '<hr style="margin:8px 0;">';
@@ -12763,14 +12801,14 @@ class timesheets extends AdminController
 			$html .= '<div class="' . ($number_day_off == 0 ? 'text-danger' : '') . '">' . _l('number_of_leave_days_allowed') . ': ' . $number_day_off . '</div>';
 		}
 
-		// For earned leave apply: usable days = earned balance (not legacy day_off when zero).
-		$allowed = $earned_balance > 0 ? $earned_balance : 0;
+		// For earned leave apply: usable days = available (balance minus pending EL).
+		$allowed = $earned_available > 0 ? $earned_available : 0;
 		if ($synced['slug'] === 'loss-of-pay') {
 			$allowed = 999; // LOP is not limited by EL balance
 		}
 
 		$html .= '<input type="hidden" name="number_day_off" value="' . $allowed . '">';
-		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_balance . '">';
+		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_available . '">';
 
 		$valid_cur_date = $this->timesheets_model->get_next_shift_date($id, date('Y-m-d'));
 
@@ -12778,13 +12816,15 @@ class timesheets extends AdminController
 			'html' => $html,
 			'valid_date' => _d($valid_cur_date),
 			'balance' => $earned_balance,
-			'earned_balance' => $earned_balance,
+			'available' => $earned_available,
+			'pending' => $earned_pending,
+			'earned_balance' => $earned_available,
 			'type_balance' => $balance,
 			'carry_forward' => (float) $earned_synced['carry_forward'],
 			'leave_taken' => (float) $earned_synced['consumed'],
 			'earned_leave' => (float) ($earned_synced['monthly_earn'] ?? $earned_synced['granted']),
 			'number_day_off' => $allowed,
-			'can_use_earned_leave' => $earned_balance > 0,
+			'can_use_earned_leave' => $earned_available > 0,
 			'month' => $month_label,
 			'type' => $type_label,
 			'slug' => $synced['slug'],

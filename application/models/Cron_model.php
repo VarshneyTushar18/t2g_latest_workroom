@@ -4787,7 +4787,15 @@ class Cron_model extends App_Model
     }
     public function update_carry_and_leave_balance_monthly()
     {
-        $prev_month = date('n', strtotime('first day of previous month'));
+        $prev_month = (int) date('n', strtotime('first day of previous month'));
+        $year = (int) date('Y');
+        if ($prev_month === 12) {
+            $year = (int) date('Y', strtotime('first day of previous month'));
+        }
+
+        if (!isset($this->timesheets_model)) {
+            $this->load->model('timesheets/timesheets_model');
+        }
 
         $staff_query = "SELECT staffid FROM tblstaff WHERE active = 1";
         $staffs = $this->db->query($staff_query)->result_array();
@@ -4796,23 +4804,15 @@ class Cron_model extends App_Model
 
             $staffid = $staff['staffid'];
 
-            // Get latest leave record for previous month
-            $query = "SELECT * 
-                    FROM tbltimesheets_requisition_leave 
-                    WHERE staff_id = $staffid 
-                    AND MONTH(start_time) = $prev_month 
-                    ORDER BY id DESC 
-                    LIMIT 1";
+            $synced = $this->timesheets_model->get_synced_leave_balance(
+                (int) $staffid,
+                'earned-leave',
+                $year,
+                $prev_month
+            );
+            $leave_balance = (float) ($synced['available'] ?? ($synced['balance'] ?? 0));
 
-            $result = $this->db->query($query)->row();
-
-            // Prevent error if no record exists
-            $leave_balance = 0;
-            if ($result) {
-                $leave_balance = $result->leave_balance;
-            }
-
-            // Calculate carry forward
+            // Calculate carry forward from synced available (not last requisition snapshot).
             if ($leave_balance < 0) {
                 $new_carry_forward = 0;
             } else {
