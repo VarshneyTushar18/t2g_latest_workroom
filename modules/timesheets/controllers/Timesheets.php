@@ -345,7 +345,7 @@ class timesheets extends AdminController
 		//echo $type;
 		//echo 'SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "'.$start_date.'" AND "'.$end_date.'" AND date(end_time) BETWEEN "'.$start_date.'" AND "'.$end_date.'" AND staff_id = "'.$staff_id.'"';die;	
 
-		$res  = $this->db->query('SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND date(end_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND staff_id = "' . $staff_id . '"')->result_array();
+		$res  = $this->db->query('SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND date(end_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND staff_id = "' . $staff_id . '" AND status != 3')->result_array();
 		//print_r($res);die;
 		$count  = count($res);
 		if ($count > 0 and $type == 'unplanned_leaves') {
@@ -381,6 +381,7 @@ class timesheets extends AdminController
 		$this->db->where('type_of_leave', $type);
 		$this->db->where('MONTH(datecreated)', $month); //For current month
 		$this->db->where('staff_id', $staff_id);
+		$this->db->where('status !=', 3);
 		$res  = $this->db->get(db_prefix() . 'timesheets_requisition_leave')->result_array();
 		$count  = count($res);
 		//	echo '<pre>';print_r($res);
