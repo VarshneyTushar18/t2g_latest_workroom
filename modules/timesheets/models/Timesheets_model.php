@@ -8558,23 +8558,33 @@ public function add_requisition_ajax($data)
 		update_option($opt_key, '1');
 	}
 
-	/** Leave requisition status: cancelled (not pending; do not count toward balance/overlap). */
+	/** Leave requisition status: cancelled (live uses 4 for Absent; 3 is unused). */
 	public function leave_requisition_status_cancelled()
 	{
-		return 4;
+		return 3;
 	}
 
 	/**
 	 * True when a pending row (status 0) still has an approval chain (not user-cancelled).
 	 */
-	public function leave_requisition_has_approval_chain($leave_id)
+	public function leave_requisition_has_approval_chain($leave_id, $type_of_leave = null)
 	{
 		$leave_id = (int) $leave_id;
 		if ($leave_id <= 0) {
 			return false;
 		}
+		if ($type_of_leave === null || $type_of_leave === '') {
+			$row = $this->db->select('type_of_leave')
+				->where('id', $leave_id)
+				->get(db_prefix() . 'timesheets_requisition_leave')
+				->row();
+			$type_of_leave = $row ? (string) ($row->type_of_leave ?? '') : '';
+		}
 		$this->db->from(db_prefix() . 'timesheets_approval_details');
 		$this->db->where('rel_id', $leave_id);
+		if ($type_of_leave !== '') {
+			$this->db->where('rel_type', $type_of_leave);
+		}
 
 		return $this->db->count_all_results() > 0;
 	}
@@ -8593,7 +8603,7 @@ public function add_requisition_ajax($data)
 			return true;
 		}
 		if ($status === 0 && $id > 0) {
-			return $this->leave_requisition_has_approval_chain($id);
+			return $this->leave_requisition_has_approval_chain($id, (string) ($requisition->type_of_leave ?? ''));
 		}
 
 		return false;
@@ -8624,7 +8634,7 @@ public function add_requisition_ajax($data)
 			->where($tbl . '.status', 0)
 			->where_in($tbl . '.type_of_leave', $keys)
 			->where(
-				'EXISTS (SELECT 1 FROM ' . $ad . ' ad WHERE ad.rel_id = ' . $tbl . '.id)',
+				'EXISTS (SELECT 1 FROM ' . $ad . ' ad WHERE ad.rel_id = ' . $tbl . '.id AND ad.rel_type = ' . $tbl . '.type_of_leave)',
 				null,
 				false
 			);

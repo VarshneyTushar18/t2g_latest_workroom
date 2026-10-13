@@ -183,10 +183,11 @@ $row[] = '<p>' . $aRow['type_of_leave_text'] . '</p>';
 		$row[] = '<span class="label label-success  mr-1 mb-1 mt-1">' . _l('approved') . '</span>';
 	} else if ($aRow['status'] == 2) {
 		$row[] = '<span class="label label-danger  mr-1 mb-1 mt-1">' . _l('Reject') . '</span>';
-	} else if ((int) $aRow['status'] === 4) {
+	} else if ((int) $aRow['status'] === 3) {
 		$row[] = '<span class="label label-default  mr-1 mb-1 mt-1">Cancelled</span>';
-	}
-	else {
+	} else if ((int) $aRow['status'] === 4) {
+		$row[] = '<span class="label label-danger  mr-1 mb-1 mt-1">' . _l('Absent') . '</span>';
+	} else {
 		$row[] = '<span class="label label-danger  mr-1 mb-1 mt-1">' . _l('Absent') . '</span>';
 	}
 
