@@ -258,6 +258,7 @@ class timesheets extends AdminController
 			'0' => 'Pending',
 			'1' => 'Approved',
 			'2' => 'Rejected',
+			'3' => 'Cancelled',
 			'-1' => 'Cancelled',
 		];
 
@@ -289,7 +290,7 @@ class timesheets extends AdminController
 		$this->db->select('id, start_time, end_time, number_of_leaving_day, type_of_leave_text, type_of_leave, status');
 		$this->db->from($prefix . 'timesheets_requisition_leave');
 		$this->db->where('staff_id', $staff_id);
-		$this->db->where('status !=', 2);
+		$this->db->where_not_in('status', [2, 3]);
 		$this->db->where('YEAR(start_time) = ' . $year, null, false);
 		$cal_q = $this->db->get();
 		$cal_rows = $cal_q !== false ? $cal_q->result_array() : [];

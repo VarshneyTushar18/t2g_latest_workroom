@@ -17683,7 +17683,7 @@ public function add_requisition_ajax($data)
 			case 2:
 				return 'Rejected';
 			case 3:
-				return 'Withdrawn';
+				return 'Cancelled';
 			case 10:
 				return 'Carry Forward';
 			case 11:
@@ -18177,7 +18177,10 @@ public function add_requisition_ajax($data)
 		}else{
 			//$data_leave_application = $this->get_list_leave_application($data);
 		foreach ($data_leave_application as $datas) {
-		
+			if ((int) ($datas['status'] ?? -1) === 3) {
+				continue;
+			}
+
 			$status = $datas['status'];
 			if ($status == 0) {
 				$status =  'Pending';
