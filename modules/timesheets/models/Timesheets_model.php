@@ -19840,7 +19840,7 @@ public function add_requisition_ajax($data)
 				$params = $codes;
 				$params[] = '%-' . $month_suffix;
 				$bio_daily_rows = $this->db->query(
-					'SELECT attendance_date, a_in_time, a_out_time, punch_records
+					'SELECT attendance_date, a_in_time, a_out_time, punch_records, status, work_duration, t_duration
 					FROM ' . db_prefix() . 'biometric_report
 					WHERE TRIM(employee_code) IN (' . $placeholders . ') AND attendance_date LIKE ?',
 					$params
@@ -20302,7 +20302,8 @@ public function add_requisition_ajax($data)
 			// Biometric staff: trust import "Present" + total hours (legacy green), not strict final OUT pairing.
 			if (
 				isset($bio_daily_by_date[$date])
-				&& $attendance_source === 'biometric'
+				&& !$is_wfh_day
+				&& in_array($attendance_source, ['biometric', 'workroom', 'none', 'biometric+workroom'], true)
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'future', 'night_carryover', 'regularised', 'pending'], true)
 				&& !($date === $today && $has_in && !$has_out)
 			) {
@@ -20311,6 +20312,7 @@ public function add_requisition_ajax($data)
 					$status = 'ok';
 					$issues = [];
 					$can_regularise = false;
+					$punch['punch_missing'] = false;
 					$calendar_hours = max($calendar_hours, $legacy_hrs);
 					$hours = max($hours, $legacy_hrs);
 					$code = 'P';
