@@ -20136,14 +20136,20 @@ public function add_requisition_ajax($data)
 				$span_minutes = intdiv((int) round($span_hrs * 3600), 60);
 			}
 			$carryover_parent = $carryover_dates[$date] ?? null;
+			$orphan_carryover_out = $this->is_workroom_orphan_carryover_punch($punch, $carryover_parent, $date);
 			$is_night_carryover = (
 				$carryover_parent
 				&& !$session
 				&& !$is_future
-				&& $attendance_source === 'none'
-				&& empty($punch['swipes'])
-				&& $hours <= 0
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)
+				&& (
+					(
+						$attendance_source === 'none'
+						&& empty($punch['swipes'])
+						&& $hours <= 0
+					)
+					|| $orphan_carryover_out
+				)
 			);
 			if ($is_night_carryover) {
 				$status = 'night_carryover';
@@ -21801,6 +21807,38 @@ public function add_requisition_ajax($data)
 	 * @param array<string, array<int, array<string, mixed>>> $cio_by_date
 	 * @return array<string, array<int, array<string, mixed>>>
 	 */
+	/**
+	 * After midnight, Workroom OUT may still sit on the next calendar day; treat as NC not Absent.
+	 *
+	 * @param array<string, mixed> $punch
+	 */
+	protected function is_workroom_orphan_carryover_punch(array $punch, $carryover_parent, $date)
+	{
+		if ($carryover_parent === null || $carryover_parent === '') {
+			return false;
+		}
+		$has_in = !empty($punch['check_in']) || !empty($punch['ins']);
+		if ($has_in) {
+			return false;
+		}
+		$has_out = !empty($punch['check_out']) || !empty($punch['outs']);
+		if (!$has_out && empty($punch['swipes'])) {
+			return false;
+		}
+		$out_time = trim((string) ($punch['check_out'] ?? ''));
+		if ($out_time === '' && !empty($punch['outs'][0])) {
+			$out_time = trim((string) ($punch['outs'][0]['time'] ?? $punch['outs'][0]));
+		}
+		if ($out_time !== '') {
+			$out_ts = strtotime($date . ' ' . substr($out_time, 0, 8));
+			if ($out_ts !== false && (int) date('G', $out_ts) >= 12) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	protected function normalize_workroom_cio_by_calendar_date(array $cio_by_date)
 	{
 		$dates = array_keys($cio_by_date);
