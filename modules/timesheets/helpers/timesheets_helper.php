@@ -1510,6 +1510,9 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 
 /**
  * Staff already completed Workroom check-out for the given date.
+ *
+ * Checkout just after midnight closes the prior shift; it must not block
+ * a new check-in later the same calendar day unless they also checked in that day.
  */
 function timesheets_staff_completed_workroom_today($staff_id, $date = null)
 {
@@ -1525,7 +1528,17 @@ function timesheets_staff_completed_workroom_today($staff_id, $date = null)
 		[$staff_id, $date]
 	)->row_array();
 
-	return $row && (int) ($row['type_check'] ?? 0) === 2;
+	if (!$row || (int) ($row['type_check'] ?? 0) !== 2) {
+		return false;
+	}
+
+	$checkin_same_day = $CI->db->query(
+		'SELECT id FROM ' . db_prefix() . 'check_in_out
+		 WHERE staff_id = ? AND DATE(date) = ? AND type_check = 1 LIMIT 1',
+		[$staff_id, $date]
+	)->row();
+
+	return $checkin_same_day !== null;
 }
 
 /**
