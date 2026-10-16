@@ -878,6 +878,108 @@ function timesheets_hr_can_view_all_staff($staff_id = '')
 }
 
 /**
+ * Department IDs treated as E-commerce for scoped attendance (Check Employee Attendance, Biometric, team break).
+ *
+ * @return int[]
+ */
+function timesheets_ecommerce_department_ids()
+{
+	return [6, 31, 35, 37, 40, 41];
+}
+
+/**
+ * E-commerce HOD / attendance viewers: all active staff in {@see timesheets_ecommerce_department_ids()}, any manager filter.
+ *
+ * @param int|string $staff_id
+ */
+function timesheets_can_view_ecommerce_attendance($staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+
+	return in_array($staff_id, [202], true);
+}
+
+/**
+ * Company-wide attendance (HR/Admin), not department-scoped.
+ *
+ * @param int|string $staff_id
+ */
+function timesheets_company_wide_attendance_access($staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+
+	return is_admin($staff_id)
+		|| is_HR($staff_id)
+		|| is_super_hr($staff_id)
+		|| $staff_id === 23;
+}
+
+/**
+ * May use reporting-manager filter on Check Employee Attendance (HR/Admin or e-commerce scope).
+ *
+ * @param int|string $staff_id
+ */
+function timesheets_check_employee_attendance_manager_filter_access($staff_id = '')
+{
+	return timesheets_company_wide_attendance_access($staff_id)
+		|| timesheets_can_view_ecommerce_attendance($staff_id);
+}
+
+/** Pseudo department value for Manage WFH staff list (employment category WFH). */
+function holiday_wfh_employment_department_key()
+{
+	return 'wfh_employment';
+}
+
+/**
+ * Department IDs allowed on Manage WFH for the viewer (null = all company departments).
+ *
+ * @param int|string $staff_id
+ * @return int[]|null
+ */
+function holiday_wfh_manage_allowed_department_ids($staff_id = '')
+{
+	$staff_id = ($staff_id === '') ? (int) get_staff_user_id() : (int) $staff_id;
+
+	if (timesheets_company_wide_attendance_access($staff_id)) {
+		return null;
+	}
+	if (timesheets_can_view_ecommerce_attendance($staff_id)) {
+		return timesheets_ecommerce_department_ids();
+	}
+
+	$CI = &get_instance();
+	$CI->load->model('departments_model');
+
+	return array_values(array_unique(array_map('intval', array_column(
+		$CI->departments_model->get_staff_departments($staff_id),
+		'departmentid'
+	))));
+}
+
+/**
+ * Active staff IDs in e-commerce departments (for Biometric / scoped queries).
+ *
+ * @return int[]
+ */
+function timesheets_ecommerce_attendance_staff_ids()
+{
+	$CI = &get_instance();
+	$depts = timesheets_ecommerce_department_ids();
+	if (!$depts) {
+		return [];
+	}
+	$in = implode(',', array_map('intval', $depts));
+	$rows = $CI->db->query(
+		'SELECT DISTINCT s.staffid FROM ' . db_prefix() . 'staff s
+		 INNER JOIN ' . db_prefix() . 'staff_departments sd ON sd.staffid = s.staffid
+		 WHERE s.active = 1 AND sd.departmentid IN (' . $in . ')'
+	)->result_array();
+
+	return array_values(array_unique(array_map('intval', array_column($rows, 'staffid'))));
+}
+
+/**
  * Staff IDs the current user may view (self + direct/indirect reports).
  * Returns null when HR/Admin (all active staff).
  *
@@ -1451,14 +1553,14 @@ function timesheets_staff_has_open_workroom_checkin($staff_id)
 }
 
 /**
- * Hours before cron auto-check-out for an open Workroom session (WFH / remote = longer).
+ * Hours before cron auto-check-out for an open Workroom session (13h default; 24h if office with no biometric that day).
  */
 function timesheets_workroom_auto_checkout_hours($staff_id, $checkin_date_ymd = null)
 {
 	$staff_id = (int) $staff_id;
 	$checkin_date_ymd = $checkin_date_ymd ?: date('Y-m-d');
 	if (timesheets_is_staff_wfh_on_date($staff_id, $checkin_date_ymd)) {
-		return 24;
+		return 13;
 	}
 	$CI = &get_instance();
 	if ($CI->db->table_exists(db_prefix() . 'biometric_attendance')) {

@@ -207,6 +207,25 @@ class Cron extends App_Controller
 		$this->cron_model->send_break_report_to_staff();
 	}
 
+	/** E-commerce biometric CSV to Pankaj Lohani (CC Sarabjeet). Optional ?months=3 */
+	public function send_ecommerce_biometric_report_pankaj($months = 3)
+	{
+		$this->load->model('cron_model');
+		$result = $this->cron_model->send_ecommerce_biometric_report_to_pankaj($months);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** Daily break timing sheet to each reporting manager (default: yesterday). Optional date: d-M-Y */
+	public function send_daily_team_break_timing_report($date = '')
+	{
+		$this->load->model('cron_model');
+		$att_date = $date !== '' ? $date : null;
+		$result = $this->cron_model->send_daily_team_break_timing_to_managers($att_date);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
     /**
      * PEDMA evaluation email reminders for managers (days 1, 5, and 10 only).
      * Example: /cron/send_pedma_evaluation_reminders/YOUR_CRON_KEY

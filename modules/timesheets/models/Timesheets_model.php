@@ -11303,6 +11303,22 @@ public function add_requisition_ajax($data)
 			}
 		}
 
+		if ($result->start_working === '' || $result->end_working === '') {
+			$row = $this->db->select('shiftstart, shiftend')
+				->where('staffid', (int) $staff_id)
+				->get(db_prefix() . 'staff_info')
+				->row();
+			if ($row && !empty($row->shiftstart) && !empty($row->shiftend)) {
+				$result->start_working = $this->normalize_shift_time($row->shiftstart, '09:30');
+				$result->end_working = $this->normalize_shift_time($row->shiftend, '18:30');
+				$woking_hour = $this->get_hour($result->start_working, $result->end_working);
+				if ($woking_hour < 0) {
+					$woking_hour = abs($woking_hour);
+				}
+				$result->woking_hour = $woking_hour > 0 ? $woking_hour : 9;
+			}
+		}
+
 		return $result;
 	}
 
@@ -19775,6 +19791,7 @@ public function add_requisition_ajax($data)
 		foreach ($cio_rows as $row) {
 			$cio_by_date[$row['d']][] = $row;
 		}
+		$cio_by_date = $this->normalize_workroom_cio_by_calendar_date($cio_by_date);
 
 		$bio_by_date = [];
 		$bio_daily_by_date = [];
@@ -19918,8 +19935,15 @@ public function add_requisition_ajax($data)
 			// TEMP Oct 2026: trailing last-IN with full first-IN→last-OUT span counts as Present.
 			$this->apply_october_trailing_in_present_fix($year, $month, $punch, $required_span_minutes);
 			$day_swipes = $punch['swipes'] ?? [];
+			$workroom_swipes_for_merge = $workroom_punch['swipes'] ?? [];
 			if ($has_workroom && $attendance_source === 'biometric') {
-				$day_swipes = $this->merge_attendance_swipe_rows($day_swipes, $workroom_punch['swipes']);
+				$workroom_swipes_for_merge = $this->filter_workroom_swipes_for_biometric_day(
+					$day_swipes,
+					$workroom_swipes_for_merge
+				);
+				if (!empty($workroom_swipes_for_merge)) {
+					$day_swipes = $this->merge_attendance_swipe_rows($day_swipes, $workroom_swipes_for_merge);
+				}
 			}
 			$hours = $punch['hours'];
 			if ($hours <= 0 && $ts && is_numeric($ts['value'])) {
@@ -20271,15 +20295,18 @@ public function add_requisition_ajax($data)
 
 			$display_check_in = $punch['check_in'] ?? '';
 			$display_check_out = $punch['check_out'] ?? '';
-			if ($display_check_in === '' && !empty($workroom_punch['check_in'])) {
+			$workroom_fills_display = $attendance_source === 'workroom'
+				|| $attendance_source === 'wfh'
+				|| !empty($workroom_swipes_for_merge);
+			if ($workroom_fills_display && $display_check_in === '' && !empty($workroom_punch['check_in'])) {
 				$display_check_in = $workroom_punch['check_in'];
 			}
-			if ($display_check_out === '' && !empty($workroom_punch['check_out'])) {
+			if ($workroom_fills_display && $display_check_out === '' && !empty($workroom_punch['check_out'])) {
 				$display_check_out = $workroom_punch['check_out'];
 			}
 			$display_first_in = ($detail['first_in'] !== '—' && $detail['first_in'] !== '') ? $detail['first_in'] : $display_check_in;
 			$display_last_out = ($detail['last_out'] !== '—' && $detail['last_out'] !== '') ? $detail['last_out'] : $display_check_out;
-			if ($has_workroom && $attendance_source === 'biometric') {
+			if ($has_workroom && $attendance_source === 'biometric' && !empty($workroom_swipes_for_merge)) {
 				$attendance_source = 'biometric+workroom';
 			}
 
@@ -20324,6 +20351,7 @@ public function add_requisition_ajax($data)
 				'sessions' => $detail['sessions'],
 				'swipes' => $day_swipes,
 				'attendance_source' => $attendance_source,
+				'wfh_allotted' => $is_wfh_day,
 				'regularisation' => $reg ? [
 					'id' => (int) $reg['id'],
 					'status' => (int) $reg['status'],
@@ -21255,8 +21283,14 @@ public function add_requisition_ajax($data)
 		$events = [];
 
 		foreach ($cio_rows as $row) {
+			$full = trim((string) ($row['date'] ?? ''));
+			if ($full === '' && !empty($row['d']) && !empty($row['t'])) {
+				$full = $row['d'] . ' ' . $row['t'];
+			}
+			$at = $full !== '' ? strtotime($full) : 0;
 			$events[] = [
-				'time' => $row['t'],
+				'time' => $row['t'] ?? ($at ? date('H:i:s', $at) : ''),
+				'at' => $at,
 				'type' => ((int) $row['type_check'] === 2) ? 'OUT' : 'IN',
 				'source' => $workroom_source,
 				'door' => $workroom_door,
@@ -21273,7 +21307,13 @@ public function add_requisition_ajax($data)
 		}
 
 		usort($events, function ($a, $b) {
-			return strcmp($a['time'], $b['time']);
+			$a_at = (int) ($a['at'] ?? 0);
+			$b_at = (int) ($b['at'] ?? 0);
+			if ($a_at > 0 && $b_at > 0) {
+				return $a_at <=> $b_at;
+			}
+
+			return strcmp((string) ($a['time'] ?? ''), (string) ($b['time'] ?? ''));
 		});
 
 		// Drop near-duplicate punches (same type within 2 minutes) — bio + Workroom often double-log.
@@ -21284,13 +21324,19 @@ public function add_requisition_ajax($data)
 				$deduped[] = $ev;
 				continue;
 			}
-			$ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
+			$ts = (int) ($ev['at'] ?? 0);
+			if ($ts <= 0) {
+				$ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
+			}
 			$keep = true;
 			if (!empty($deduped)) {
 				$prev = $deduped[count($deduped) - 1];
 				if ($prev['type'] === $type) {
-					$prev_ts = strtotime('1970-01-01 ' . substr($prev['time'], 0, 8));
-					if (abs($ts - $prev_ts) <= 120) {
+					$prev_ts = (int) ($prev['at'] ?? 0);
+					if ($prev_ts <= 0) {
+						$prev_ts = strtotime('1970-01-01 ' . substr($prev['time'], 0, 8));
+					}
+					if ($ts !== false && $prev_ts !== false && abs($ts - $prev_ts) <= 120) {
 						$keep = false;
 					}
 				}
@@ -21313,53 +21359,83 @@ public function add_requisition_ajax($data)
 
 		$check_in = $ins ? $ins[0] : '';
 		$check_out = $outs ? $outs[count($outs) - 1] : '';
-
-		// Ignore OUT punches that occur before the first IN (stale Workroom / night-shift bleed).
-		if ($check_in && $check_out) {
-			$in_ts = strtotime('1970-01-01 ' . substr($check_in, 0, 8));
-			$out_ts = strtotime('1970-01-01 ' . substr($check_out, 0, 8));
-			if ($in_ts !== false && $out_ts !== false && $out_ts <= $in_ts) {
-				$check_out = '';
-				$outs = array_values(array_filter($outs, function ($t) use ($in_ts) {
-					$ts = strtotime('1970-01-01 ' . substr($t, 0, 8));
-					return $ts !== false && $ts > $in_ts;
-				}));
-				if ($outs) {
-					$check_out = $outs[count($outs) - 1];
-				}
+		$first_in_at = null;
+		$last_out_at = null;
+		$events_have_at = !empty($events);
+		foreach ($events as $ev) {
+			if (empty($ev['at'])) {
+				$events_have_at = false;
+				break;
 			}
 		}
-
-		if (!$check_in && !empty($ins)) {
-			$check_in = $ins[0];
-		}
-		if (!empty($ins)) {
-			$first_in_ts = strtotime('1970-01-01 ' . substr($ins[0], 0, 8));
-			if ($first_in_ts !== false) {
-				$events = array_values(array_filter($events, function ($ev) use ($first_in_ts) {
-					if (($ev['type'] ?? '') !== 'OUT') {
-						return true;
-					}
-					$ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
-					return $ts === false || $ts > $first_in_ts;
-				}));
-				$outs = [];
-				foreach ($events as $ev) {
-					if (($ev['type'] ?? '') === 'OUT') {
-						$outs[] = $ev['time'];
+		if ($events_have_at) {
+			foreach ($events as $ev) {
+				$at = (int) ($ev['at'] ?? 0);
+				if ($at <= 0) {
+					continue;
+				}
+				if (($ev['type'] ?? '') === 'IN' && ($first_in_at === null || $at < $first_in_at)) {
+					$first_in_at = $at;
+				}
+				if (($ev['type'] ?? '') === 'OUT' && ($last_out_at === null || $at > $last_out_at)) {
+					$last_out_at = $at;
+				}
+			}
+			if ($first_in_at !== null) {
+				$check_in = date('H:i:s', $first_in_at);
+			}
+			if ($last_out_at !== null && $first_in_at !== null && $last_out_at > $first_in_at) {
+				$check_out = date('H:i:s', $last_out_at);
+			} elseif ($last_out_at !== null && $first_in_at === null) {
+				$check_out = date('H:i:s', $last_out_at);
+			}
+		} else {
+			// Ignore OUT punches that occur before the first IN on the same clock day.
+			if ($check_in && $check_out) {
+				$in_ts = strtotime('1970-01-01 ' . substr($check_in, 0, 8));
+				$out_ts = strtotime('1970-01-01 ' . substr($check_out, 0, 8));
+				if ($in_ts !== false && $out_ts !== false && $out_ts <= $in_ts) {
+					$check_out = '';
+					$outs = array_values(array_filter($outs, function ($t) use ($in_ts) {
+						$ts = strtotime('1970-01-01 ' . substr($t, 0, 8));
+						return $ts !== false && $ts > $in_ts;
+					}));
+					if ($outs) {
+						$check_out = $outs[count($outs) - 1];
 					}
 				}
+			}
+
+			if (!$check_in && !empty($ins)) {
+				$check_in = $ins[0];
+			}
+			if (!empty($ins)) {
+				$first_in_ts = strtotime('1970-01-01 ' . substr($ins[0], 0, 8));
+				if ($first_in_ts !== false) {
+					$events = array_values(array_filter($events, function ($ev) use ($first_in_ts) {
+						if (($ev['type'] ?? '') !== 'OUT') {
+							return true;
+						}
+						$ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
+						return $ts === false || $ts > $first_in_ts;
+					}));
+					$outs = [];
+					foreach ($events as $ev) {
+						if (($ev['type'] ?? '') === 'OUT') {
+							$outs[] = $ev['time'];
+						}
+					}
+					$check_out = $outs ? $outs[count($outs) - 1] : '';
+				}
+			}
+			if (!$check_out && count($events) > 1) {
 				$check_out = $outs ? $outs[count($outs) - 1] : '';
+				if ($check_out === '' && $events[count($events) - 1]['type'] === 'OUT') {
+					$check_out = $events[count($events) - 1]['time'];
+				}
+			} elseif (!$check_out && count($events) === 1 && $events[0]['type'] === 'OUT') {
+				$check_out = $events[0]['time'];
 			}
-		}
-		if (!$check_out && count($events) > 1) {
-			// Prefer last OUT; if day ends on IN with no later OUT, use last event only if OUT.
-			$check_out = $outs ? $outs[count($outs) - 1] : '';
-			if ($check_out === '' && $events[count($events) - 1]['type'] === 'OUT') {
-				$check_out = $events[count($events) - 1]['time'];
-			}
-		} elseif (!$check_out && count($events) === 1 && $events[0]['type'] === 'OUT') {
-			$check_out = $events[0]['time'];
 		}
 
 		$break_from_punches = !empty($bio_rows);
@@ -21368,7 +21444,10 @@ public function add_requisition_ajax($data)
 		$span_minutes = null;
 		$break_hrs = 0.0;
 		$work_hrs = 0.0;
-		if ($check_in && $check_out) {
+		if ($first_in_at !== null && $last_out_at !== null && $last_out_at > $first_in_at) {
+			$span_minutes = intdiv($last_out_at - $first_in_at, 60);
+			$span_hrs = ($last_out_at - $first_in_at) / 3600;
+		} elseif ($check_in && $check_out) {
 			$in_ts = strtotime('1970-01-01 ' . substr($check_in, 0, 8));
 			$out_ts = strtotime('1970-01-01 ' . substr($check_out, 0, 8));
 			if ($in_ts !== false && $out_ts !== false && $out_ts > $in_ts) {
@@ -21379,8 +21458,14 @@ public function add_requisition_ajax($data)
 		for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
 			$cur = $events[$j]['type'] ?? '';
 			$nxt = $events[$j + 1]['type'] ?? '';
-			$ts1 = strtotime('1970-01-01 ' . substr($events[$j]['time'], 0, 8));
-			$ts2 = strtotime('1970-01-01 ' . substr($events[$j + 1]['time'], 0, 8));
+			$ts1 = (int) ($events[$j]['at'] ?? 0);
+			$ts2 = (int) ($events[$j + 1]['at'] ?? 0);
+			if ($ts1 <= 0) {
+				$ts1 = strtotime('1970-01-01 ' . substr($events[$j]['time'], 0, 8));
+			}
+			if ($ts2 <= 0) {
+				$ts2 = strtotime('1970-01-01 ' . substr($events[$j + 1]['time'], 0, 8));
+			}
 			if ($ts1 === false || $ts2 === false) {
 				continue;
 			}
@@ -21563,6 +21648,10 @@ public function add_requisition_ajax($data)
 			return 'AB';
 		}
 		if ($status === 'punch_missing') {
+			if (strtoupper(trim((string) $ts_type)) === 'WFH') {
+				return 'WFH';
+			}
+
 			return 'INC';
 		}
 		// Rejected regularization: still show real hours result, not forced Absent.
@@ -21666,6 +21755,13 @@ public function add_requisition_ajax($data)
 			return 'Half day';
 		}
 
+		if ($code === 'WFH' && ($status === 'ok' || $status === 'regularised' || $status === 'pending')) {
+			return 'Present (WFH allotted)';
+		}
+		if ($code === 'WFH') {
+			return 'WFH allotted';
+		}
+
 		$labels = [
 			'P' => 'Present',
 			'AB' => 'Absent',
@@ -21697,6 +21793,131 @@ public function add_requisition_ajax($data)
 		}
 
 		return $labels[$code] ?? ucfirst(str_replace('_', ' ', $status));
+	}
+
+	/**
+	 * Move early-morning Workroom OUT rows to the prior day when they close a prior-evening IN.
+	 *
+	 * @param array<string, array<int, array<string, mixed>>> $cio_by_date
+	 * @return array<string, array<int, array<string, mixed>>>
+	 */
+	protected function normalize_workroom_cio_by_calendar_date(array $cio_by_date)
+	{
+		$dates = array_keys($cio_by_date);
+		sort($dates);
+
+		foreach ($dates as $d) {
+			if (empty($cio_by_date[$d])) {
+				continue;
+			}
+			$keep = [];
+			foreach ($cio_by_date[$d] as $row) {
+				if ((int) ($row['type_check'] ?? 0) !== 2) {
+					$keep[] = $row;
+					continue;
+				}
+
+				$ts = strtotime((string) ($row['date'] ?? ($d . ' ' . ($row['t'] ?? ''))));
+				if ($ts === false || (int) date('G', $ts) >= 12) {
+					$keep[] = $row;
+					continue;
+				}
+
+				$prev = date('Y-m-d', strtotime($d . ' -1 day'));
+				$moved = false;
+				if ($prev !== '1970-01-01' && !empty($cio_by_date[$prev])) {
+					$last_type = $this->workroom_last_punch_type_on_rows($cio_by_date[$prev]);
+					$has_evening_in = false;
+					foreach ($cio_by_date[$prev] as $pr) {
+						if ((int) ($pr['type_check'] ?? 0) !== 1) {
+							continue;
+						}
+						$in_ts = strtotime((string) ($pr['date'] ?? ($prev . ' ' . ($pr['t'] ?? ''))));
+						if ($in_ts !== false && (int) date('G', $in_ts) >= 12) {
+							$has_evening_in = true;
+							break;
+						}
+					}
+					if ($has_evening_in && $last_type === 1) {
+						$cio_by_date[$prev][] = $row;
+						$moved = true;
+					}
+				}
+				if (!$moved) {
+					$keep[] = $row;
+				}
+			}
+			$cio_by_date[$d] = $keep;
+		}
+
+		foreach ($cio_by_date as $d => &$rows) {
+			usort($rows, function ($a, $b) {
+				return strcmp((string) ($a['date'] ?? ''), (string) ($b['date'] ?? ''));
+			});
+		}
+		unset($rows);
+
+		return $cio_by_date;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $rows
+	 */
+	protected function workroom_last_punch_type_on_rows(array $rows)
+	{
+		$last_type = 0;
+		$last_ts = 0;
+		foreach ($rows as $row) {
+			$ts = strtotime((string) ($row['date'] ?? ''));
+			if ($ts === false) {
+				continue;
+			}
+			if ($ts >= $last_ts) {
+				$last_ts = $ts;
+				$last_type = (int) ($row['type_check'] ?? 0);
+			}
+		}
+
+		return $last_type;
+	}
+
+	/**
+	 * Drop stray Workroom OUT rows before the first biometric IN on the same calendar day.
+	 *
+	 * @param array<int, array<string, mixed>> $primary
+	 * @param array<int, array<string, mixed>> $workroom
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function filter_workroom_swipes_for_biometric_day(array $primary, array $workroom)
+	{
+		if (empty($primary) || empty($workroom)) {
+			return $workroom;
+		}
+
+		$first_in_ts = null;
+		foreach ($primary as $sw) {
+			if (($sw['type'] ?? '') !== 'IN') {
+				continue;
+			}
+			$first_in_ts = strtotime('1970-01-01 ' . substr((string) ($sw['time'] ?? ''), 0, 8));
+			break;
+		}
+		if ($first_in_ts === false || $first_in_ts === null) {
+			return $workroom;
+		}
+
+		return array_values(array_filter($workroom, function ($sw) use ($first_in_ts) {
+			$src = (string) ($sw['source'] ?? '');
+			if ($src !== 'Workroom' && $src !== 'WFH') {
+				return true;
+			}
+			if (($sw['type'] ?? '') !== 'OUT') {
+				return true;
+			}
+			$ts = strtotime('1970-01-01 ' . substr((string) ($sw['time'] ?? ''), 0, 8));
+
+			return $ts === false || $ts >= $first_in_ts;
+		}));
 	}
 
 	/**
@@ -21825,5 +22046,185 @@ public function add_requisition_ajax($data)
 			'actual_work_hrs' => $actual > 0 ? round($actual, 2) . 'h' : '—',
 			'sessions' => $sessions,
 		];
+	}
+
+	/**
+	 * Biometric break segments for a team/date range (for manager break sheets).
+	 *
+	 * @param string $from Y-m-d
+	 * @param string $to Y-m-d
+	 * @param int[] $staff_ids
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function get_team_break_timing_rows($from, $to, array $staff_ids, $include_staff_without_breaks = false)
+	{
+		$staff_ids = array_values(array_unique(array_filter(array_map('intval', $staff_ids))));
+		if (!$staff_ids || !file_exists(APPPATH . 'models/Biometric_model.php')) {
+			return [];
+		}
+
+		$from = date('Y-m-d', strtotime((string) $from));
+		$to = date('Y-m-d', strtotime((string) $to));
+		if ($from === '1970-01-01' || $to === '1970-01-01' || $from > $to) {
+			return [];
+		}
+
+		$this->load->model('biometric_model');
+
+		$staff_rows = $this->db->select('s.staffid, s.firstname, s.lastname, s.team_manage, i.empid')
+			->from(db_prefix() . 'staff s')
+			->join(db_prefix() . 'staff_info i', 'i.staffid = s.staffid', 'left')
+			->where_in('s.staffid', $staff_ids)
+			->get()
+			->result_array();
+
+		$staff_map = [];
+		$manager_ids = [];
+		foreach ($staff_rows as $sr) {
+			$sid = (int) ($sr['staffid'] ?? 0);
+			if ($sid <= 0) {
+				continue;
+			}
+			$staff_map[$sid] = $sr;
+			$mid = (int) ($sr['team_manage'] ?? 0);
+			if ($mid > 0) {
+				$manager_ids[$mid] = true;
+			}
+		}
+
+		$manager_names = [];
+		if ($manager_ids) {
+			$mq = $this->db->select('staffid, firstname, lastname')
+				->where_in('staffid', array_keys($manager_ids))
+				->get(db_prefix() . 'staff')
+				->result_array();
+			foreach ($mq as $m) {
+				$manager_names[(int) $m['staffid']] = trim($m['firstname'] . ' ' . $m['lastname']);
+			}
+		}
+
+		$out = [];
+		$cursor = strtotime($from);
+		$end = strtotime($to);
+		while ($cursor !== false && $cursor <= $end) {
+			$date_ymd = date('Y-m-d', $cursor);
+			$att_date = date('d-M-Y', $cursor);
+			foreach ($staff_ids as $sid) {
+				if (!isset($staff_map[$sid])) {
+					continue;
+				}
+				$info = $staff_map[$sid];
+				$mgr_id = (int) ($info['team_manage'] ?? 0);
+				$mgr_name = $mgr_id > 0 ? ($manager_names[$mgr_id] ?? ('ID ' . $mgr_id)) : '—';
+
+				$punch = $this->biometric_model->get_staff_punch_for_date($sid, $att_date);
+				if (!$punch) {
+					continue;
+				}
+				$summary = $this->biometric_model->get_biometric_break_summary($punch);
+				if (!$summary) {
+					continue;
+				}
+
+				$total_label = (string) ($summary['total_label'] ?? '00:00:00');
+				if (empty($summary['breaks'])) {
+					if (!$include_staff_without_breaks) {
+						continue;
+					}
+					$out[] = [
+						'manager_name' => $mgr_name,
+						'manager_id' => $mgr_id,
+						'empid' => trim((string) ($info['empid'] ?? '')),
+						'staff_id' => $sid,
+						'staff_name' => trim($info['firstname'] . ' ' . $info['lastname']),
+						'work_date' => $date_ymd,
+						'break_num' => 0,
+						'break_out' => '—',
+						'break_in' => '—',
+						'duration' => '—',
+						'total_break_day' => $total_label,
+					];
+					continue;
+				}
+
+				$n = 0;
+				foreach ($summary['breaks'] as $b) {
+					$n++;
+					$out[] = [
+						'manager_name' => $mgr_name,
+						'manager_id' => $mgr_id,
+						'empid' => trim((string) ($info['empid'] ?? '')),
+						'staff_id' => $sid,
+						'staff_name' => trim($info['firstname'] . ' ' . $info['lastname']),
+						'work_date' => $date_ymd,
+						'break_num' => $n,
+						'break_out' => $b['out_time'] ?? '',
+						'break_in' => $b['in_time'] ?? '',
+						'duration' => $b['duration_label'] ?? '',
+						'total_break_day' => $total_label,
+					];
+				}
+			}
+			$cursor = strtotime('+1 day', $cursor);
+		}
+
+		usort($out, function ($a, $b) {
+			$c = strcmp((string) $a['manager_name'], (string) $b['manager_name']);
+			if ($c !== 0) {
+				return $c;
+			}
+			$c = strcmp((string) $a['staff_name'], (string) $b['staff_name']);
+			if ($c !== 0) {
+				return $c;
+			}
+			$c = strcmp((string) $a['work_date'], (string) $b['work_date']);
+			if ($c !== 0) {
+				return $c;
+			}
+
+			return (int) $a['break_num'] <=> (int) $b['break_num'];
+		});
+
+		return $out;
+	}
+
+	/**
+	 * One row per employee per day: total counted break time (for daily manager emails).
+	 *
+	 * @param string $date_ymd Y-m-d
+	 * @param int[] $staff_ids
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function get_team_daily_break_total_rows($date_ymd, array $staff_ids)
+	{
+		$detail = $this->get_team_break_timing_rows($date_ymd, $date_ymd, $staff_ids, true);
+		$by_staff = [];
+		foreach ($detail as $r) {
+			$sid = (int) ($r['staff_id'] ?? 0);
+			if ($sid <= 0) {
+				continue;
+			}
+			if (!isset($by_staff[$sid])) {
+				$by_staff[$sid] = [
+					'staff_id' => $sid,
+					'empid' => trim((string) ($r['empid'] ?? '')),
+					'staff_name' => trim((string) ($r['staff_name'] ?? '')),
+					'work_date' => $r['work_date'] ?? $date_ymd,
+					'total_break_day' => (string) ($r['total_break_day'] ?? '00:00:00'),
+					'break_count' => 0,
+					'had_biometric' => true,
+				];
+			}
+			if ((int) ($r['break_num'] ?? 0) > 0) {
+				$by_staff[$sid]['break_count']++;
+			}
+		}
+
+		$out = array_values($by_staff);
+		usort($out, function ($a, $b) {
+			return strcasecmp((string) $a['staff_name'], (string) $b['staff_name']);
+		});
+
+		return $out;
 	}
 }

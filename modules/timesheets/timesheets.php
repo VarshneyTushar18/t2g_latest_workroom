@@ -223,7 +223,11 @@ function timesheets_module_init_menu_items() {
 		}
 
 		if (has_permission('leave_management', '', 'view_own') || has_permission('leave_management', '', 'view') || is_admin()) {
-			if (is_admin() || is_super_admin() || is_manager() || is_HR() || is_admin2()) {
+			$CI->load->helper('timesheets/timesheets');
+			$can_team_attendance_menu = is_admin() || is_super_admin() || is_manager() || is_HR() || is_admin2()
+				|| (function_exists('timesheets_can_view_ecommerce_attendance') && timesheets_can_view_ecommerce_attendance())
+				|| (function_exists('attendance_permission') && attendance_permission());
+			if ($can_team_attendance_menu) {
 				$CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
 					'slug' => 'timesheets_check_employee_attendance',
 					'name' => 'Check Employee Attendance',

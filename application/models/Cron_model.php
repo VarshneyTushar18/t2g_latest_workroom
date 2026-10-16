@@ -176,6 +176,8 @@ class Cron_model extends App_Model
             // check in check out auto checkout
             $this->processCheckins();
 
+            $this->maybe_send_daily_team_break_timing_emails();
+
             // PEDMA evaluation reminder emails to managers (1st / 5th / 10th only; popup handles after 10th)
             $this->send_pedma_evaluation_reminders();
 
@@ -231,9 +233,7 @@ class Cron_model extends App_Model
     {
         $CI = &get_instance();
         $CI->load->model('timesheets_model');
-        // Calculate the timestamp 13 hours ago (13 hours cooldown)
-        $thirteenHoursAgo = time() - (13 * 60 * 60);
-        $thirteenHoursAgoFormatted = date('Y-m-d H:i:s', $thirteenHoursAgo);
+        $CI->load->helper('timesheets/timesheets');
 
         // Fetch the latest check-ins and check-outs for each staff member
         $sql = "SELECT staff_id, MAX(date) AS latest_checkin
@@ -251,13 +251,18 @@ class Cron_model extends App_Model
                 continue;
             }
 
-            // Auto-checkout only when THIS person's check-in is older than 13 hours
-            // (not at calendar midnight for everyone).
-            if ($latestCheckinTimestamp < $thirteenHoursAgoFormatted) {
+            $work_date = date('Y-m-d', strtotime($latestCheckinTimestamp));
+            $grace_hours = function_exists('timesheets_workroom_auto_checkout_hours')
+                ? (int) timesheets_workroom_auto_checkout_hours($staffId, $work_date)
+                : 13;
+            $grace_hours = max(13, min(24, $grace_hours));
+            $cutoffFormatted = date('Y-m-d H:i:s', time() - ($grace_hours * 3600));
+
+            // Auto-checkout when this person's check-in is older than their grace window.
+            if ($latestCheckinTimestamp < $cutoffFormatted) {
                 // Check if the staff member is not already checked out
                 if (!$this->isUserCheckedOut($staffId, $latestCheckinTimestamp)) {
-                    // Out time = check-in + 13 hours (per person), not a shared 19:00.
-                    $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + (13 * 3600));
+                    $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + ($grace_hours * 3600));
                     if (strtotime($auto_out) <= strtotime($latestCheckinTimestamp)) {
                         $auto_out = date('Y-m-d H:i:s', strtotime($latestCheckinTimestamp) + (9 * 3600));
                     }
@@ -270,7 +275,6 @@ class Cron_model extends App_Model
                     $this->db->insert(db_prefix() . 'check_in_out', $checkoutData);
 
                     $hours = (float) $CI->timesheets_model->get_hour($latestCheckinTimestamp, $auto_out);
-                    $CI->load->helper('timesheets/timesheets');
                     $type = timesheets_attendance_code_from_hours($hours);
 
                     $existing = $this->db->where('staff_id', $staffId)
@@ -337,7 +341,7 @@ class Cron_model extends App_Model
         if ($latest && !empty($latest->latest_checkin) && !empty($cutoffFormatted) && $latest->latest_checkin < $cutoffFormatted) {
             if (!$this->isUserCheckedOut($staffId, $latest->latest_checkin)) {
                 $work_date = date('Y-m-d', strtotime($latest->latest_checkin));
-                // Per-person: auto-out at check-in + grace window (24h WFH/remote, 13h office).
+                // Per-person: auto-out at check-in + grace window (13h Workroom; 24h only for office with no biometric that day).
                 $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + ($grace_hours * 3600));
                 if (strtotime($auto_out) <= strtotime($latest->latest_checkin)) {
                     $auto_out = date('Y-m-d H:i:s', strtotime($latest->latest_checkin) + (9 * 3600));
@@ -8240,6 +8244,463 @@ public function send_daily_timesheet_optimise_report($data)
 				echo "❌ Failed to send email. " . $this->email->print_debugger();
 			}
 		}
+
+	/**
+	 * Once per day (after configured hour): email yesterday's team break sheet to each reporting manager.
+	 * Also callable manually via cron/send_daily_team_break_timing_report.
+	 */
+	public function maybe_send_daily_team_break_timing_emails()
+	{
+		$run_hour = (int) hooks()->apply_filters('daily_team_break_timing_email_hour', 8);
+		if ((int) date('G') < $run_hour) {
+			return;
+		}
+
+		$today = date('Y-m-d');
+		if (get_option('daily_team_break_timing_last_send') === $today) {
+			return;
+		}
+
+		$this->send_daily_team_break_timing_to_managers();
+		update_option('daily_team_break_timing_last_send', $today);
+	}
+
+	/**
+	 * Daily break timing report — one HTML email per active reporting manager (direct reports only).
+	 *
+	 * @param string|null $date Biometric attendance_date format d-M-Y; default yesterday.
+	 * @return array{attempted:int,sent:int,skipped:int,failed:int,date:string}
+	 */
+	public function send_daily_team_break_timing_to_managers($date = null)
+	{
+		$this->load->library('email');
+		$this->load->model('staff_model');
+		$this->load->model('timesheets/timesheets_model');
+
+		if (!$date) {
+			$date = date('d-M-Y', strtotime('-1 day'));
+		}
+
+		$date_obj = DateTime::createFromFormat('d-M-Y', $date);
+		if (!$date_obj) {
+			echo 'Invalid date: ' . htmlspecialchars((string) $date, ENT_QUOTES, 'UTF-8');
+
+			return [
+				'attempted' => 0,
+				'sent' => 0,
+				'skipped' => 0,
+				'failed' => 0,
+				'date' => (string) $date,
+			];
+		}
+
+		$date_ymd = $date_obj->format('Y-m-d');
+		$date_label = $date_obj->format('d-M-Y');
+
+		$manager_rows = $this->db->select('DISTINCT team_manage AS manager_id', false)
+			->where('active', 1)
+			->where('team_manage >', 0)
+			->get(db_prefix() . 'staff')
+			->result_array();
+
+		$stats = [
+			'attempted' => 0,
+			'sent' => 0,
+			'skipped' => 0,
+			'failed' => 0,
+			'date' => $date_label,
+		];
+
+		$this->email->set_mailtype('html');
+		$this->email->from('noreply@t2gworkroom.com', 'Tech2globe');
+
+		foreach ($manager_rows as $mr) {
+			$manager_id = (int) ($mr['manager_id'] ?? 0);
+			if ($manager_id <= 0 || !function_exists('check_staff_active') || !check_staff_active($manager_id)) {
+				$stats['skipped']++;
+				continue;
+			}
+
+			$team_rows = $this->db->select('staffid')
+				->where('team_manage', $manager_id)
+				->where('active', 1)
+				->get(db_prefix() . 'staff')
+				->result_array();
+			$staff_ids = array_values(array_filter(array_map('intval', array_column($team_rows, 'staffid'))));
+			if (!$staff_ids) {
+				$stats['skipped']++;
+				continue;
+			}
+
+			$summary_rows = $this->timesheets_model->get_team_daily_break_total_rows($date_ymd, $staff_ids);
+			if (!$summary_rows) {
+				$stats['skipped']++;
+				continue;
+			}
+
+			$manager = $this->db->get_where(db_prefix() . 'staff', ['staffid' => $manager_id])->row();
+			if (!$manager || !filter_var($manager->email ?? '', FILTER_VALIDATE_EMAIL)) {
+				$stats['skipped']++;
+				continue;
+			}
+
+			$stats['attempted']++;
+
+			$team_total_secs = 0;
+			foreach ($summary_rows as $sr) {
+				$team_total_secs += $this->parse_break_duration_label_to_seconds($sr['total_break_day'] ?? '00:00:00');
+			}
+			$team_total_label = $this->format_seconds_as_break_hms($team_total_secs);
+
+			$html = '<div style="background:#fff;color:#222;font-family:Arial,sans-serif;font-size:14px;padding:16px;">'
+				. '<p>Dear '
+				. htmlspecialchars(trim($manager->firstname . ' ' . $manager->lastname), ENT_QUOTES, 'UTF-8')
+				. ',</p>'
+				. '<p>Daily <strong>team break summary</strong> for <strong>'
+				. htmlspecialchars($date_label, ENT_QUOTES, 'UTF-8')
+				. '</strong> (biometric short breaks ≤ 1 hour; lunch/long gaps not counted).</p>'
+				. '<p><strong>Team total break:</strong> ' . htmlspecialchars($team_total_label, ENT_QUOTES, 'UTF-8')
+				. ' · <strong>Team size on report:</strong> ' . count($summary_rows) . '</p>'
+				. '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;background:#fff;color:#111;">'
+				. '<thead style="background:#141e46;color:#fff;"><tr>'
+				. '<th>Emp ID</th><th>Employee</th><th># Breaks</th><th>Total break (day)</th>'
+				. '</tr></thead><tbody>';
+
+			foreach ($summary_rows as $r) {
+				$emp = $r['empid'] !== '' ? $r['empid'] : (string) $r['staff_id'];
+				$html .= '<tr style="background:#fff;color:#111;">'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars($emp, ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) $r['staff_name'], ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;text-align:center;">' . (int) ($r['break_count'] ?? 0) . '</td>'
+					. '<td style="border:1px solid #ddd;text-align:center;font-weight:bold;">' . htmlspecialchars((string) ($r['total_break_day'] ?? '—'), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '</tr>';
+			}
+
+			$html .= '</tbody></table>'
+				. '<p style="color:#555;font-size:12px;">This report is sent automatically each morning for the previous workday.</p>'
+				. '</div>';
+
+			$this->load->config('email');
+			$this->email->clear(true);
+			$this->email->set_newline(config_item('newline'));
+			$smtp_from = get_option('smtp_email');
+			$this->email->from($smtp_from !== '' ? $smtp_from : 'noreply@t2gworkroom.com', get_option('companyname') ?: 'Tech2globe');
+			$this->email->to($manager->email);
+			$this->email->subject('Daily team break total – ' . $date_label);
+			$this->email->message($html);
+			$this->email->set_alt_message('Daily team break summary for ' . $date_label . '. Team total: ' . $team_total_label . '. Employees: ' . count($summary_rows));
+
+			if ($this->email->send()) {
+				$stats['sent']++;
+				log_activity('Daily team break timing email sent to manager #' . $manager_id . ' for ' . $date_label);
+			} else {
+				$stats['failed']++;
+				log_message('error', 'Daily team break timing email failed for manager #' . $manager_id . ': ' . $this->email->print_debugger(['headers']));
+			}
+		}
+
+		return $stats;
+	}
+
+	/**
+	 * Parse biometric break labels (e.g. 16m, 1h 30m, 45s) or HH:MM:SS to seconds.
+	 */
+	private function parse_break_duration_label_to_seconds($label)
+	{
+		$label = trim((string) $label);
+		if ($label === '' || $label === '—' || $label === '-') {
+			return 0;
+		}
+		if (preg_match('/^(\d{1,2}):(\d{2}):(\d{2})$/', $label, $m)) {
+			return ((int) $m[1] * 3600) + ((int) $m[2] * 60) + (int) $m[3];
+		}
+
+		$secs = 0;
+		if (preg_match('/(\d+)\s*h\b/i', $label, $m)) {
+			$secs += (int) $m[1] * 3600;
+		}
+		if (preg_match('/(\d+)\s*m\b/i', $label, $m)) {
+			$secs += (int) $m[1] * 60;
+		}
+		if (preg_match('/(\d+)\s*s\b/i', $label, $m)) {
+			$secs += (int) $m[1];
+		}
+
+		return $secs;
+	}
+
+	/**
+	 * Human-readable total (matches biometric break labels in emails).
+	 */
+	private function format_seconds_as_break_hms($seconds)
+	{
+		$seconds = max(0, (int) $seconds);
+		if (!isset($this->biometric_model)) {
+			$this->load->model('biometric_model');
+		}
+
+		return $this->biometric_model->format_break_duration($seconds);
+	}
+
+	/**
+	 * E-commerce biometric attendance export (CSV) emailed to Pankaj Lohani; Sarabjeet in CC.
+	 *
+	 * @param int $months Calendar months included (default 3: current month + prior two full months).
+	 * @return array<string, mixed>
+	 */
+	public function send_ecommerce_biometric_report_to_pankaj($months = 3)
+	{
+		$months = max(1, min(12, (int) $months));
+		$this->load->helper('timesheets/timesheets');
+
+		$dept_ids = function_exists('timesheets_ecommerce_department_ids')
+			? timesheets_ecommerce_department_ids()
+			: [6, 31, 35, 37, 40, 41];
+		$dept_in = implode(',', array_map('intval', $dept_ids));
+
+		$to_ymd = date('Y-m-d');
+		$from_ymd = date('Y-m-01', strtotime('-' . ($months - 1) . ' months'));
+
+		$prefix = db_prefix();
+		$sql = "
+			SELECT br.attendance_date,
+				TRIM(br.employee_code) AS employee_code,
+				br.employee_name,
+				br.a_in_time,
+				br.a_out_time,
+				br.punch_records,
+				s.staffid,
+				TRIM(CONCAT(s.firstname, ' ', s.lastname)) AS staff_name,
+				(
+					SELECT GROUP_CONCAT(DISTINCT d.name ORDER BY d.name SEPARATOR ', ')
+					FROM {$prefix}staff_departments sd
+					INNER JOIN {$prefix}departments d ON d.departmentid = sd.departmentid
+					WHERE sd.staffid = s.staffid AND sd.departmentid IN ({$dept_in})
+				) AS ecommerce_departments
+			FROM {$prefix}biometric_report br
+			INNER JOIN {$prefix}staff s ON s.active = 1
+				AND (
+					TRIM(s.staff_identifi) = TRIM(br.employee_code)
+					OR TRIM(COALESCE((SELECT i.empid FROM {$prefix}staff_info i WHERE i.staffid = s.staffid LIMIT 1), '')) = TRIM(br.employee_code)
+				)
+			WHERE STR_TO_DATE(br.attendance_date, '%d-%b-%Y') >= ?
+			  AND STR_TO_DATE(br.attendance_date, '%d-%b-%Y') <= ?
+			  AND s.staffid IN (
+					SELECT DISTINCT sd2.staffid FROM {$prefix}staff_departments sd2
+					WHERE sd2.departmentid IN ({$dept_in})
+			  )
+			ORDER BY STR_TO_DATE(br.attendance_date, '%d-%b-%Y') ASC,
+				CAST(TRIM(br.employee_code) AS UNSIGNED) ASC,
+				TRIM(br.employee_code) ASC
+		";
+
+		$rows = $this->db->query($sql, [$from_ymd, $to_ymd])->result_array();
+		$unique_staff = [];
+		foreach ($rows as $r) {
+			$unique_staff[(int) ($r['staffid'] ?? 0)] = true;
+		}
+
+		$pankaj = $this->db->select('email, firstname, lastname')
+			->where('staffid', 202)
+			->where('active', 1)
+			->get($prefix . 'staff')
+			->row();
+		$to_email = $pankaj && filter_var($pankaj->email ?? '', FILTER_VALIDATE_EMAIL)
+			? trim($pankaj->email)
+			: 'pankaj.lohani@tech2globe.com';
+
+		$sarab = $this->db->query(
+			"SELECT email FROM {$prefix}staff WHERE active = 1 AND (firstname LIKE 'Sarab%' OR email LIKE '%sarabjeet%') ORDER BY staffid ASC LIMIT 1"
+		)->row();
+		$cc_email = $sarab && filter_var($sarab->email ?? '', FILTER_VALIDATE_EMAIL)
+			? trim($sarab->email)
+			: 'sarabjeet@tech2globe.net';
+
+		$from_label = date('d-M-Y', strtotime($from_ymd));
+		$to_label = date('d-M-Y', strtotime($to_ymd));
+		$base_name = 'Ecommerce_Biometric_' . date('Y-m-d', strtotime($from_ymd)) . '_to_' . date('Y-m-d', strtotime($to_ymd));
+		$file_name = $base_name . '.csv';
+		$xlsx_name = $base_name . '.xlsx';
+
+		$export_dir = FCPATH . 'uploads/temp/ecommerce_biometric_exports/';
+		if (!is_dir($export_dir)) {
+			@mkdir($export_dir, 0755, true);
+		}
+		$csv_path = $export_dir . $file_name;
+		$xlsx_path = $export_dir . $xlsx_name;
+
+		$header_labels = [
+			'Attendance date',
+			'Employee code',
+			'Biometric name',
+			'Workroom name',
+			'Staff ID',
+			'E-commerce department(s)',
+			'First IN (a_in_time)',
+			'Last OUT (a_out_time)',
+			'Punch records',
+		];
+
+		$fp = fopen($csv_path, 'w');
+		if ($fp === false) {
+			return ['success' => false, 'error' => 'Could not create CSV file'];
+		}
+		fwrite($fp, "\xEF\xBB\xBF");
+		fputcsv($fp, $header_labels);
+
+		$sheet_rows = [];
+		foreach ($rows as $r) {
+			$line = [
+				$r['attendance_date'] ?? '',
+				$r['employee_code'] ?? '',
+				$r['employee_name'] ?? '',
+				$r['staff_name'] ?? '',
+				$r['staffid'] ?? '',
+				$r['ecommerce_departments'] ?? '',
+				$r['a_in_time'] ?? '',
+				$r['a_out_time'] ?? '',
+				$r['punch_records'] ?? '',
+			];
+			fputcsv($fp, $line);
+			$sheet_rows[] = $line;
+		}
+		fclose($fp);
+
+		$row_count = count($rows);
+		$staff_count = count(array_filter(array_keys($unique_staff)));
+		$csv_bytes = is_file($csv_path) ? (int) filesize($csv_path) : 0;
+
+		$xlsx_ok = false;
+		$xlsx_bytes = 0;
+		$xlsx_writer_path = FCPATH . 'modules/timesheets/assets/plugins/XLSXWriter/xlsxwriter.class.php';
+		if (is_file($xlsx_writer_path)) {
+			require_once $xlsx_writer_path;
+			$header_types = [
+				'Attendance date' => 'string',
+				'Employee code' => 'string',
+				'Biometric name' => 'string',
+				'Workroom name' => 'string',
+				'Staff ID' => 'integer',
+				'E-commerce department(s)' => 'string',
+				'First IN (a_in_time)' => 'string',
+				'Last OUT (a_out_time)' => 'string',
+				'Punch records' => 'string',
+			];
+			$writer = new XLSXWriter();
+			$writer->writeSheetHeader('Biometric', $header_types, [
+				'widths' => [14, 12, 22, 22, 10, 28, 14, 14, 48],
+				'fill' => '#141e46',
+				'font-style' => 'bold',
+				'color' => '#FFFFFF',
+			]);
+			foreach ($sheet_rows as $line) {
+				$writer->writeSheetRow('Biometric', [
+					$line[0],
+					$line[1],
+					$line[2],
+					$line[3],
+					(int) $line[4],
+					$line[5],
+					$line[6],
+					$line[7],
+					$line[8],
+				]);
+			}
+			$writer->writeToFile($xlsx_path);
+			$xlsx_ok = is_file($xlsx_path) && filesize($xlsx_path) > 0;
+			$xlsx_bytes = $xlsx_ok ? (int) filesize($xlsx_path) : 0;
+		}
+
+		$preview_max = 40;
+		$preview_html = '';
+		if ($row_count > 0) {
+			$preview_html = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:12px;background:#fff;color:#111;">'
+				. '<thead style="background:#141e46;color:#fff;"><tr>';
+			foreach (['Date', 'Code', 'Name', 'Dept', 'IN', 'OUT'] as $h) {
+				$preview_html .= '<th style="border:1px solid #ccc;padding:6px;">' . htmlspecialchars($h, ENT_QUOTES, 'UTF-8') . '</th>';
+			}
+			$preview_html .= '</tr></thead><tbody>';
+			$shown = 0;
+			foreach ($rows as $r) {
+				if ($shown >= $preview_max) {
+					break;
+				}
+				$preview_html .= '<tr style="background:#fff;color:#111;">'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['attendance_date'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['employee_code'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['staff_name'] ?? $r['employee_name'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['ecommerce_departments'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['a_in_time'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['a_out_time'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '</tr>';
+				$shown++;
+			}
+			$preview_html .= '</tbody></table>';
+			if ($row_count > $preview_max) {
+				$preview_html .= '<p style="color:#333;"><em>Preview shows first ' . (int) $preview_max . ' rows. Full data is in the Excel/CSV attachments.</em></p>';
+			}
+		} else {
+			$preview_html = '<p style="color:#b45309;"><strong>No biometric rows found</strong> for this period and department filter.</p>';
+		}
+
+		$html = '<div style="background:#ffffff;color:#222222;font-family:Arial,sans-serif;font-size:14px;padding:16px;">'
+			. '<p>Dear ' . htmlspecialchars(trim(($pankaj->firstname ?? 'Pankaj') . ' ' . ($pankaj->lastname ?? 'Lohani')), ENT_QUOTES, 'UTF-8') . ',</p>'
+			. '<p>Please find attached <strong>biometric attendance</strong> for all active <strong>E-commerce</strong> team members.</p>'
+			. '<ul style="color:#222;">'
+			. '<li><strong>Period:</strong> ' . htmlspecialchars($from_label, ENT_QUOTES, 'UTF-8') . ' to ' . htmlspecialchars($to_label, ENT_QUOTES, 'UTF-8') . ' (' . (int) $months . ' months)</li>'
+			. '<li><strong>Day rows:</strong> ' . (int) $row_count . '</li>'
+			. '<li><strong>Employees with at least one day:</strong> ' . (int) $staff_count . '</li>'
+			. '<li><strong>Attachments:</strong> ' . ($xlsx_ok ? 'Excel (.xlsx)' : '') . ($xlsx_ok && $csv_bytes > 0 ? ' + ' : '') . ($csv_bytes > 0 ? 'CSV (.csv)' : '') . '</li>'
+			. '</ul>'
+			. '<p style="color:#333;"><strong>Tip:</strong> Open the <strong>.xlsx</strong> file in Excel if the CSV looks blank.</p>'
+			. $preview_html
+			. '<p style="color:#333;">Regards,<br>Workroom</p></div>';
+
+		$this->load->config('email');
+		$this->load->library('email');
+		$this->email->clear(true);
+		$this->email->set_mailtype('html');
+		$this->email->set_newline(config_item('newline'));
+		$smtp_from = get_option('smtp_email');
+		$this->email->from($smtp_from !== '' ? $smtp_from : 'noreply@t2gworkroom.com', get_option('companyname') ?: 'Tech2globe');
+		$this->email->to($to_email);
+		$this->email->cc($cc_email);
+		$this->email->subject('E-commerce biometric attendance – last ' . (int) $months . ' months (' . $from_label . ' to ' . $to_label . ')');
+		$this->email->message($html);
+		$this->email->set_alt_message(strip_tags('E-commerce biometric report. Rows: ' . $row_count . '. Period: ' . $from_label . ' to ' . $to_label . '. See attachments.'));
+
+		if ($xlsx_ok) {
+			$this->email->attach($xlsx_path, 'attachment', $xlsx_name);
+		}
+		if ($csv_bytes > 0) {
+			$this->email->attach($csv_path, 'attachment', $file_name);
+		}
+
+		$sent = $this->email->send();
+		$debug = $sent ? '' : $this->email->print_debugger(['headers']);
+
+		if ($sent) {
+			log_activity('E-commerce biometric report sent to Pankaj (CC Sarabjeet), rows=' . $row_count . ', csv_bytes=' . $csv_bytes . ', xlsx_bytes=' . $xlsx_bytes);
+		} else {
+			log_message('error', 'E-commerce biometric report email failed: ' . $debug);
+		}
+
+		return [
+			'success' => (bool) $sent,
+			'to' => $to_email,
+			'cc' => $cc_email,
+			'from_date' => $from_ymd,
+			'to_date' => $to_ymd,
+			'rows' => $row_count,
+			'staff_with_data' => $staff_count,
+			'csv_file' => $file_name,
+			'csv_bytes' => $csv_bytes,
+			'xlsx_file' => $xlsx_ok ? $xlsx_name : null,
+			'xlsx_bytes' => $xlsx_bytes,
+			'export_dir' => $export_dir,
+			'debug' => $sent ? null : $debug,
+		];
+	}
 
 		/*Biometric attendace send to staff member and mangaer*/
 

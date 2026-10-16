@@ -14084,7 +14084,9 @@ class timesheets extends AdminController
 		try {
 			$data['month_year'] = date('Y-m');
 
-			$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
+			$this->load->helper('timesheets/timesheets');
+			$att_access = $this->check_employee_attendance_access_flags();
+			$is_full_access = $att_access['can_filter_by_manager'];
 
 			// Only apply reporting-manager filter when explicitly selected (or forced for managers).
 			$reporting_person = (int) ($this->input->post('reporting_person') ?: 0);
@@ -14116,11 +14118,20 @@ class timesheets extends AdminController
 			$this->load->model('departments_model');
 			$department_id = (int) ($this->input->post('department_id') ?: 0);
 			$data['departments'] = $this->departments_model->get();
+			if ($att_access['ecommerce_scope']) {
+				$allowed_depts = timesheets_ecommerce_department_ids();
+				$data['departments'] = array_values(array_filter($data['departments'], function ($d) use ($allowed_depts) {
+					return in_array((int) ($d['departmentid'] ?? 0), $allowed_depts, true);
+				}));
+				if ($department_id > 0 && !in_array($department_id, $allowed_depts, true)) {
+					$department_id = 0;
+				}
+			}
 			$data['department_id'] = $department_id > 0 ? $department_id : '';
 
 			// Manager dropdown syncs to selected department (HR → HR-relevant managers only).
 			if ($is_full_access) {
-				$data['staffs_in_select_option'] = $this->check_employee_attendance_manager_list($department_id);
+				$data['staffs_in_select_option'] = $this->check_employee_attendance_manager_list_for_viewer($department_id);
 				// Drop stale manager selection if not in filtered list.
 				if ($reporting_person > 0) {
 					$mgr_ids = array_map('intval', array_column($data['staffs_in_select_option'], 'staffid'));
@@ -14150,7 +14161,7 @@ class timesheets extends AdminController
 
 			$calendarsPerPage = 9;
 
-			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id) {
+			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id, $att_access) {
 				$this->db->where('s.active', 1);
 				if ($team_manage_filter) {
 					// Direct reports OR the manager/HOD themselves (own attendance).
@@ -14162,6 +14173,13 @@ class timesheets extends AdminController
 				if ($department_id > 0) {
 					$this->db->where(
 						's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+						null,
+						false
+					);
+				} elseif (!empty($att_access['ecommerce_scope'])) {
+					$in = implode(',', array_map('intval', timesheets_ecommerce_department_ids()));
+					$this->db->where(
+						's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid IN (' . $in . '))',
 						null,
 						false
 					);
@@ -14230,12 +14248,20 @@ class timesheets extends AdminController
 			return;
 		}
 
-		$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
+		$this->load->helper('timesheets/timesheets');
+		$att_access = $this->check_employee_attendance_access_flags();
+		$is_full_access = $att_access['can_filter_by_manager'];
 		$department_id = (int) ($this->input->get_post('department_id') ?: 0);
+		if ($att_access['ecommerce_scope']) {
+			$allowed_depts = timesheets_ecommerce_department_ids();
+			if ($department_id > 0 && !in_array($department_id, $allowed_depts, true)) {
+				$department_id = 0;
+			}
+		}
 		$reporting_person = (int) ($this->input->get_post('reporting_person') ?: 0);
 
 		$managers = $is_full_access
-			? $this->check_employee_attendance_manager_list($department_id)
+			? $this->check_employee_attendance_manager_list_for_viewer($department_id)
 			: [];
 
 		if ($reporting_person > 0 && $is_full_access) {
@@ -14342,6 +14368,9 @@ class timesheets extends AdminController
 	 */
 	private function check_employee_attendance_staff_list($team_manage_filter = null, $department_id = 0)
 	{
+		$this->load->helper('timesheets/timesheets');
+		$att_access = $this->check_employee_attendance_access_flags();
+
 		$this->db->select(
 			's.staffid, CONCAT(s.firstname, " ", s.lastname, IFNULL(CONCAT(" - ", NULLIF(s.staff_identifi, "")), "")) AS full_name',
 			false
@@ -14356,8 +14385,21 @@ class timesheets extends AdminController
 			$this->db->group_end();
 		}
 		if ((int) $department_id > 0) {
+			if (!empty($att_access['ecommerce_scope'])) {
+				$allowed = timesheets_ecommerce_department_ids();
+				if (!in_array((int) $department_id, $allowed, true)) {
+					return [];
+				}
+			}
 			$this->db->where(
 				's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+				null,
+				false
+			);
+		} elseif (!empty($att_access['ecommerce_scope'])) {
+			$in = implode(',', array_map('intval', timesheets_ecommerce_department_ids()));
+			$this->db->where(
+				's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid IN (' . $in . '))',
 				null,
 				false
 			);
@@ -14365,6 +14407,54 @@ class timesheets extends AdminController
 		$this->db->order_by('s.firstname', 'ASC');
 		$q = $this->db->get();
 		return $q !== false ? $q->result_array() : [];
+	}
+
+	/**
+	 * @return array{company_wide:bool,ecommerce_scope:bool,can_filter_by_manager:bool}
+	 */
+	private function check_employee_attendance_access_flags()
+	{
+		$this->load->helper('timesheets/timesheets');
+		$company_wide = timesheets_company_wide_attendance_access();
+		$ecommerce_scope = !$company_wide && timesheets_can_view_ecommerce_attendance();
+
+		return [
+			'company_wide' => $company_wide,
+			'ecommerce_scope' => $ecommerce_scope,
+			'can_filter_by_manager' => timesheets_check_employee_attendance_manager_filter_access(),
+		];
+	}
+
+	/**
+	 * Manager dropdown for Check Employee Attendance (company-wide or e-commerce scoped).
+	 */
+	private function check_employee_attendance_manager_list_for_viewer($department_id = 0)
+	{
+		$att_access = $this->check_employee_attendance_access_flags();
+		if ($att_access['company_wide']) {
+			return $this->check_employee_attendance_manager_list($department_id);
+		}
+		if (!$att_access['ecommerce_scope']) {
+			return [];
+		}
+
+		$department_id = (int) $department_id;
+		if ($department_id > 0) {
+			return $this->check_employee_attendance_manager_list($department_id);
+		}
+
+		$by_id = [];
+		foreach (timesheets_ecommerce_department_ids() as $dept_id) {
+			foreach ($this->check_employee_attendance_manager_list((int) $dept_id) as $row) {
+				$by_id[(int) $row['staffid']] = $row;
+			}
+		}
+		$rows = array_values($by_id);
+		usort($rows, function ($a, $b) {
+			return strcasecmp((string) ($a['full_name'] ?? ''), (string) ($b['full_name'] ?? ''));
+		});
+
+		return $rows;
 	}
 
 	public function get_staff_attendance($staffid, $month, $year)
@@ -14382,8 +14472,14 @@ class timesheets extends AdminController
 			if ($code === '' || $code === 'O') {
 				continue;
 			}
+			$wfh_allotted = !empty($day['wfh_allotted']) || (($day['attendance_source'] ?? '') === 'wfh');
 			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
-				$code = 'P';
+				$code = $wfh_allotted ? 'WFH' : 'P';
+			} elseif ($code === 'WFH' || $wfh_allotted) {
+				// Allotted WFH day (Manage WFH module) — keep label on team calendar.
+				if ($code === 'P' || $code === '') {
+					$code = 'WFH';
+				}
 			} elseif ($status === 'absent' || $status === 'punch_missing' || $status === 'rejected') {
 				$code = 'AB';
 			} elseif ($status === 'short_hours' && $code === 'P') {
@@ -14817,8 +14913,10 @@ class timesheets extends AdminController
 			'HO' => '#3d85c6',
 			'UL' => '#666666',
 			'W' => '#2ecc71',
+			'WFH' => '#7c3aed',
 		];
 		$type = strtoupper((string) $type);
 		return $map[$type] ?? '#7f8c8d';
 	}
+
 }
