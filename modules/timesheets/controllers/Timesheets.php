@@ -258,6 +258,7 @@ class timesheets extends AdminController
 			'0' => 'Pending',
 			'1' => 'Approved',
 			'2' => 'Rejected',
+			'3' => 'Cancelled',
 			'-1' => 'Cancelled',
 		];
 
@@ -289,7 +290,7 @@ class timesheets extends AdminController
 		$this->db->select('id, start_time, end_time, number_of_leaving_day, type_of_leave_text, type_of_leave, status');
 		$this->db->from($prefix . 'timesheets_requisition_leave');
 		$this->db->where('staff_id', $staff_id);
-		$this->db->where('status !=', 2);
+		$this->db->where_not_in('status', [2, 3]);
 		$this->db->where('YEAR(start_time) = ' . $year, null, false);
 		$cal_q = $this->db->get();
 		$cal_rows = $cal_q !== false ? $cal_q->result_array() : [];
@@ -344,7 +345,7 @@ class timesheets extends AdminController
 		//echo $type;
 		//echo 'SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "'.$start_date.'" AND "'.$end_date.'" AND date(end_time) BETWEEN "'.$start_date.'" AND "'.$end_date.'" AND staff_id = "'.$staff_id.'"';die;	
 
-		$res  = $this->db->query('SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND date(end_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND staff_id = "' . $staff_id . '"')->result_array();
+		$res  = $this->db->query('SELECT * FROM tbltimesheets_requisition_leave WHERE date(start_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND date(end_time) BETWEEN "' . $start_date . '" AND "' . $end_date . '" AND staff_id = "' . $staff_id . '" AND status != 3')->result_array();
 		//print_r($res);die;
 		$count  = count($res);
 		if ($count > 0 and $type == 'unplanned_leaves') {
@@ -380,6 +381,7 @@ class timesheets extends AdminController
 		$this->db->where('type_of_leave', $type);
 		$this->db->where('MONTH(datecreated)', $month); //For current month
 		$this->db->where('staff_id', $staff_id);
+		$this->db->where('status !=', 3);
 		$res  = $this->db->get(db_prefix() . 'timesheets_requisition_leave')->result_array();
 		$count  = count($res);
 		//	echo '<pre>';print_r($res);
@@ -1658,6 +1660,33 @@ class timesheets extends AdminController
 				set_alert('warning', 'Comp - Off and Work From Home are no longer available.');
 				redirect(admin_url('timesheets/requisition_manage'));
 			}
+			$this->timesheets_model->ensure_leave_requisition_audit_columns();
+			$requested_as = $leave_type;
+
+			$overlap_start = $leave_start_ymd;
+			$overlap_end = $leave_end_ymd;
+			if (in_array($leave_type, ['half-days', 'unpaid-half-days', 'short-leaves', 'saturday-leaves'], true)) {
+				$single = date('Y-m-d', strtotime($data['end_time']));
+				$overlap_start = $single;
+				$overlap_end = $single;
+			}
+			if (!in_array($leave_type, ['comp-off'], true)) {
+				$exclude_leave_id = (int) ($this->input->post('leave_id') ?: ($this->input->post('id') ?: 0));
+				$overlap = $this->timesheets_model->find_overlapping_leave_requisition(
+					(int) $data['staff_id'],
+					$overlap_start,
+					$overlap_end,
+					$exclude_leave_id
+				);
+				if ($overlap) {
+					echo json_encode([
+						'success' => false,
+						'message' => 'Leave dates overlap an existing pending or approved request (#' . (int) $overlap->id . ').',
+					]);
+					die;
+				}
+			}
+
 			if (!in_array($leave_type, ['present', 'half-days', 'unpaid-half-days'], true)) {
 				$start_session = (int) ($this->input->post('start_session') ?: 1);
 				$end_session = (int) ($this->input->post('end_session') ?: 2);
@@ -1695,21 +1724,28 @@ class timesheets extends AdminController
 				$leave_year,
 				$leave_month
 			);
-			$earned_balance = (float) $earned_synced['balance'];
+			$earned_balance = (float) ($earned_synced['balance'] ?? 0);
+			$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
+			$earned_pending = (float) ($earned_synced['pending'] ?? 0);
 			if (($requested_synced['slug'] ?? '') === 'earned-leave') {
-				if ($earned_balance <= 0 || $days_for_balance > ($earned_balance + 0.001)) {
+				if ($earned_available <= 0 || $days_for_balance > ($earned_available + 0.001)) {
 					$data['type_of_leave'] = 'loss-of-pay';
 					$leave_type = 'loss-of-pay';
-					if ($earned_balance <= 0) {
-						set_alert('warning', 'No earned leave balance. Application saved as Loss of Pay.');
+					if ($earned_available <= 0) {
+						set_alert('warning', 'No earned leave available (after pending requests). Application saved as Loss of Pay.');
 					} else {
 						set_alert(
 							'warning',
-							'Earned leave available: ' . $earned_balance . ' day(s), but request is ' . $days_for_balance . ' day(s). Application saved as Loss of Pay.'
+							'Earned leave available: ' . $earned_available . ' day(s)'
+							. ($earned_pending > 0 ? ' (pending: ' . $earned_pending . ')' : '')
+							. ', but request is ' . $days_for_balance . ' day(s). Application saved as Loss of Pay.'
 						);
 					}
 				}
 			}
+
+			$data['requested_as'] = $requested_as;
+			$data['saved_as'] = $leave_type;
 
 			$synced = $this->timesheets_model->get_synced_leave_balance(
 				(int) $data['staff_id'],
@@ -1720,11 +1756,11 @@ class timesheets extends AdminController
 			$data['carry_forward'] = ($leave_type === 'loss-of-pay')
 				? $earned_synced['carry_forward']
 				: $synced['carry_forward'];
-			// Store remaining EL balance AFTER this application (legacy readers use this column).
+			// Legacy column — audit only; logic uses get_synced_leave_balance (available).
 			if ($leave_type === 'loss-of-pay') {
-				$data['leave_balance'] = round($earned_balance, 2);
+				$data['leave_balance'] = round($earned_available, 2);
 			} else {
-				$data['leave_balance'] = round($earned_balance - $days_for_balance, 2);
+				$data['leave_balance'] = round($earned_available - $days_for_balance, 2);
 			}
 
 			if (isset($data['according_to_the_plan'])) {
@@ -12726,7 +12762,9 @@ class timesheets extends AdminController
 
 		// Always resolve earned-leave balance for EL vs LOP enforcement on the apply form.
 		$earned_synced = $this->timesheets_model->get_synced_leave_balance($id, 'earned-leave', $year, $month);
-		$earned_balance = (float) $earned_synced['balance'];
+		$earned_balance = (float) ($earned_synced['balance'] ?? 0);
+		$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
+		$earned_pending = (float) ($earned_synced['pending'] ?? 0);
 
 		$month_label = date('F Y', mktime(0, 0, 0, $month, 1, $year));
 		$type_label = $type_of_leave !== '' ? htmlspecialchars((string) $type_of_leave) : htmlspecialchars($synced['slug']);
@@ -12735,8 +12773,12 @@ class timesheets extends AdminController
 		$html .= '<div style="margin-top:4px;"><strong>Carry forward:</strong> ' . $carry . '</div>';
 		$html .= '<div><strong>Leaves taken (this month):</strong> ' . $taken . '</div>';
 		$html .= '<div><strong>Earned leave (rate):</strong> ' . ((float) ($synced['monthly_earn'] ?? $earned)) . '</div>';
-		$html .= '<div class="' . ($earned_balance <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
-		$html .= '<strong>Current earned leave balance: ' . $earned_balance . '</strong></div>';
+		if ($earned_pending > 0) {
+			$html .= '<div><strong>Pending earned leave:</strong> ' . $earned_pending . '</div>';
+		}
+		$html .= '<div class="' . ($earned_available <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
+		$html .= '<strong>Available earned leave: ' . $earned_available . '</strong></div>';
+		$html .= '<div class="text-muted" style="font-size:12px;">Balance (approved only): ' . $earned_balance . '</div>';
 
 		if ($number_day_off > 0 || $days_off > 0) {
 			$html .= '<hr style="margin:8px 0;">';
@@ -12744,14 +12786,14 @@ class timesheets extends AdminController
 			$html .= '<div class="' . ($number_day_off == 0 ? 'text-danger' : '') . '">' . _l('number_of_leave_days_allowed') . ': ' . $number_day_off . '</div>';
 		}
 
-		// For earned leave apply: usable days = earned balance (not legacy day_off when zero).
-		$allowed = $earned_balance > 0 ? $earned_balance : 0;
+		// For earned leave apply: usable days = available (balance minus pending EL).
+		$allowed = $earned_available > 0 ? $earned_available : 0;
 		if ($synced['slug'] === 'loss-of-pay') {
 			$allowed = 999; // LOP is not limited by EL balance
 		}
 
 		$html .= '<input type="hidden" name="number_day_off" value="' . $allowed . '">';
-		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_balance . '">';
+		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_available . '">';
 
 		$valid_cur_date = $this->timesheets_model->get_next_shift_date($id, date('Y-m-d'));
 
@@ -12759,13 +12801,15 @@ class timesheets extends AdminController
 			'html' => $html,
 			'valid_date' => _d($valid_cur_date),
 			'balance' => $earned_balance,
-			'earned_balance' => $earned_balance,
+			'available' => $earned_available,
+			'pending' => $earned_pending,
+			'earned_balance' => $earned_available,
 			'type_balance' => $balance,
 			'carry_forward' => (float) $earned_synced['carry_forward'],
 			'leave_taken' => (float) $earned_synced['consumed'],
 			'earned_leave' => (float) ($earned_synced['monthly_earn'] ?? $earned_synced['granted']),
 			'number_day_off' => $allowed,
-			'can_use_earned_leave' => $earned_balance > 0,
+			'can_use_earned_leave' => $earned_available > 0,
 			'month' => $month_label,
 			'type' => $type_label,
 			'slug' => $synced['slug'],
@@ -14021,7 +14065,9 @@ class timesheets extends AdminController
 		try {
 			$data['month_year'] = date('Y-m');
 
-			$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
+			$this->load->helper('timesheets/timesheets');
+			$att_access = $this->check_employee_attendance_access_flags();
+			$is_full_access = $att_access['can_filter_by_manager'];
 
 			// Only apply reporting-manager filter when explicitly selected (or forced for managers).
 			$reporting_person = (int) ($this->input->post('reporting_person') ?: 0);
@@ -14053,11 +14099,20 @@ class timesheets extends AdminController
 			$this->load->model('departments_model');
 			$department_id = (int) ($this->input->post('department_id') ?: 0);
 			$data['departments'] = $this->departments_model->get();
+			if ($att_access['ecommerce_scope']) {
+				$allowed_depts = timesheets_ecommerce_department_ids();
+				$data['departments'] = array_values(array_filter($data['departments'], function ($d) use ($allowed_depts) {
+					return in_array((int) ($d['departmentid'] ?? 0), $allowed_depts, true);
+				}));
+				if ($department_id > 0 && !in_array($department_id, $allowed_depts, true)) {
+					$department_id = 0;
+				}
+			}
 			$data['department_id'] = $department_id > 0 ? $department_id : '';
 
 			// Manager dropdown syncs to selected department (HR → HR-relevant managers only).
 			if ($is_full_access) {
-				$data['staffs_in_select_option'] = $this->check_employee_attendance_manager_list($department_id);
+				$data['staffs_in_select_option'] = $this->check_employee_attendance_manager_list_for_viewer($department_id);
 				// Drop stale manager selection if not in filtered list.
 				if ($reporting_person > 0) {
 					$mgr_ids = array_map('intval', array_column($data['staffs_in_select_option'], 'staffid'));
@@ -14087,7 +14142,7 @@ class timesheets extends AdminController
 
 			$calendarsPerPage = 9;
 
-			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id) {
+			$apply_staff_scope = function () use ($team_manage_filter, $department_id, $staff_id, $att_access) {
 				$this->db->where('s.active', 1);
 				if ($team_manage_filter) {
 					// Direct reports OR the manager/HOD themselves (own attendance).
@@ -14099,6 +14154,13 @@ class timesheets extends AdminController
 				if ($department_id > 0) {
 					$this->db->where(
 						's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+						null,
+						false
+					);
+				} elseif (!empty($att_access['ecommerce_scope'])) {
+					$in = implode(',', array_map('intval', timesheets_ecommerce_department_ids()));
+					$this->db->where(
+						's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid IN (' . $in . '))',
 						null,
 						false
 					);
@@ -14167,12 +14229,20 @@ class timesheets extends AdminController
 			return;
 		}
 
-		$is_full_access = is_admin() || is_HR() || is_super_hr() || get_staff_user_id() == 23;
+		$this->load->helper('timesheets/timesheets');
+		$att_access = $this->check_employee_attendance_access_flags();
+		$is_full_access = $att_access['can_filter_by_manager'];
 		$department_id = (int) ($this->input->get_post('department_id') ?: 0);
+		if ($att_access['ecommerce_scope']) {
+			$allowed_depts = timesheets_ecommerce_department_ids();
+			if ($department_id > 0 && !in_array($department_id, $allowed_depts, true)) {
+				$department_id = 0;
+			}
+		}
 		$reporting_person = (int) ($this->input->get_post('reporting_person') ?: 0);
 
 		$managers = $is_full_access
-			? $this->check_employee_attendance_manager_list($department_id)
+			? $this->check_employee_attendance_manager_list_for_viewer($department_id)
 			: [];
 
 		if ($reporting_person > 0 && $is_full_access) {
@@ -14279,6 +14349,9 @@ class timesheets extends AdminController
 	 */
 	private function check_employee_attendance_staff_list($team_manage_filter = null, $department_id = 0)
 	{
+		$this->load->helper('timesheets/timesheets');
+		$att_access = $this->check_employee_attendance_access_flags();
+
 		$this->db->select(
 			's.staffid, CONCAT(s.firstname, " ", s.lastname, IFNULL(CONCAT(" - ", NULLIF(s.staff_identifi, "")), "")) AS full_name',
 			false
@@ -14293,8 +14366,21 @@ class timesheets extends AdminController
 			$this->db->group_end();
 		}
 		if ((int) $department_id > 0) {
+			if (!empty($att_access['ecommerce_scope'])) {
+				$allowed = timesheets_ecommerce_department_ids();
+				if (!in_array((int) $department_id, $allowed, true)) {
+					return [];
+				}
+			}
 			$this->db->where(
 				's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid = ' . (int) $department_id . ')',
+				null,
+				false
+			);
+		} elseif (!empty($att_access['ecommerce_scope'])) {
+			$in = implode(',', array_map('intval', timesheets_ecommerce_department_ids()));
+			$this->db->where(
+				's.staffid IN (SELECT sd.staffid FROM ' . db_prefix() . 'staff_departments sd WHERE sd.departmentid IN (' . $in . '))',
 				null,
 				false
 			);
@@ -14302,6 +14388,54 @@ class timesheets extends AdminController
 		$this->db->order_by('s.firstname', 'ASC');
 		$q = $this->db->get();
 		return $q !== false ? $q->result_array() : [];
+	}
+
+	/**
+	 * @return array{company_wide:bool,ecommerce_scope:bool,can_filter_by_manager:bool}
+	 */
+	private function check_employee_attendance_access_flags()
+	{
+		$this->load->helper('timesheets/timesheets');
+		$company_wide = timesheets_company_wide_attendance_access();
+		$ecommerce_scope = !$company_wide && timesheets_can_view_ecommerce_attendance();
+
+		return [
+			'company_wide' => $company_wide,
+			'ecommerce_scope' => $ecommerce_scope,
+			'can_filter_by_manager' => timesheets_check_employee_attendance_manager_filter_access(),
+		];
+	}
+
+	/**
+	 * Manager dropdown for Check Employee Attendance (company-wide or e-commerce scoped).
+	 */
+	private function check_employee_attendance_manager_list_for_viewer($department_id = 0)
+	{
+		$att_access = $this->check_employee_attendance_access_flags();
+		if ($att_access['company_wide']) {
+			return $this->check_employee_attendance_manager_list($department_id);
+		}
+		if (!$att_access['ecommerce_scope']) {
+			return [];
+		}
+
+		$department_id = (int) $department_id;
+		if ($department_id > 0) {
+			return $this->check_employee_attendance_manager_list($department_id);
+		}
+
+		$by_id = [];
+		foreach (timesheets_ecommerce_department_ids() as $dept_id) {
+			foreach ($this->check_employee_attendance_manager_list((int) $dept_id) as $row) {
+				$by_id[(int) $row['staffid']] = $row;
+			}
+		}
+		$rows = array_values($by_id);
+		usort($rows, function ($a, $b) {
+			return strcasecmp((string) ($a['full_name'] ?? ''), (string) ($b['full_name'] ?? ''));
+		});
+
+		return $rows;
 	}
 
 	public function get_staff_attendance($staffid, $month, $year)
@@ -14319,8 +14453,14 @@ class timesheets extends AdminController
 			if ($code === '' || $code === 'O') {
 				continue;
 			}
+			$wfh_allotted = !empty($day['wfh_allotted']) || (($day['attendance_source'] ?? '') === 'wfh');
 			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
-				$code = 'P';
+				$code = $wfh_allotted ? 'WFH' : 'P';
+			} elseif ($code === 'WFH' || $wfh_allotted) {
+				// Allotted WFH day (Manage WFH module) — keep label on team calendar.
+				if ($code === 'P' || $code === '') {
+					$code = 'WFH';
+				}
 			} elseif ($status === 'absent' || $status === 'punch_missing' || $status === 'rejected') {
 				$code = 'AB';
 			} elseif ($status === 'short_hours' && $code === 'P') {
@@ -14754,8 +14894,10 @@ class timesheets extends AdminController
 			'HO' => '#3d85c6',
 			'UL' => '#666666',
 			'W' => '#2ecc71',
+			'WFH' => '#7c3aed',
 		];
 		$type = strtoupper((string) $type);
 		return $map[$type] ?? '#7f8c8d';
 	}
+
 }

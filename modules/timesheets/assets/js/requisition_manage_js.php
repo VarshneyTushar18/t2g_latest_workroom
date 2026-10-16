@@ -805,11 +805,14 @@
     }
     $.post(admin_url+'timesheets/get_remain_day_of/'+staff_id+'/'+encodeURIComponent(type_of_leave || 'earned-leave'), payload).done(function(response){
       try { response = typeof response === 'string' ? JSON.parse(response) : response; } catch(e) { response = {}; }
-      if(typeof response.earned_balance !== 'undefined'){
+      if(typeof response.available !== 'undefined'){
+        window._earnedLeaveBalance = parseFloat(response.available);
+      } else if(typeof response.earned_balance !== 'undefined'){
         window._earnedLeaveBalance = parseFloat(response.earned_balance);
       } else if(typeof response.balance !== 'undefined'){
         window._earnedLeaveBalance = parseFloat(response.balance);
       }
+      window._earnedLeavePending = (typeof response.pending !== 'undefined') ? parseFloat(response.pending) : 0;
       if(typeof response.balance !== 'undefined'){
         var bal = format_leave_number(window._earnedLeaveBalance);
         $('#leave_balance_value').text(bal);

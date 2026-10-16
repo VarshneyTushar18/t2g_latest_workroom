@@ -115,22 +115,20 @@
 
                         $data_check_in_out = $CI->timesheets_model->get_latest_check_in_out();
                         $html_list = '';
+                        $type_check_in_out = '';
+                        $time_from_checkin = 999;
 
-                        $type_check_in_out = $data_check_in_out[0]['type_check'];
+                        if (!empty($data_check_in_out) && isset($data_check_in_out[0]['type_check'])) {
+                            $type_check_in_out = $data_check_in_out[0]['type_check'];
 
-                        $time_from_checkin = '';
-
-                        if ($type_check_in_out == 1) {
-
-                            $html_list = '<div class="row"><div class="col-md-12"><div class="alert alert-success">  Checked in at : ' . _dt($data_check_in_out[0]['date']) . '</div></div></div>';
-                            $time_from_checkin = abs(strtotime("now") - strtotime($data_check_in_out[0]['date'])) / 3600;
-
-                        } else {
-                            $html_list = '<div class="row"><div class="col-md-12"><div class="alert alert-success">  Checked in at : ' . _dt($data_check_in_out[1]['date']) . '</div></div></div>';
-
-                            $html_list .= '<div class="row"><div class="col-md-12"><div class="alert alert-warning"> Checked out at : ' . _dt($data_check_in_out[0]['date']) . '</div></div></div>';
-
-                            $time_from_checkin = abs(strtotime("now") - strtotime($data_check_in_out[1]['date'])) / 3600;
+                            if ($type_check_in_out == 1) {
+                                $html_list = '<div class="row"><div class="col-md-12"><div class="alert alert-success">  Checked in at : ' . _dt($data_check_in_out[0]['date']) . '</div></div></div>';
+                                $time_from_checkin = abs(strtotime('now') - strtotime($data_check_in_out[0]['date'])) / 3600;
+                            } elseif (isset($data_check_in_out[1]['date'])) {
+                                $html_list = '<div class="row"><div class="col-md-12"><div class="alert alert-success">  Checked in at : ' . _dt($data_check_in_out[1]['date']) . '</div></div></div>';
+                                $html_list .= '<div class="row"><div class="col-md-12"><div class="alert alert-warning"> Checked out at : ' . _dt($data_check_in_out[0]['date']) . '</div></div></div>';
+                                $time_from_checkin = abs(strtotime('now') - strtotime($data_check_in_out[1]['date'])) / 3600;
+                            }
                         }
 
 

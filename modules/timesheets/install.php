@@ -315,6 +315,14 @@ if ($CI->db->field_exists('start_time', db_prefix() . 'timesheets_requisition_le
         MODIFY `end_time` DATE NULL'
 	);
 }
+if (!$CI->db->field_exists('requested_as', db_prefix() . 'timesheets_requisition_leave')) {
+	$CI->db->query('ALTER TABLE `' . db_prefix() . 'timesheets_requisition_leave`
+        ADD COLUMN `requested_as` VARCHAR(64) NULL DEFAULT NULL');
+}
+if (!$CI->db->field_exists('saved_as', db_prefix() . 'timesheets_requisition_leave')) {
+	$CI->db->query('ALTER TABLE `' . db_prefix() . 'timesheets_requisition_leave`
+        ADD COLUMN `saved_as` VARCHAR(64) NULL DEFAULT NULL');
+}
 
 if (!$CI->db->table_exists(db_prefix() . 'shift_type')) {
 	$CI->db->query('CREATE TABLE `' . db_prefix() . "shift_type` (

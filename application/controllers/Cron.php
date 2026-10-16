@@ -207,6 +207,25 @@ class Cron extends App_Controller
 		$this->cron_model->send_break_report_to_staff();
 	}
 
+	/** E-commerce biometric CSV to Pankaj Lohani (CC Sarabjeet). Optional ?months=3 */
+	public function send_ecommerce_biometric_report_pankaj($months = 3)
+	{
+		$this->load->model('cron_model');
+		$result = $this->cron_model->send_ecommerce_biometric_report_to_pankaj($months);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** Daily break timing sheet to each reporting manager (default: yesterday). Optional date: d-M-Y */
+	public function send_daily_team_break_timing_report($date = '')
+	{
+		$this->load->model('cron_model');
+		$att_date = $date !== '' ? $date : null;
+		$result = $this->cron_model->send_daily_team_break_timing_to_managers($att_date);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
     /**
      * PEDMA evaluation email reminders for managers (days 1, 5, and 10 only).
      * Example: /cron/send_pedma_evaluation_reminders/YOUR_CRON_KEY
@@ -251,6 +270,46 @@ class Cron extends App_Controller
 			print_r($this->email->print_debugger());
 			die('Failed to send email.');
 		}
+	}
+
+	/** Run Perfex/Workroom DB migrations to migration_version (CLI only). */
+	public function upgrade_db()
+	{
+		if (!$this->input->is_cli_request()) {
+			echo "Direct access not allowed\n";
+			return;
+		}
+
+		$this->load->config('migration');
+		if ($this->config->item('migration_enabled') !== true) {
+			echo "Enable migration_enabled in application/config/migration.php\n";
+			return;
+		}
+
+		$target = (int) $this->config->item('migration_version');
+		$before = (int) $this->app->get_current_db_version();
+		echo "Upgrading database from {$before} to {$target}...\n";
+
+		$this->load->library('migration', [
+			'migration_enabled'     => true,
+			'migration_type'        => $this->config->item('migration_type'),
+			'migration_table'       => $this->config->item('migration_table'),
+			'migration_auto_latest' => $this->config->item('migration_auto_latest'),
+			'migration_version'     => $target,
+			'migration_path'        => $this->config->item('migration_path'),
+		]);
+
+		if (!defined('DOING_DATABASE_UPGRADE')) {
+			define('DOING_DATABASE_UPGRADE', true);
+		}
+
+		if ($this->migration->current() === false) {
+			echo 'Migration failed: ' . $this->migration->error_string() . "\n";
+			return;
+		}
+
+		$after = (int) $this->app->get_current_db_version();
+		echo "Done. Database version is now {$after}.\n";
 	}
 
 }

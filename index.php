@@ -93,6 +93,30 @@ switch (ENVIRONMENT)
 		exit(1); // EXIT_ERROR
 }
 
+if (ENVIRONMENT === 'production' && PHP_SAPI !== 'cli') {
+	$GLOBALS['_t2g_maintenance_view'] = __DIR__ . '/application/views/errors/html/maintenance.php';
+	register_shutdown_function(function () {
+		$err = error_get_last();
+		if (!$err || !in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+			return;
+		}
+		$path = $GLOBALS['_t2g_maintenance_view'] ?? '';
+		if ($path === '' || !is_file($path)) {
+			return;
+		}
+		while (ob_get_level() > 0) {
+			@ob_end_clean();
+		}
+		if (!headers_sent()) {
+			http_response_code(503);
+			header('Content-Type: text/html; charset=utf-8');
+			header('Retry-After: 300');
+		}
+		$http_code = 503;
+		include $path;
+	});
+}
+
 /*
  *---------------------------------------------------------------
  * SYSTEM DIRECTORY NAME

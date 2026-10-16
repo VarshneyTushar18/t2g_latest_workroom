@@ -135,7 +135,7 @@ function attendance_permission($id = '')
         return true;
     }
 
-    if (get_staff_user_id() == 178) {
+    if ((int) $id === 178 || (int) $id === 202) {
         return true;
     }
 

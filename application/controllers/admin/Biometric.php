@@ -118,6 +118,13 @@ class Biometric extends AdminController
 			return null;
 		}
 
+		$this->load->helper('timesheets/timesheets');
+		if (function_exists('timesheets_can_view_ecommerce_attendance') && timesheets_can_view_ecommerce_attendance()) {
+			$ids = timesheets_ecommerce_attendance_staff_ids();
+
+			return $ids ?: [(int) get_staff_user_id()];
+		}
+
 		$uid = (int) get_staff_user_id();
 		$ids = [$uid];
 		$rows = $this->db->select('staffid')

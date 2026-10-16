@@ -214,12 +214,18 @@
                   <label class="control-label">Department</label>
                   <?php echo render_select('department_id', $departments ?? [], array('departmentid', 'name'), '', $department_id ?? '') ?>
                 </div>
-                <?php if (is_admin() || is_HR() || is_super_hr() || (get_staff_user_id() == 23)): ?>
+                <?php
+                if (!function_exists('timesheets_check_employee_attendance_manager_filter_access')) {
+                    $CI = &get_instance();
+                    $CI->load->helper('timesheets/timesheets');
+                }
+                if (timesheets_check_employee_attendance_manager_filter_access() || is_admin() || is_HR() || is_super_hr() || (get_staff_user_id() == 23)) {
+                ?>
                   <div class="col-md-2 leads-filter-column">
                     <label class="control-label">Reporting manager</label>
                     <?php echo render_select('reporting_person', $staffs_in_select_option, array('staffid', 'full_name'), '', $reporting_person ?? '', ['data-live-search' => 'true', 'data-none-selected-text' => 'Select manager']) ?>
                   </div>
-                <?php endif ?>
+                <?php } ?>
                 <div class="col-md-3 leads-filter-column">
                   <label class="control-label">Employee name</label>
                   <?php echo render_select('staff_id', $staff_options ?? [], array('staffid', 'full_name'), '', $staff_id ?? '', ['data-live-search' => 'true', 'data-none-selected-text' => 'Select employee']) ?>

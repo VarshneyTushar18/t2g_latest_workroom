@@ -46,6 +46,8 @@
   .t2g-att-cal-code.code-leave { color: #7c3aed; }
   .t2g-att-cal-code.code-off { color: #64748b; }
   .t2g-att-cal-code.code-holiday { color: #0369a1; }
+  .t2g-att-cal-code.code-wfh { color: #7c3aed; font-weight: 800; }
+  .t2g-att-cal-code.code-wfh-present { color: #15803d; font-weight: 800; }
   .t2g-att-cal-emp { display: none; }
   .t2g-att-cal-day.tone-ok { background: #dcfce7; border-color: #86efac; }
   .t2g-att-cal-day.tone-half { background: #ffedd5; border-color: #fdba74; }
@@ -345,6 +347,15 @@
     });
   }
 
+  function isWfhAllottedDay(day) {
+    if (!day) return false;
+    if (day.wfh_allotted) return true;
+    if (day.attendance_source === 'wfh') return true;
+    var c = String(day.code || '').toUpperCase();
+    var ts = String(day.timesheet_type || '').toUpperCase();
+    return c === 'WFH' || ts === 'WFH';
+  }
+
   function dayCodeLabel(code) {
     if (code === 'INC') return 'Inc';
     if (code === 'AB') return 'A';
@@ -417,6 +428,17 @@
     if (!day) return '';
     if (day.status === 'night_carryover' || day.code === 'NC') {
       return '<span class="t2g-att-cal-code code-off" title="Night shift hours on prior day">NC</span>';
+    }
+    if (isWfhAllottedDay(day)) {
+      var wfhTone = dayHealthTone(day);
+      var wfhCls = (wfhTone === 'ok' || day.code === 'P' || day.status === 'ok') ? 'code-wfh-present' : 'code-wfh';
+      if (day.status === 'punch_missing' || day.code === 'INC' || day.code === 'WFH') {
+        wfhCls = 'code-wfh';
+      }
+      if (wfhTone === 'bad' && day.code !== 'P') {
+        return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
+      }
+      return '<span class="t2g-att-cal-code ' + wfhCls + '" title="WFH allotted (Manage WFH)">WFH</span>';
     }
     if (day.status === 'punch_missing' || day.code === 'INC') {
       return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
@@ -527,6 +549,9 @@
     html += '<div class="t2g-att-day-shift">' + esc(day.shift_scheme || 'General') + '</div>';
     if (day.shift_start && day.shift_end) {
       html += '<div class="t2g-att-day-shift">Shift : ' + esc(day.shift_start) + ' to ' + esc(day.shift_end) + '</div>';
+    }
+    if (day.wfh_allotted || day.attendance_source === 'wfh') {
+      html += '<div class="t2g-att-day-shift t2g-att-source-wfh">WFH allotted (Manage WFH) — use Workroom check-in/out</div>';
     }
     if (day.attendance_source === 'wfh') {
       html += '<div class="t2g-att-day-shift t2g-att-source-wfh">Attendance source : WFH (Workroom)</div>';
