@@ -890,8 +890,15 @@ class Staff extends AdminController
             access_denied('pedma');
         }
 
+        if ($id === '' && !can_create_pedma_kra()) {
+            access_denied('pedma');
+        }
+
         if ($this->input->method() === 'post') {
-            
+            if ($id === '' && !can_create_pedma_kra()) {
+                access_denied('pedma');
+            }
+
             $type = $this->input->post('kraType');
             $kraMaxScore = $this->input->post('kraMaxScore');
             $kpiName = $this->input->post('kpiName');

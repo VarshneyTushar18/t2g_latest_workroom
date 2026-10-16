@@ -861,8 +861,23 @@ function pedma_has_evaluation_role_access($staff_id = '')
 
 function pedma_has_kra_role_access($staff_id = '')
 {
-    // Same matrix as Evaluation: Super Admin / Admin / Manager only
-    return pedma_has_evaluation_role_access($staff_id);
+    return can_create_pedma_kra($staff_id);
+}
+
+/**
+ * Create / manage KRA definitions: system admin, Admin, Super Admin, and HR only (not managers).
+ */
+function can_create_pedma_kra($staff_id = '')
+{
+    if ($staff_id === '' || $staff_id === null) {
+        $staff_id = get_staff_user_id();
+    }
+
+    if (is_admin($staff_id) || is_super_admin() || is_admin2()) {
+        return true;
+    }
+
+    return is_HR($staff_id);
 }
 
 function can_view_own_pedma($staff_id = '')
@@ -932,8 +947,7 @@ function pedma_can_edit_overall_feedback($staff_id = '')
 
 function can_manage_pedma_kra($staff_id = '')
 {
-    // Manage KRA: Super Admin / Admin / Manager only
-    return pedma_has_kra_role_access($staff_id);
+    return can_create_pedma_kra($staff_id);
 }
 
 function can_access_manage_pedma_menu($staff_id = '')
@@ -1089,6 +1103,118 @@ function is_sales() {
     $role = $CI->db->get()->row();
 
     return $role && strtolower(get_role_name($role->role)) === "sales";
+}
+
+/**
+ * Snapshot screenshots: admin / super admin see all departments; others see only their own department(s).
+ */
+function snapshot_can_view_all_departments($staff_id = '')
+{
+    if ($staff_id === '' || $staff_id === null) {
+        $staff_id = get_staff_user_id();
+    }
+
+    return is_admin($staff_id) || is_super_admin() || is_admin2();
+}
+
+/**
+ * @return int[]|null null = no department restriction
+ */
+function snapshot_viewer_department_ids($staff_id = '')
+{
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return null;
+    }
+
+    if ($staff_id === '' || $staff_id === null) {
+        $staff_id = get_staff_user_id();
+    }
+
+    $ids = [];
+    foreach (get_department_by_staffid($staff_id) as $dept) {
+        $id = (int) ($dept['departmentid'] ?? 0);
+        if ($id > 0) {
+            $ids[] = $id;
+        }
+    }
+
+    return array_values(array_unique($ids));
+}
+
+/**
+ * Normalize department filter from query string for the current viewer.
+ *
+ * @return int 0 = all allowed departments, >0 specific department, -1 = no access
+ */
+function snapshot_resolve_department_id($requestedDepartmentId, $staff_id = '')
+{
+    $requestedDepartmentId = (int) $requestedDepartmentId;
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return max(0, $requestedDepartmentId);
+    }
+
+    $scope = snapshot_viewer_department_ids($staff_id);
+    if ($scope === []) {
+        return -1;
+    }
+
+    if ($requestedDepartmentId > 0) {
+        return in_array($requestedDepartmentId, $scope, true) ? $requestedDepartmentId : (int) $scope[0];
+    }
+
+    return 0;
+}
+
+/**
+ * @param array<int, object|array<string, mixed>> $departments
+ * @return array<int, object|array<string, mixed>>
+ */
+function filter_snapshot_departments_for_viewer($departments, $staff_id = '')
+{
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return $departments;
+    }
+
+    $scope = snapshot_viewer_department_ids($staff_id);
+    if ($scope === []) {
+        return [];
+    }
+
+    $allowed = array_flip($scope);
+    $out = [];
+    foreach ($departments as $dept) {
+        $id = is_object($dept) ? (int) ($dept->departmentid ?? 0) : (int) ($dept['departmentid'] ?? 0);
+        if ($id > 0 && isset($allowed[$id])) {
+            $out[] = $dept;
+        }
+    }
+
+    return $out;
+}
+
+function snapshot_staff_id_in_viewer_scope($targetStaffId, $staff_id = '')
+{
+    $targetStaffId = (int) $targetStaffId;
+    if ($targetStaffId < 1) {
+        return false;
+    }
+
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return true;
+    }
+
+    $scope = snapshot_viewer_department_ids($staff_id);
+    if ($scope === []) {
+        return false;
+    }
+
+    foreach (get_department_by_staffid($targetStaffId) as $dept) {
+        if (in_array((int) ($dept['departmentid'] ?? 0), $scope, true)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**

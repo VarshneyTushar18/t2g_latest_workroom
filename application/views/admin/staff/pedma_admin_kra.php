@@ -16,7 +16,9 @@
                         </defs>
                     </svg>Manage Key Responsibility Area (KRA)
                 </h4>
+                <?php if (function_exists('can_create_pedma_kra') && can_create_pedma_kra()) { ?>
                 <a href="./pedma_admin_kra_action" class="btn btn-primary">Create KRA</a>
+                <?php } ?>
             </div>
             <div>
                 <div class="table-responsive">

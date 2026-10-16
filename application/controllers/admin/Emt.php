@@ -12,6 +12,9 @@ class Emt extends AdminController
 	private $service;
 	private $driveReady = false;
 
+	/** @var array<string, true>|null */
+	private $snapshotAllowedEmployeeFolderIds = null;
+
 	public function __construct()
 	{
 		parent::__construct();
@@ -44,6 +47,7 @@ class Emt extends AdminController
 
 	public function getEmployeeId()
 	{
+		$this->load->helper('custom');
 		$response_parent = [
 			'drive_error' => null,
 			'drive_hint'  => null,
@@ -54,7 +58,8 @@ class Emt extends AdminController
 		}
 
 		$this->load->model('departments_model');
-		$response_parent['departments'] = $this->departments_model->get();
+		$response_parent['departments'] = $this->snapshotDepartmentsForViewer();
+		$response_parent['snapshot_view_all_departments'] = snapshot_can_view_all_departments();
 		$metrics = $this->buildSnapshotDashboardMetrics();
 		if ($this->driveReady && empty($response_parent['drive_error']) && (int) ($metrics['employee_folder_count'] ?? 0) === 0) {
 			$response_parent['drive_hint'] = $this->snapshotEmptyHint();
@@ -94,7 +99,9 @@ class Emt extends AdminController
 			$reportDate = $defaultDate;
 		}
 
-		$departmentId = (int) $this->input->get('department_id');
+		$this->load->helper('custom');
+		$scopeIds = $this->snapshotScopeDepartmentIds();
+		$departmentId = snapshot_resolve_department_id((int) $this->input->get('department_id'));
 		$loginFilter = (string) ($this->input->get('snapshot_login', true) ?: 'all');
 		if (!in_array($loginFilter, ['all', 'logged_in', 'not_logged_in'], true)) {
 			$loginFilter = 'all';
@@ -104,7 +111,7 @@ class Emt extends AdminController
 		$dayFolderByStaffId = [];
 		if ($this->driveReady) {
 			try {
-				$folderFiles = $this->fetchEmployeeFolderFiles();
+				$folderFiles = $this->filterEmployeeFolderFilesForViewer($this->fetchEmployeeFolderFiles());
 				$staffFolderMap = $this->Emt_model->buildStaffDriveFolderMap($folderFiles);
 				$dayFolderByStaffId = $this->resolveSnapshotDayDriveContext($staffFolderMap, $reportDate)['day_folder_by_staff_id'];
 			} catch (Exception $e) {
@@ -112,7 +119,12 @@ class Emt extends AdminController
 			}
 		}
 
-		$rows = $this->Emt_model->getSnapshotDailyReportRows($reportDate, $departmentId ?: null, $dayFolderByStaffId);
+		$rows = $this->Emt_model->getSnapshotDailyReportRows(
+			$reportDate,
+			$departmentId,
+			$dayFolderByStaffId,
+			$scopeIds
+		);
 		$driveTimes = $this->buildSnapshotReportDriveTimes($reportDate, $rows, $staffFolderMap, $dayFolderByStaffId);
 		$rows = $this->Emt_model->mergeSnapshotDailyReportDriveTimes($rows, $driveTimes);
 		$rows = $this->Emt_model->filterSnapshotDailyReportRows($rows, $loginFilter);
@@ -124,7 +136,8 @@ class Emt extends AdminController
 			'default_report_date'=> $defaultDate,
 			'department_id'      => $departmentId,
 			'snapshot_login_filter' => $loginFilter,
-			'departments'        => $this->departments_model->get(),
+			'departments'        => $this->snapshotDepartmentsForViewer(),
+			'snapshot_view_all_departments' => snapshot_can_view_all_departments(),
 			'rows'               => $rows,
 			'dashboard_url'      => admin_url('Emt/getEmployeeId'),
 			'report_base_url'    => admin_url('Emt/report'),
@@ -147,7 +160,7 @@ class Emt extends AdminController
 
 		if ($this->driveReady) {
 			try {
-				$folders = $this->fetchEmployeeFolderFiles();
+				$folders = $this->filterEmployeeFolderFilesForViewer($this->fetchEmployeeFolderFiles());
 				$data['result'] = $this->fileListFromFiles($folders);
 				$data['staff_folder_map'] = $this->Emt_model->buildStaffDriveFolderMap($folders);
 				if (empty($folders)) {
@@ -161,8 +174,9 @@ class Emt extends AdminController
 			$data['drive_error'] = 'Google Drive is not configured.';
 		}
 
-		$this->load->model('departments_model');
-		$data['departments'] = $this->departments_model->get();
+		$this->load->helper('custom');
+		$data['departments'] = $this->snapshotDepartmentsForViewer();
+		$data['snapshot_view_all_departments'] = snapshot_can_view_all_departments();
 		$data['folder_departments'] = $this->Emt_model->getFolderDepartmentMap();
 		$data['dashboard_url'] = admin_url('Emt/getEmployeeId');
 
@@ -180,8 +194,9 @@ class Emt extends AdminController
 
 			return;
 		}
-		$departmentId = (int) $this->input->get('department_id');
-		$metrics = $this->buildSnapshotDashboardMetrics($departmentId ?: null);
+		$this->load->helper('custom');
+		$departmentId = snapshot_resolve_department_id((int) $this->input->get('department_id'));
+		$metrics = $this->buildSnapshotDashboardMetrics($departmentId);
 		echo json_encode([
 			'success' => true,
 			'summary' => $metrics['summary'],
@@ -199,9 +214,10 @@ class Emt extends AdminController
 
 			return;
 		}
+		$this->load->helper('custom');
 		$type = $this->input->get('type', true) ?: 'active';
-		$departmentId = (int) $this->input->get('department_id');
-		$metrics = $this->buildSnapshotDashboardMetrics($departmentId ?: null);
+		$departmentId = snapshot_resolve_department_id((int) $this->input->get('department_id'));
+		$metrics = $this->buildSnapshotDashboardMetrics($departmentId);
 		echo json_encode([
 			'success' => true,
 			'type'    => $type,
@@ -235,7 +251,8 @@ class Emt extends AdminController
 		if (!in_array($type, ['active', 'logged_in', 'not_logged_in'], true)) {
 			$type = 'active';
 		}
-		$departmentId = (int) $this->input->get('department_id');
+		$this->load->helper('custom');
+		$departmentId = snapshot_resolve_department_id((int) $this->input->get('department_id'));
 
 		$titles = [
 			'active'        => 'Total active employees',
@@ -243,15 +260,15 @@ class Emt extends AdminController
 			'not_logged_in' => 'Not logged-in today',
 		];
 
-		$this->load->model('departments_model');
-		$metrics = $this->buildSnapshotDashboardMetrics($departmentId ?: null);
+		$metrics = $this->buildSnapshotDashboardMetrics($departmentId);
 
 		$data = [
 			'title'             => $titles[$type] ?? 'Snapshot employees',
 			'list_type'         => $type,
-			'department_id'     => $departmentId,
-			'departments'       => $this->departments_model->get(),
-			'staff'             => $this->loadSnapshotStaffList($type, $departmentId ?: null, $metrics),
+			'department_id'     => max(0, $departmentId),
+			'departments'       => $this->snapshotDepartmentsForViewer(),
+			'snapshot_view_all_departments' => snapshot_can_view_all_departments(),
+			'staff'             => $this->loadSnapshotStaffList($type, $departmentId, $metrics),
 			'staff_folder_map'  => $metrics['staff_folder_map'],
 			'dashboard_url'     => admin_url('Emt/getEmployeeId'),
 			'monitoring_url'    => admin_url('Emt/monitoring'),
@@ -276,6 +293,13 @@ class Emt extends AdminController
 		$fileId = $this->input->get('id', true);
 		if (!$fileId || !preg_match('/^[a-zA-Z0-9_-]{10,}$/', $fileId)) {
 			$this->snapshotImageError(404);
+
+			return;
+		}
+
+		$this->load->helper('custom');
+		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($fileId)) {
+			$this->snapshotImageError(403);
 
 			return;
 		}
@@ -389,6 +413,13 @@ class Emt extends AdminController
 			return;
 		}
 
+		$this->load->helper('custom');
+		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($parentFolderId)) {
+			echo json_encode([]);
+
+			return;
+		}
+
 		try {
 			echo json_encode($this->collectSnapshotDays($parentFolderId));
 		} catch (Exception $e) {
@@ -409,6 +440,13 @@ class Emt extends AdminController
 		$childFolderId = $this->input->get('date', true);
 		$dayFilter = $this->input->get('day_filter', true);
 		if (!$childFolderId) {
+			echo json_encode([]);
+
+			return;
+		}
+
+		$this->load->helper('custom');
+		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($childFolderId)) {
 			echo json_encode([]);
 
 			return;
@@ -585,7 +623,13 @@ class Emt extends AdminController
 
 	public function getEmployeedepartment()
 	{
-		$staffid = $_GET['staffid'];
+		$this->load->helper('custom');
+		$staffid = (int) ($_GET['staffid'] ?? 0);
+		if ($staffid < 1 || !snapshot_staff_id_in_viewer_scope($staffid)) {
+			echo json_encode([]);
+
+			return;
+		}
 		$sql = "SELECT staff_id,file_id,directory_id,parent_directory_id,status,date_time from tblstaff_drive_data where staff_id='$staffid' GROUP BY DATE_FORMAT(date_time, '%Y-%m-%d') ORDER by date_time desc";
 		$query = $this->db->query($sql);
 		echo json_encode($query->result());
@@ -596,6 +640,13 @@ class Emt extends AdminController
 		header('Content-Type: application/json');
 		$childFolderId = $_GET['date'];
 		if (!$this->driveReady || !$childFolderId) {
+			echo json_encode([]);
+
+			return;
+		}
+
+		$this->load->helper('custom');
+		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($childFolderId)) {
 			echo json_encode([]);
 
 			return;
@@ -797,29 +848,53 @@ class Emt extends AdminController
 	 */
 	private function buildSnapshotDashboardMetrics($departmentId = null)
 	{
+		$this->load->helper('custom');
+		if ($departmentId === null) {
+			$departmentId = 0;
+		}
+		$departmentId = (int) $departmentId;
+		$scopeIds = $this->snapshotScopeDepartmentIds();
+
 		$folderFiles = [];
 		$staffFolderMap = [];
 		$driveLoggedStaffIds = [];
 		$todayFolderByStaffId = [];
 		if ($this->driveReady) {
 			try {
-				$folderFiles = $this->fetchEmployeeFolderFiles();
+				$folderFiles = $this->filterEmployeeFolderFilesForViewer($this->fetchEmployeeFolderFiles());
 				$staffFolderMap = $this->Emt_model->buildStaffDriveFolderMap($folderFiles);
 				$todayCtx = $this->resolveSnapshotTodayDriveContext($staffFolderMap);
 				$driveLoggedStaffIds = $todayCtx['drive_logged_staff_ids'];
 				$todayFolderByStaffId = $todayCtx['today_folder_by_staff_id'];
+				if ($scopeIds !== null) {
+					$allowedStaff = $this->Emt_model->getActiveStaffIdsInDepartmentScope($scopeIds);
+					$driveLoggedStaffIds = array_values(array_filter($driveLoggedStaffIds, function ($sid) use ($allowedStaff) {
+						return isset($allowedStaff[(int) $sid]);
+					}));
+					$todayFolderByStaffId = array_filter(
+						$todayFolderByStaffId,
+						function ($folderId, $sid) use ($allowedStaff) {
+							return isset($allowedStaff[(int) $sid]);
+						},
+						ARRAY_FILTER_USE_BOTH
+					);
+				}
 			} catch (Exception $e) {
 				log_message('error', 'buildSnapshotDashboardMetrics: ' . $e->getMessage());
 			}
 		}
 
+		$deptFilter = $departmentId === 0 ? null : $departmentId;
+
 		return [
-			'summary'                    => $this->Emt_model->getSnapshotDashboardSummary($departmentId, $staffFolderMap, $driveLoggedStaffIds),
-			'by_department'              => $this->Emt_model->getSnapshotDashboardSummaryByDepartment($staffFolderMap, $driveLoggedStaffIds),
+			'summary'                    => $this->Emt_model->getSnapshotDashboardSummary($deptFilter, $staffFolderMap, $driveLoggedStaffIds, $scopeIds),
+			'by_department'              => $this->Emt_model->getSnapshotDashboardSummaryByDepartment($staffFolderMap, $driveLoggedStaffIds, $scopeIds),
 			'staff_folder_map'           => $staffFolderMap,
 			'drive_logged_staff_ids'     => $driveLoggedStaffIds,
 			'today_folder_by_staff_id'   => $todayFolderByStaffId,
 			'employee_folder_count'      => count($folderFiles),
+			'scope_department_ids'       => $scopeIds,
+			'department_id'              => $departmentId,
 		];
 	}
 
@@ -978,12 +1053,15 @@ class Emt extends AdminController
 	 */
 	private function loadSnapshotStaffList($type, $departmentId, array $metrics)
 	{
+		$deptFilter = ($departmentId === null || (int) $departmentId === 0) ? null : (int) $departmentId;
+		$scopeIds = $metrics['scope_department_ids'] ?? $this->snapshotScopeDepartmentIds();
 		$staff = $this->Emt_model->getSnapshotDashboardStaffList(
 			$type,
-			$departmentId,
+			$deptFilter,
 			$metrics['staff_folder_map'] ?? [],
 			$metrics['drive_logged_staff_ids'] ?? [],
-			$metrics['today_folder_by_staff_id'] ?? []
+			$metrics['today_folder_by_staff_id'] ?? [],
+			$scopeIds
 		);
 
 		return $this->enrichSnapshotStaffListFromDrive(
@@ -1354,5 +1432,117 @@ class Emt extends AdminController
 		}
 
 		return $files;
+	}
+
+	/**
+	 * @return int[]|null
+	 */
+	private function snapshotScopeDepartmentIds()
+	{
+		$this->load->helper('custom');
+
+		return snapshot_viewer_department_ids();
+	}
+
+	private function snapshotDepartmentsForViewer()
+	{
+		$this->load->model('departments_model');
+		$this->load->helper('custom');
+
+		return filter_snapshot_departments_for_viewer($this->departments_model->get());
+	}
+
+	/**
+	 * @param array<int, object> $files
+	 * @return array<int, object>
+	 */
+	private function filterEmployeeFolderFilesForViewer(array $files)
+	{
+		$scopeIds = $this->snapshotScopeDepartmentIds();
+		if ($scopeIds === null) {
+			return $files;
+		}
+
+		$allowedStaff = $this->Emt_model->getActiveStaffIdsInDepartmentScope($scopeIds);
+		$filtered = [];
+		foreach ($files as $file) {
+			if (!is_object($file) || !method_exists($file, 'getName')) {
+				continue;
+			}
+			$staffId = $this->Emt_model->findStaffIdByEmailPrefix($file->getName());
+			if ($staffId > 0 && isset($allowedStaff[$staffId])) {
+				$filtered[] = $file;
+			}
+		}
+
+		return $filtered;
+	}
+
+	/**
+	 * @return array<string, true>
+	 */
+	private function snapshotAllowedEmployeeFolderIdSet()
+	{
+		if ($this->snapshotAllowedEmployeeFolderIds !== null) {
+			return $this->snapshotAllowedEmployeeFolderIds;
+		}
+
+		$set = [];
+		if ($this->driveReady) {
+			try {
+				$folders = $this->filterEmployeeFolderFilesForViewer($this->fetchEmployeeFolderFiles());
+				foreach ($this->Emt_model->buildStaffDriveFolderMap($folders) as $folderId) {
+					$folderId = trim((string) $folderId);
+					if ($folderId !== '') {
+						$set[$folderId] = true;
+					}
+				}
+			} catch (Exception $e) {
+				log_message('error', 'snapshotAllowedEmployeeFolderIdSet: ' . $e->getMessage());
+			}
+		}
+
+		$this->snapshotAllowedEmployeeFolderIds = $set;
+
+		return $set;
+	}
+
+	private function snapshotDriveResourceAccessible($resourceId)
+	{
+		$this->load->helper('custom');
+		$resourceId = trim((string) $resourceId);
+		if ($resourceId === '') {
+			return false;
+		}
+
+		$allowedFolders = $this->snapshotAllowedEmployeeFolderIdSet();
+		if (isset($allowedFolders[$resourceId])) {
+			return true;
+		}
+
+		$staffId = $this->Emt_model->findStaffIdForDriveFile($resourceId);
+		if ($staffId > 0 && snapshot_staff_id_in_viewer_scope($staffId)) {
+			return true;
+		}
+
+		if (!$this->driveReady) {
+			return false;
+		}
+
+		try {
+			$meta = $this->service->files->get($resourceId, [
+				'supportsAllDrives' => true,
+				'fields'            => 'parents,mimeType',
+			]);
+			foreach ((array) $meta->getParents() as $parentId) {
+				if (isset($allowedFolders[$parentId])) {
+					return true;
+				}
+			}
+		} catch (Exception $e) {
+			return false;
+		}
+
+		return false;
 	}
 }

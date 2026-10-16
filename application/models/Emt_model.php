@@ -314,8 +314,39 @@ public function get()
         return [1, 292, 178];
     }
 
-    private function snapshotDashboardDepartmentFilterSql($departmentId, array &$params)
+    /**
+     * @param int[]|null $scopeDepartmentIds when set, restrict to these departments (manager view)
+     */
+    private function snapshotDashboardDepartmentFilterSql($departmentId, array &$params, array $scopeDepartmentIds = null)
     {
+        if ($departmentId === null) {
+            $departmentId = 0;
+        }
+
+        if ($scopeDepartmentIds !== null) {
+            $scopeDepartmentIds = array_values(array_unique(array_filter(array_map('intval', $scopeDepartmentIds))));
+            if ($scopeDepartmentIds === []) {
+                return ' AND 1=0 ';
+            }
+
+            $departmentId = (int) $departmentId;
+            if ($departmentId > 0) {
+                if (!in_array($departmentId, $scopeDepartmentIds, true)) {
+                    $departmentId = (int) $scopeDepartmentIds[0];
+                }
+                $params[] = $departmentId;
+
+                return ' AND s.staffid IN (SELECT staffid FROM ' . db_prefix() . 'staff_departments WHERE departmentid = ?) ';
+            }
+
+            $ph = implode(',', array_fill(0, count($scopeDepartmentIds), '?'));
+            foreach ($scopeDepartmentIds as $id) {
+                $params[] = $id;
+            }
+
+            return ' AND s.staffid IN (SELECT staffid FROM ' . db_prefix() . 'staff_departments WHERE departmentid IN (' . $ph . ')) ';
+        }
+
         $departmentId = (int) $departmentId;
         if ($departmentId < 1) {
             return '';
@@ -323,6 +354,54 @@ public function get()
         $params[] = $departmentId;
 
         return ' AND s.staffid IN (SELECT staffid FROM ' . db_prefix() . 'staff_departments WHERE departmentid = ?) ';
+    }
+
+    /**
+     * @param int[] $departmentIds
+     * @return array<int, true> staffid => true
+     */
+    public function getActiveStaffIdsInDepartmentScope(array $departmentIds)
+    {
+        $departmentIds = array_values(array_unique(array_filter(array_map('intval', $departmentIds))));
+        if ($departmentIds === []) {
+            return [];
+        }
+
+        $excluded = implode(',', array_map('intval', $this->snapshotDashboardExcludedStaffIds()));
+        $ph = implode(',', array_fill(0, count($departmentIds), '?'));
+        $params = $departmentIds;
+        $rows = $this->db->query(
+            'SELECT DISTINCT s.staffid FROM ' . db_prefix() . 'staff s
+             INNER JOIN ' . db_prefix() . 'staff_departments sd ON sd.staffid = s.staffid
+             WHERE s.active = 1 AND s.staffid NOT IN (' . $excluded . ')
+             AND sd.departmentid IN (' . $ph . ')',
+            $params
+        )->result();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row->staffid] = true;
+        }
+
+        return $out;
+    }
+
+    public function findStaffIdForDriveFile($fileId)
+    {
+        $fileId = trim((string) $fileId);
+        if ($fileId === '' || !$this->db->table_exists(db_prefix() . 'staff_drive_data')) {
+            return 0;
+        }
+
+        $row = $this->db->select('staff_id')
+            ->from(db_prefix() . 'staff_drive_data')
+            ->where('file_id', $fileId)
+            ->order_by('date_time', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row();
+
+        return $row ? (int) $row->staff_id : 0;
     }
 
     /**
@@ -436,7 +515,7 @@ public function get()
     /**
      * @param array<int, string> $dayFolderByStaffId staffid => Drive folder id for report date (Y-m-d)
      */
-    public function getSnapshotDailyReportRows($reportDateYmd, $departmentId = null, array $dayFolderByStaffId = [])
+    public function getSnapshotDailyReportRows($reportDateYmd, $departmentId = null, array $dayFolderByStaffId = [], array $scopeDepartmentIds = null)
     {
         $reportDateYmd = trim((string) $reportDateYmd);
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reportDateYmd)) {
@@ -451,7 +530,11 @@ public function get()
         [$dayStart, $dayEnd] = $this->snapshotDatetimeBoundsForYmd($reportDateYmd);
         $excluded = implode(',', array_map('intval', $this->snapshotDashboardExcludedStaffIds()));
         $params = [];
-        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params);
+        if ($departmentId === -1) {
+            return [];
+        }
+
+        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params, $scopeDepartmentIds);
 
         $staffSql = 'SELECT s.staffid, s.firstname, s.lastname, s.staff_identifi,
                 TRIM(COALESCE(i.empid, \'\')) AS empid,
@@ -670,9 +753,12 @@ public function get()
      * @param array<int, int> $driveLoggedStaffIds extra staff ids from Drive (today date folder exists)
      * @return array<int, true> staffid => true
      */
-    public function snapshotLoggedInStaffIdsToday($departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [])
+    public function snapshotLoggedInStaffIdsToday($departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [], array $scopeDepartmentIds = null)
     {
         $departmentId = $departmentId !== null ? (int) $departmentId : 0;
+        if ($departmentId === -1) {
+            return [];
+        }
         $driveTable = db_prefix() . 'staff_drive_data';
         $excluded = $this->snapshotDashboardExcludedStaffIds();
         $folderIdToStaffId = [];
@@ -718,7 +804,7 @@ public function get()
         $ids = array_keys($logged);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $params = $ids;
-        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId ?: null, $params);
+        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params, $scopeDepartmentIds);
         $excludedSql = implode(',', array_map('intval', $excluded));
         $activeRows = $this->db->query(
             'SELECT s.staffid FROM ' . db_prefix() . 'staff s
@@ -770,12 +856,20 @@ public function get()
         return $map;
     }
 
-    public function getSnapshotDashboardSummary($departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [])
+    public function getSnapshotDashboardSummary($departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [], array $scopeDepartmentIds = null)
     {
+        if ($departmentId === -1) {
+            return [
+                'total_active'    => 0,
+                'logged_in_today' => 0,
+                'not_logged_in'   => 0,
+            ];
+        }
+
         $staffTable = db_prefix() . 'staff';
         $excluded = implode(',', $this->snapshotDashboardExcludedStaffIds());
         $params = [];
-        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params);
+        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params, $scopeDepartmentIds);
 
         $totalRow = $this->db->query(
             "SELECT COUNT(DISTINCT s.staffid) AS cnt
@@ -785,7 +879,7 @@ public function get()
         )->row();
         $total = $totalRow ? (int) $totalRow->cnt : 0;
 
-        $loggedIn = count($this->snapshotLoggedInStaffIdsToday($departmentId, $staffIdToFolderId, $driveLoggedStaffIds));
+        $loggedIn = count($this->snapshotLoggedInStaffIdsToday($departmentId, $staffIdToFolderId, $driveLoggedStaffIds, $scopeDepartmentIds));
 
         return [
             'total_active'    => $total,
@@ -799,12 +893,24 @@ public function get()
      *
      * @return array<int, array{departmentid:int,name:string,total_active:int,logged_in_today:int,not_logged_in:int}>
      */
-    public function getSnapshotDashboardSummaryByDepartment(array $staffIdToFolderId = [], array $driveLoggedStaffIds = [])
+    public function getSnapshotDashboardSummaryByDepartment(array $staffIdToFolderId = [], array $driveLoggedStaffIds = [], array $scopeDepartmentIds = null)
     {
         $staffTable = db_prefix() . 'staff';
         $deptTable = db_prefix() . 'departments';
         $sdTable = db_prefix() . 'staff_departments';
         $excluded = implode(',', $this->snapshotDashboardExcludedStaffIds());
+
+        $scopeSql = '';
+        $scopeParams = [];
+        if ($scopeDepartmentIds !== null) {
+            $scopeDepartmentIds = array_values(array_unique(array_filter(array_map('intval', $scopeDepartmentIds))));
+            if ($scopeDepartmentIds === []) {
+                return [];
+            }
+            $ph = implode(',', array_fill(0, count($scopeDepartmentIds), '?'));
+            $scopeSql = ' AND d.departmentid IN (' . $ph . ') ';
+            $scopeParams = $scopeDepartmentIds;
+        }
 
         $rows = $this->db->query(
             "SELECT d.departmentid, d.name,
@@ -813,15 +919,17 @@ public function get()
              INNER JOIN {$sdTable} sd ON sd.departmentid = d.departmentid
              INNER JOIN {$staffTable} s ON s.staffid = sd.staffid
                 AND s.active = 1 AND s.staffid NOT IN ({$excluded})
+             WHERE 1=1 {$scopeSql}
              GROUP BY d.departmentid, d.name
-             ORDER BY d.name ASC"
+             ORDER BY d.name ASC",
+            $scopeParams
         )->result_array();
 
         $out = [];
         foreach ($rows as $row) {
             $deptId = (int) ($row['departmentid'] ?? 0);
             $total = (int) ($row['total_active'] ?? 0);
-            $logged = count($this->snapshotLoggedInStaffIdsToday($deptId, $staffIdToFolderId, $driveLoggedStaffIds));
+            $logged = count($this->snapshotLoggedInStaffIdsToday($deptId, $staffIdToFolderId, $driveLoggedStaffIds, $scopeDepartmentIds));
             $out[] = [
                 'departmentid'      => $deptId,
                 'name'              => (string) ($row['name'] ?? ''),
@@ -892,21 +1000,25 @@ public function get()
         return $out;
     }
 
-    public function getSnapshotDashboardStaffList($type, $departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [], array $todayFolderByStaffId = [])
+    public function getSnapshotDashboardStaffList($type, $departmentId = null, array $staffIdToFolderId = [], array $driveLoggedStaffIds = [], array $todayFolderByStaffId = [], array $scopeDepartmentIds = null)
     {
         $type = (string) $type;
         if (!in_array($type, ['active', 'logged_in', 'not_logged_in'], true)) {
             $type = 'active';
         }
 
+        if ($departmentId === -1) {
+            return [];
+        }
+
         $staffTable = db_prefix() . 'staff';
         $driveTable = db_prefix() . 'staff_drive_data';
         $excluded = implode(',', $this->snapshotDashboardExcludedStaffIds());
         $params = [];
-        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params);
+        $deptSql = $this->snapshotDashboardDepartmentFilterSql($departmentId, $params, $scopeDepartmentIds);
         [$todayStart, $todayEnd] = $this->snapshotTodayDatetimeBounds();
 
-        $loggedSet = $this->snapshotLoggedInStaffIdsToday($departmentId, $staffIdToFolderId, $driveLoggedStaffIds);
+        $loggedSet = $this->snapshotLoggedInStaffIdsToday($departmentId, $staffIdToFolderId, $driveLoggedStaffIds, $scopeDepartmentIds);
         $typeSql = '';
         if ($type === 'logged_in') {
             if (empty($loggedSet)) {
