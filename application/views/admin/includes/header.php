@@ -1,10 +1,10 @@
-<?php
+﻿<?php
 
 use app\services\utilities\Date;
 
 defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
-<link rel="stylesheet" href="<?php echo base_url('assets/css/admin-dashboard-nav.css?v=4'); ?>" type="text/css" />
+<link rel="stylesheet" href="<?php echo base_url('assets/css/admin-dashboard-nav.css?v=3'); ?>" type="text/css" />
 <style>
     /* adding the css for check out button and checkin/out info */
 
@@ -89,12 +89,11 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     // Biometric available → show Biometric pill only. WFH / no biometric today → Workroom check in/out.
     ?>
 
-    <nav>
+    <nav class="t2g-topnav">
 
-        <div class="tw-flex tw-justify-between">
+        <div class="t2g-topnav-row">
 
-
-            <div class="tw-flex tw-flex-1 sm:tw-flex-initial">
+            <div class="t2g-topnav-left">
 
                 <!-- commenting the search bar -->
                 <!-- <div id="top_search" class="tw-inline-flex tw-relative dropdown sm:tw-ml-1.5 sm:tw-mr-3 tw-max-w-xl tw-flex-auto" data-toggle="tooltip" data-placement="bottom" data-title="<?php echo _l('search_by_tags'); ?>">
@@ -123,21 +122,58 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </div> -->
 
-                <ul class="nav navbar-nav visible-md visible-lg header-primary-nav">
+                <div class="t2g-header-workplace-inner">
+                    <a href="<?php echo admin_url('company_policies'); ?>" class="t2g-header-nav-link">Company Policies</a>
+                    <div id="headerActionButtons" class="header-action-buttons check-time-btn">
+                    <?php if ($biometric_navbar_active) { ?>
+                        <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
+                            <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
+                        </span>
+                        <?php if (is_array($biometric_break_summary)) { ?>
+                        <span class="header-biometric-break-pill header-break-pill"
+                            title="<?php echo html_escape($biometric_break_summary['tooltip'] ?? ''); ?>"
+                            data-break-completed-secs="<?php echo (int) ($biometric_break_summary['completed_secs'] ?? 0); ?>"
+                            data-break-out-ts="<?php echo !empty($biometric_break_summary['on_break']) ? (int) ($biometric_break_summary['current_out_ts'] ?? 0) : 0; ?>">
+                            <span class="header-source-tag">Break</span>
+                            Total : <span class="header-break-live"><?php echo html_escape($biometric_break_summary['total_label']); ?></span>
+                        </span>
+                        <?php } ?>
+                    <?php } else { ?>
+                        <?php
+                        if ($type_check_in_out != 1 && !$workroom_day_complete && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
+                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                            <input type="hidden" name="type_check" value="1">
+                            <input type="hidden" name="edit_date" value="">
+                            <input type="hidden" name="point_id" value="">
+                            <input type="hidden" name="location_user" value="">
+                            <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
+                        <?php echo form_close();
+                        } ?>
 
+                        <?php
+                        if ($type_check_in_out == 1) {
+                            echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                            <input type="hidden" name="type_check" value="2">
+                            <input type="hidden" name="edit_date" value="">
+                            <input type="hidden" name="point_id" value="">
+                            <input type="hidden" name="location_user" value="">
+                            <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
+                        <?php echo form_close();
+                        } ?>
 
+                        <?php
+                        if (!($time_from_checkin >= 13)) {
+                            echo $html_list;
+                        }
+                        ?>
+                    <?php } ?>
+                    </div>
+                </div>
 
-                    <?php
-
-                    $quickActions = collect($this->app->get_quick_actions_links())->reject(function ($action) {
-
-                        return isset($action['permission']) && !has_permission($action['permission'], '', 'create');
-                    });
-
-                    ?>
-
-                    <!-- commenting the quick create button -->
-                    <!-- <?php if ($quickActions->isNotEmpty()) { ?>
+                    <!-- commenting the quick create button (legacy ul removed) -->
+                    <!-- <?php if (false && $quickActions->isNotEmpty()) { ?>
 
                         <li class="icon tw-relative ltr:tw-mr-1.5 rtl:tw-ml-1.5" title="<?php echo _l('quick_create'); ?>" data-toggle="tooltip" data-placement="bottom">
 
@@ -219,87 +255,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                     <?php } ?> -->
 
-
-                    <!-- Check-in · SOP · Company Policies — single row -->
-                    <li class="header-workplace-row">
-                        <div class="header-workplace-row-inner">
-                            <div id="headerActionButtons" class="header-action-buttons">
-                                <?php if ($biometric_navbar_active) { ?>
-                                    <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
-                                        <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
-                                    </span>
-                                    <?php if (is_array($biometric_break_summary)) { ?>
-                                    <span class="header-biometric-break-pill header-break-pill"
-                                        title="<?php echo html_escape($biometric_break_summary['tooltip'] ?? ''); ?>"
-                                        data-break-completed-secs="<?php echo (int) ($biometric_break_summary['completed_secs'] ?? 0); ?>"
-                                        data-break-out-ts="<?php echo !empty($biometric_break_summary['on_break']) ? (int) ($biometric_break_summary['current_out_ts'] ?? 0) : 0; ?>">
-                                        <span class="header-source-tag">Break</span>
-                                        Total : <span class="header-break-live"><?php echo html_escape($biometric_break_summary['total_label']); ?></span>
-                                    </span>
-                                    <?php } ?>
-                                <?php } else { ?>
-                                    <?php
-                                    if ($type_check_in_out != 1 && !$workroom_day_complete && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
-                                        echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                                        <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                                        <input type="hidden" name="type_check" value="1">
-                                        <input type="hidden" name="edit_date" value="">
-                                        <input type="hidden" name="point_id" value="">
-                                        <input type="hidden" name="location_user" value="">
-                                        <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
-                                    <?php echo form_close();
-                                    } ?>
-
-                                    <?php
-                                    if ($type_check_in_out == 1) {
-                                        echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                                        <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                                        <input type="hidden" name="type_check" value="2">
-                                        <input type="hidden" name="edit_date" value="">
-                                        <input type="hidden" name="point_id" value="">
-                                        <input type="hidden" name="location_user" value="">
-                                        <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
-                                    <?php echo form_close();
-                                    } ?>
-
-                                    <?php
-                                    if (!($time_from_checkin >= 13)) {
-                                        echo $html_list;
-                                    }
-                                    ?>
-                                <?php } ?>
-                            </div>
-                            <span class="header-workplace-sep" aria-hidden="true"></span>
-                            <a href="<?php echo admin_url('sop'); ?>" class="header-text-nav-link header-sop-nav-link"<?php if (!empty($unread_sops)) { ?> title="<?php echo html_escape(sprintf(_l('sop_unread_tooltip'), (int) $unread_sops)); ?>"<?php } ?>>
-                                <span class="header-sop-nav-text"><?php echo _l('sop'); ?></span>
-                                <?php if (!empty($unread_sops)) { ?>
-                                <span class="header-sop-unread-badge" aria-label="<?php echo html_escape(sprintf(_l('sop_unread_tooltip'), (int) $unread_sops)); ?>"><?php echo (int) $unread_sops > 99 ? '99+' : (int) $unread_sops; ?></span>
-                                <?php } ?>
-                            </a>
-                            <a href="<?php echo admin_url('company_policies'); ?>" class="header-text-nav-link header-policies-nav-link">Company Policies</a>
-                        </div>
-                    </li>
-
                     <style>
-                        #headerActionButtons.header-action-buttons {
-                            gap: 6px;
-                            width: auto !important;
-                            vertical-align: middle;
-                            list-style: none;
-                            flex-wrap: nowrap;
-                        }
-                        #headerActionButtons .header-action-form {
-                            display: inline-block !important;
-                            position: static !important;
-                            left: auto !important;
-                            width: auto !important;
-                            margin: 0 !important;
-                        }
-                        #headerActionButtons .btn {
-                            margin: 0 !important;
-                            vertical-align: middle;
-                            white-space: nowrap;
-                        }
                         #headerActionButtons .btn-suggestion-header {
                             background-color: #0ea5e9 !important;
                             border: 1px solid #38bdf8 !important;
@@ -312,77 +268,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                             background-color: #0284c7 !important;
                             border-color: #7dd3fc !important;
                             color: #fff !important;
-                        }
-                        .header-source-tag {
-                            display: inline-block;
-                            padding: 0 4px;
-                            border-radius: 3px;
-                            font-size: 8px;
-                            font-weight: 800;
-                            letter-spacing: 0.03em;
-                            text-transform: uppercase;
-                            line-height: 1.35;
-                        }
-                        .header-biometric-pill,
-                        .header-workroom-pill {
-                            display: inline-flex;
-                            align-items: center;
-                            justify-content: center;
-                            gap: 4px;
-                            padding: 3px 8px;
-                            border-radius: 5px;
-                            color: #fff !important;
-                            font-size: 11px;
-                            font-weight: 600;
-                            line-height: 1.2;
-                            white-space: nowrap;
-                            font-variant-numeric: tabular-nums;
-                            cursor: default;
-                            user-select: none;
-                            pointer-events: none;
-                            border: none;
-                            box-shadow: none;
-                            transition: none !important;
-                            text-decoration: none !important;
-                            margin: 0 !important;
-                            height: 24px;
-                        }
-                        .header-biometric-pill {
-                            background-color: #0a1140 !important;
-                        }
-                        .header-biometric-pill .header-source-tag {
-                            background: rgba(96, 165, 250, 0.25);
-                            color: #93c5fd;
-                        }
-                        .header-biometric-break-pill {
-                            display: inline-flex;
-                            align-items: center;
-                            justify-content: center;
-                            gap: 4px;
-                            padding: 3px 8px;
-                            border-radius: 5px;
-                            color: #fff !important;
-                            font-size: 11px;
-                            font-weight: 600;
-                            line-height: 1.2;
-                            white-space: nowrap;
-                            font-variant-numeric: tabular-nums;
-                            cursor: help;
-                            user-select: none;
-                            margin: 0 !important;
-                            height: 24px;
-                            background-color: #b45309 !important;
-                        }
-                        .header-biometric-break-pill .header-source-tag {
-                            background: rgba(0, 0, 0, 0.18);
-                            color: #fde68a;
-                        }
-                        .header-workroom-pill {
-                            background-color: #ca8a04 !important;
-                        }
-                        .header-workroom-pill .header-source-tag {
-                            background: rgba(0, 0, 0, 0.18);
-                            color: #fff;
                         }
                     </style>
                     <script>
@@ -420,7 +305,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         });
                     })();
                     </script>
-                </ul>
 
             </div>
 
@@ -434,7 +318,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </button>
 
-                <ul class="mobile-icon-menu tw-inline-flex tw-mt-5">
+                <ul class="mobile-icon-menu tw-inline-flex">
 
                     <?php
 
@@ -534,7 +418,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-            <ul class="nav navbar-nav navbar-right right-elements">
+            <ul class="nav navbar-nav navbar-right right-elements t2g-topnav-right">
 
                 <?php //do_action_deprecated('after_render_top_search', [], '3.0.0', 'admin_navbar_start'); 
                 ?>
@@ -585,13 +469,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </li>-->
 				<li class="icon header-snapshot-download">
-				<a href="/Snapshot.zip" download class="header-text-nav-link header-snapshot-nav-link" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i><span>Snapshot</span></a>
+				<a href="/Snapshot.zip" download class="t2g-header-snapshot-link" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i><span>Snapshot</span></a>
 				</li>
                 <li class="icon header-user-profile" data-toggle="tooltip" title="<?php echo get_staff_full_name(); ?>" data-placement="bottom">
 
-                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-0" data-toggle="dropdown" aria-expanded="false">
+                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-1" data-toggle="dropdown" aria-expanded="false">
 
-                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-mx-0.5']); ?>
+                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-ring-1 tw-ring-offset-2 tw-ring-primary-500 tw-mx-1 tw-mt-2.5']); ?>
 
                     </a>
 
@@ -659,13 +543,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-                <li class="icon header-timers timer-button tw-relative" data-placement="bottom" data-toggle="tooltip" data-title="<?php echo _l('my_timesheets'); ?>">
+                <li class="icon header-timers timer-button tw-relative ltr:tw-mr-1.5 rtl:tw-ml-1.5" data-placement="bottom" data-toggle="tooltip" data-title="<?php echo _l('my_timesheets'); ?>">
 
                     <a href="#" id="top-timers" class="top-timers !tw-px-0 tw-group" data-toggle="dropdown">
 
-                        <span class="header-icon-shell tw-rounded-md tw-border tw-border-solid tw-inline-flex tw-items-center tw-justify-center">
+                        <span class="tw-rounded-md tw-border tw-border-solid tw-border-neutral-200/60 tw-inline-flex tw-items-center tw-justify-center tw-h-8 tw-w-9 -tw-mt-1.5 group-hover:!tw-bg-neutral-100/60">
 
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-text-neutral-900 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
 
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
 
@@ -691,7 +575,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-                <li class="icon dropdown tw-relative tw-block notifications-wrapper header-notifications" data-toggle="tooltip" title="<?php echo _l('nav_notifications'); ?>" data-placement="bottom">
+                <li class="icon dropdown tw-relative tw-block notifications-wrapper header-notifications rtl:tw-ml-3" data-toggle="tooltip" title="<?php echo _l('nav_notifications'); ?>" data-placement="bottom">
 
                     <?php $this->load->view('admin/includes/notifications'); ?>
 

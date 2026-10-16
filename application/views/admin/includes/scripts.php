@@ -39,11 +39,6 @@ if (get_option('pusher_realtime_notifications') == 1) { ?>
     </script>
 <?php } ?>
 <?php app_admin_footer(); ?>
-<?php
-if (is_staff_logged_in() && function_exists('snapshot_login_reminder_popup_script')) {
-    snapshot_login_reminder_popup_script();
-}
-?>
 
 <script>
     function extractTime(element) {

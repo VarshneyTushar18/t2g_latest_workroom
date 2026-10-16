@@ -272,4 +272,44 @@ class Cron extends App_Controller
 		}
 	}
 
+	/** Run Perfex/Workroom DB migrations to migration_version (CLI only). */
+	public function upgrade_db()
+	{
+		if (!$this->input->is_cli_request()) {
+			echo "Direct access not allowed\n";
+			return;
+		}
+
+		$this->load->config('migration');
+		if ($this->config->item('migration_enabled') !== true) {
+			echo "Enable migration_enabled in application/config/migration.php\n";
+			return;
+		}
+
+		$target = (int) $this->config->item('migration_version');
+		$before = (int) $this->app->get_current_db_version();
+		echo "Upgrading database from {$before} to {$target}...\n";
+
+		$this->load->library('migration', [
+			'migration_enabled'     => true,
+			'migration_type'        => $this->config->item('migration_type'),
+			'migration_table'       => $this->config->item('migration_table'),
+			'migration_auto_latest' => $this->config->item('migration_auto_latest'),
+			'migration_version'     => $target,
+			'migration_path'        => $this->config->item('migration_path'),
+		]);
+
+		if (!defined('DOING_DATABASE_UPGRADE')) {
+			define('DOING_DATABASE_UPGRADE', true);
+		}
+
+		if ($this->migration->current() === false) {
+			echo 'Migration failed: ' . $this->migration->error_string() . "\n";
+			return;
+		}
+
+		$after = (int) $this->app->get_current_db_version();
+		echo "Done. Database version is now {$after}.\n";
+	}
+
 }

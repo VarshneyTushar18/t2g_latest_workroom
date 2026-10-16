@@ -1,4 +1,6 @@
 AddDefaultCharset utf-8
+ErrorDocument 500 /maintenance.html
+ErrorDocument 503 /maintenance.html
 <IfModule mod_rewrite.c>
 RewriteEngine on
 RewriteCond $1 !^(index\.php|resources|robots\.txt)
