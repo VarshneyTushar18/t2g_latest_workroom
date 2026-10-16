@@ -4,6 +4,7 @@ use app\services\utilities\Date;
 
 defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
+<link rel="stylesheet" href="<?php echo base_url('assets/css/admin-dashboard-nav.css?v=4'); ?>" type="text/css" />
 <style>
     /* adding the css for check out button and checkin/out info */
 
@@ -31,24 +32,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     /* .sm\:tw-w-\[400px\] {
         width: 350px;
     } */
-    .check-time-btn {
-        display: none !important;
-        /* or any other display property you want */
-    }
-
-    /* Only underline Company Policies — not every navbar link */
-    .navbar-nav > li > a[href*="company_policies"] {
-        text-decoration: underline !important;
-        color: white !important;
-    }
-
-    @media screen and (min-width: 1100px) {
-        .check-time-btn {
-            display: inline-flex !important;
-            /* or any other display property you want */
-        }
-    }
-	
 </style>
 <style>
 .table-danger td {
@@ -135,7 +118,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </div> -->
 
-                <ul class="nav navbar-nav visible-md visible-lg">
+                <ul class="nav navbar-nav visible-md visible-lg header-primary-nav">
 
 
 
@@ -232,64 +215,69 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                     <?php } ?> -->
 
 
-                    <li>
-                        <a href="/admin/company_policies">Company Policies</a>
-                    </li>
+                    <!-- Check-in · SOP · Company Policies — single row -->
+                    <li class="header-workplace-row">
+                        <div class="header-workplace-row-inner">
+                            <div id="headerActionButtons" class="header-action-buttons">
+                                <?php if ($biometric_navbar_active) { ?>
+                                    <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
+                                        <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
+                                    </span>
+                                    <?php if (is_array($biometric_break_summary)) { ?>
+                                    <span class="header-biometric-break-pill header-break-pill"
+                                        title="<?php echo html_escape($biometric_break_summary['tooltip'] ?? ''); ?>"
+                                        data-break-completed-secs="<?php echo (int) ($biometric_break_summary['completed_secs'] ?? 0); ?>"
+                                        data-break-out-ts="<?php echo !empty($biometric_break_summary['on_break']) ? (int) ($biometric_break_summary['current_out_ts'] ?? 0) : 0; ?>">
+                                        <span class="header-source-tag">Break</span>
+                                        Total : <span class="header-break-live"><?php echo html_escape($biometric_break_summary['total_label']); ?></span>
+                                    </span>
+                                    <?php } ?>
+                                <?php } else { ?>
+                                    <?php
+                                    if ($type_check_in_out != 1 && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
+                                        echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                                        <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                                        <input type="hidden" name="type_check" value="1">
+                                        <input type="hidden" name="edit_date" value="">
+                                        <input type="hidden" name="point_id" value="">
+                                        <input type="hidden" name="location_user" value="">
+                                        <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
+                                    <?php echo form_close();
+                                    } ?>
 
-                    <!-- Left: actions + status (Biometric punch when synced, else Workroom check in/out) -->
-                    <li id="headerActionButtons" class="header-action-buttons check-time-btn">
-                        <?php if ($biometric_navbar_active) { ?>
-                            <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
-                                <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
-                            </span>
-                            <?php if (is_array($biometric_break_summary)) { ?>
-                            <span class="header-biometric-break-pill header-break-pill"
-                                title="<?php echo html_escape($biometric_break_summary['tooltip'] ?? ''); ?>"
-                                data-break-completed-secs="<?php echo (int) ($biometric_break_summary['completed_secs'] ?? 0); ?>"
-                                data-break-out-ts="<?php echo !empty($biometric_break_summary['on_break']) ? (int) ($biometric_break_summary['current_out_ts'] ?? 0) : 0; ?>">
-                                <span class="header-source-tag">Break</span>
-                                Total : <span class="header-break-live"><?php echo html_escape($biometric_break_summary['total_label']); ?></span>
-                            </span>
-                            <?php } ?>
-                        <?php } else { ?>
-                            <?php
-                            if ($type_check_in_out != 1 && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
-                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                                <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                                <input type="hidden" name="type_check" value="1">
-                                <input type="hidden" name="edit_date" value="">
-                                <input type="hidden" name="point_id" value="">
-                                <input type="hidden" name="location_user" value="">
-                                <button type="submit" class="btn btn-success check_in"><?php echo 'Check in'; ?></button>
-                            <?php echo form_close();
-                            } ?>
+                                    <?php
+                                    if ($type_check_in_out == 1) {
+                                        echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
+                                        <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                                        <input type="hidden" name="type_check" value="2">
+                                        <input type="hidden" name="edit_date" value="">
+                                        <input type="hidden" name="point_id" value="">
+                                        <input type="hidden" name="location_user" value="">
+                                        <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
+                                    <?php echo form_close();
+                                    } ?>
 
-                            <?php
-                            if ($type_check_in_out == 1) {
-                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
-                                <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
-                                <input type="hidden" name="type_check" value="2">
-                                <input type="hidden" name="edit_date" value="">
-                                <input type="hidden" name="point_id" value="">
-                                <input type="hidden" name="location_user" value="">
-                                <button type="submit" class="btn btn-danger check_out"><?php echo 'Check out'; ?></button>
-                            <?php echo form_close();
-                            } ?>
-
-                            <?php
-                            if (!($time_from_checkin >= 13)) {
-                                echo $html_list;
-                            }
-                            ?>
-                        <?php } ?>
+                                    <?php
+                                    if (!($time_from_checkin >= 13)) {
+                                        echo $html_list;
+                                    }
+                                    ?>
+                                <?php } ?>
+                            </div>
+                            <span class="header-workplace-sep" aria-hidden="true"></span>
+                            <a href="<?php echo admin_url('sop'); ?>" class="header-text-nav-link header-sop-nav-link"<?php if (!empty($unread_sops)) { ?> title="<?php echo html_escape(sprintf(_l('sop_unread_tooltip'), (int) $unread_sops)); ?>"<?php } ?>>
+                                <span class="header-sop-nav-text"><?php echo _l('sop'); ?></span>
+                                <?php if (!empty($unread_sops)) { ?>
+                                <span class="header-sop-unread-badge" aria-label="<?php echo html_escape(sprintf(_l('sop_unread_tooltip'), (int) $unread_sops)); ?>"><?php echo (int) $unread_sops > 99 ? '99+' : (int) $unread_sops; ?></span>
+                                <?php } ?>
+                            </a>
+                            <a href="<?php echo admin_url('company_policies'); ?>" class="header-text-nav-link header-policies-nav-link">Company Policies</a>
+                        </div>
                     </li>
 
                     <style>
                         #headerActionButtons.header-action-buttons {
-                            display: inline-flex !important;
-                            align-items: center;
                             gap: 6px;
-                            padding: 6px 8px !important;
                             width: auto !important;
                             vertical-align: middle;
                             list-style: none;
@@ -390,11 +378,6 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         .header-workroom-pill .header-source-tag {
                             background: rgba(0, 0, 0, 0.18);
                             color: #fff;
-                        }
-                        @media screen and (max-width: 1099px) {
-                            #headerActionButtons.header-action-buttons {
-                                display: none !important;
-                            }
                         }
                     </style>
                     <script>
@@ -596,14 +579,14 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                     </a>
 
                 </li>-->
-				<li class="icon header-todo">
-				<a href="/Snapshot.zip" download title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)" style="color:#fff; text-decoration: underline !important;font-size: 14px;"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
-				</li>	
+				<li class="icon header-snapshot-download">
+				<a href="/Snapshot.zip" download class="header-text-nav-link header-snapshot-nav-link" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i><span>Snapshot</span></a>
+				</li>
                 <li class="icon header-user-profile" data-toggle="tooltip" title="<?php echo get_staff_full_name(); ?>" data-placement="bottom">
 
-                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-1" data-toggle="dropdown" aria-expanded="false">
+                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-0" data-toggle="dropdown" aria-expanded="false">
 
-                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-ring-1 tw-ring-offset-2 tw-ring-primary-500 tw-mx-1 tw-mt-2.5']); ?>
+                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-mx-0.5']); ?>
 
                     </a>
 
@@ -671,13 +654,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-                <li class="icon header-timers timer-button tw-relative ltr:tw-mr-1.5 rtl:tw-ml-1.5" data-placement="bottom" data-toggle="tooltip" data-title="<?php echo _l('my_timesheets'); ?>">
+                <li class="icon header-timers timer-button tw-relative" data-placement="bottom" data-toggle="tooltip" data-title="<?php echo _l('my_timesheets'); ?>">
 
                     <a href="#" id="top-timers" class="top-timers !tw-px-0 tw-group" data-toggle="dropdown">
 
-                        <span class="tw-rounded-md tw-border tw-border-solid tw-border-neutral-200/60 tw-inline-flex tw-items-center tw-justify-center tw-h-8 tw-w-9 -tw-mt-1.5 group-hover:!tw-bg-neutral-100/60">
+                        <span class="header-icon-shell tw-rounded-md tw-border tw-border-solid tw-inline-flex tw-items-center tw-justify-center">
 
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-text-neutral-900 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
 
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
 
@@ -703,7 +686,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-                <li class="icon dropdown tw-relative tw-block notifications-wrapper header-notifications rtl:tw-ml-3" data-toggle="tooltip" title="<?php echo _l('nav_notifications'); ?>" data-placement="bottom">
+                <li class="icon dropdown tw-relative tw-block notifications-wrapper header-notifications" data-toggle="tooltip" title="<?php echo _l('nav_notifications'); ?>" data-placement="bottom">
 
                     <?php $this->load->view('admin/includes/notifications'); ?>
 

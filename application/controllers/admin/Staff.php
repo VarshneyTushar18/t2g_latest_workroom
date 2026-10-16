@@ -806,7 +806,7 @@ class Staff extends AdminController
     /*  Performance of Employee List  */
     public function pedma_admin()
     {
-        if (!can_evaluate_pedma()) {
+        if (!can_open_pedma_evaluation()) {
             access_denied('pedma');
         }
 
@@ -815,13 +815,31 @@ class Staff extends AdminController
         $data['departments'] = $this->departments_model->get_staff_departments();
         $isManager = $this->db->query('SELECT manageleave from tblstaff_info WHERE staffid = ' . get_staff_user_id())->result_array();
 
-        // Show department staff list (do not over-filter by team_manage,
-        // otherwise Employee dropdown becomes empty after department select).
-        $data['staffs'] = $this->staff_model->get_staff_based_on_department();
-
+        // Employee list is loaded after department is selected on the evaluation page.
+        $data['staffs'] = [];
+        $data['pedma_comment_sections'] = pedma_comment_sections();
+        $data['pedma_can_overall_feedback'] = pedma_can_edit_overall_feedback();
         $data['title'] = _l('timesheets');
 
         $this->load->view('admin/staff/pedma_admin', $data);
+    }
+
+    public function pedma_admin_evaluation_panel()
+    {
+        if (!can_open_pedma_evaluation()) {
+            show_404();
+        }
+
+        $this->load->model('departments_model');
+        $data = [
+            'pedma_panel_partial' => true,
+            'panel_staffid'       => $this->input->post('staffid'),
+            'panel_month'         => $this->input->post('performance_month'),
+            'departments'         => $this->departments_model->get_staff_departments(),
+            'staffs'              => [],
+        ];
+
+        $this->load->view('admin/staff/pedma_admin_evaluation_panel', $data);
     }
 
     public function pedma_admin_old()
@@ -1089,6 +1107,57 @@ class Staff extends AdminController
         ]);
     }
 
+    public function manage_pedma_top_employees()
+    {
+        header('Content-Type: application/json');
+
+        if (!can_manage_pedma()) {
+            echo json_encode(['success' => false, 'message' => 'Access denied', 'rows' => []]);
+            return;
+        }
+
+        $month = trim((string) $this->input->post('month'));
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = date('Y-m');
+        }
+
+        $rows = $this->staff_model->get_pedma_rows_by_grade('', $month, $month, '', '1', true);
+        $byStaff = [];
+        foreach ($rows as $row) {
+            $sid = (int) $row['staffid'];
+            if (!isset($byStaff[$sid]) || (float) $row['score'] > (float) $byStaff[$sid]['score']) {
+                $byStaff[$sid] = $row;
+            }
+        }
+
+        $ranked = array_values($byStaff);
+        usort($ranked, function ($a, $b) {
+            $diff = (float) $b['score'] - (float) $a['score'];
+            if ($diff > 0) {
+                return 1;
+            }
+            if ($diff < 0) {
+                return -1;
+            }
+            return strcasecmp($a['emp_name'], $b['emp_name']);
+        });
+
+        $ranked = array_slice($ranked, 0, 10);
+
+        foreach ($ranked as $index => &$row) {
+            $row['rank'] = $index + 1;
+        }
+        unset($row);
+
+        echo json_encode([
+            'success' => true,
+            'month' => $month,
+            'month_label' => date('F Y', strtotime($month . '-01')),
+            'count' => count($ranked),
+            'rows' => $ranked,
+        ]);
+    }
+
     public function pedma_schedule_meeting()
     {
         header('Content-Type: application/json');
@@ -1277,6 +1346,34 @@ class Staff extends AdminController
     /**
      * Manager PEDMA evaluation reminder payload for Workroom daily popup.
      */
+    /**
+     * JSON for Workroom popup when Snapshot monitor is not logged in after check-in.
+     */
+    public function snapshot_login_reminder()
+    {
+        header('Content-Type: application/json');
+
+        if (!is_staff_logged_in()) {
+            echo json_encode(['success' => false, 'show' => false]);
+            return;
+        }
+
+        $staffId = (int) get_staff_user_id();
+        $this->load->model('emt_model');
+        $this->load->helper('timesheets/timesheets');
+
+        // Use fresh punch state (navbar cache is ~90s and can miss a new check-in).
+        $cacheKey = 'ts_navbar_punch_' . $staffId;
+        $this->session->unset_userdata($cacheKey);
+
+        $punch = function_exists('timesheets_admin_navbar_punch_context')
+            ? timesheets_admin_navbar_punch_context(13)
+            : [];
+        $status = $this->emt_model->getSnapshotLoginReminderStatus($staffId, $punch);
+
+        echo json_encode(array_merge(['success' => true], $status));
+    }
+
     public function pedma_eval_pending_reminder()
     {
         header('Content-Type: application/json');
@@ -1322,7 +1419,7 @@ class Staff extends AdminController
 
     public function staff_performance()
     {
-        if (!can_evaluate_pedma()) {
+        if (!can_open_pedma_evaluation()) {
             access_denied('pedma');
         }
 
@@ -1501,10 +1598,26 @@ class Staff extends AdminController
     }
 
     public function get_kra_based_on_department_json(){
+        $departmentid = (int) $this->input->post('department');
 
-        $departmentid = $this->input->post('department');
+        if ($departmentid <= 0) {
+            echo json_encode([
+                'default_kra' => [],
+                'custom_kra' => [],
+                'global_default_kra' => [],
+                'department_kra' => [],
+            ]);
+            return;
+        }
+
+        $customKra = $this->staff_model->get_custom_kra_based_on_department($departmentid);
+        $departmentDefaultKra = $this->staff_model->get_department_default_kra($departmentid);
+
+        $data['global_default_kra'] = $this->staff_model->get_global_default_kra();
+        $data['department_kra'] = array_merge($departmentDefaultKra, $customKra);
         $data['default_kra'] = $this->staff_model->get_default_kra_based_on_department($departmentid);
-        $data['custom_kra'] = $this->staff_model->get_custom_kra_based_on_department($departmentid);
+        $data['custom_kra'] = $customKra;
+        $data['departmentid'] = $departmentid;
 
         echo json_encode($data);
     }

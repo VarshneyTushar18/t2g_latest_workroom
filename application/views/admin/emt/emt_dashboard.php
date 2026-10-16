@@ -1,4 +1,4 @@
-<?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
+﻿<?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php //print_r($res_child); ?>
 <?php init_head(); ?>
 <style>
@@ -19,80 +19,84 @@
         opacity: 1 !important;
     }
     
-    .leave_balance #applybtn{
-     float: left !important;
-    padding: 6px 20px;
+    .snapshot-dashboard-filter {
+        margin-bottom: 16px;
     }
-	.leave_balance .col-md-5ths{
-		width:85% !important;
-	}
-	.leave_balance .bootstrap-select.bs3{
-		float:left;
-	}
-	.leave_balance .bootstrap-select.bs3{
-		float:left;
-		padding: 0px 5px;
-	}
+    .snapshot-dashboard-filter label {
+        display: block;
+        margin-bottom: 6px;
+    }
+    .snapshot-dashboard-filter .bootstrap-select {
+        width: 100% !important;
+    }
+    .snapshot-dashboard-filter .bootstrap-select .dropdown-menu {
+        z-index: 1060 !important;
+    }
+    .snapshot-stat-row {
+        margin-bottom: 18px;
+    }
+    a.snapshot-stat-card {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        padding: 14px 16px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        transition: border-color 0.15s, box-shadow 0.15s;
+        text-decoration: none !important;
+        color: inherit;
+        position: relative;
+    }
+    a.snapshot-stat-card:hover,
+    a.snapshot-stat-card:focus {
+        border-color: #141e46;
+        box-shadow: 0 2px 8px rgba(20, 30, 70, 0.12);
+        outline: none;
+    }
+    a.snapshot-stat-card .snapshot-stat-label {
+        display: block;
+        font-size: 13px;
+        color: #64748b;
+        margin-bottom: 6px;
+    }
+    a.snapshot-stat-card .snapshot-stat-value {
+        display: block;
+        font-size: 28px;
+        font-weight: 600;
+        color: #141e46;
+        line-height: 1.1;
+    }
+    .snapshot-dept-table {
+        margin-bottom: 20px;
+    }
+    .snapshot-dept-table th {
+        background: #141e46 !important;
+        color: #fff !important;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .snapshot-dept-table td,
+    .snapshot-dept-table th {
+        vertical-align: middle !important;
+    }
+    .snapshot-dept-table a.snapshot-dept-count {
+        font-weight: 600;
+        color: #141e46;
+    }
+    .snapshot-dept-table a.snapshot-dept-count:hover {
+        text-decoration: underline;
+    }
 	.table-loading table thead tr{
 		height:auto !important;
 	}
-	  .loader {
-        position: fixed;
-		z-index: 99;
-		top: 0;
-		left: 250px;
-		width: 80%;
-		height: 100%;
-		background: white;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-    }
 
-    .loader>img {
-        width: 100px;
-    }
-
-    .loader .hidden {
-        animation: fadeOut 1s;
-        animation-fill-mode: forwards;
-    }
-	#display_img img{
-		     width: 250px !important;
-			margin: 10px 15px;
-			border: 1px double;
-	}
-	#select_file_child{
-		padding: 6px 46px;
-    border-radius: 5px;
-    border-color: #e1e6ee;
-	}
-	.img_gallery {
-    width: 33%;
-    display: inline-grid;
-	}
-	.date_class{
-		text-align: center;
-		background: gray;
-		margin: 0px 20px;
-		color: white;
-		border-radius: 5px;
-	}
-	#display_img li{
-		display: inline-grid;
-	}
-	
+	table.dataTable thead th.sorting:after, table.dataTable thead th.sorting_desc:after{
+  filter: invert(1) !important;
+}
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-<!-- Latest compiled and minified CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
-
-<!-- Latest compiled and minified JavaScript -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/js/bootstrap-select.min.js"></script>
-
-<!-- (Optional) Latest compiled and minified JavaScript translation files -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/js/i18n/defaults-*.min.js"></script>
 <div id="wrapper" class="leave_balance">
     <div class="content">
 <!--<img src="https://lh3.googleusercontent.com/d/1fTxuTK_r_orF_d0-qvSyNn2ojdXd6ZiM=w1000?authuser=0">-->
@@ -100,339 +104,178 @@
             <div class="col-md-12">
                 <div class="panel_s">
                     <div class="panel-body">
-					<select class="form-select form-select-lg mb-3" class="selectpicker" data-live-search="true" id ="select_file" aria-label=".form-select-lg example">
-					  <option selected>Select Menu</option>
-					<?php foreach ($result->files as $file) {  ?>
-					  <option id="select_id" value="<?php echo $file->id; ?>"><?php echo $file->name; ?></option>
-					  <?php  } ?>
-					</select>
-					
-					<select class="form-select form-select-lg mb-3" class="selectpicker" id ="select_file_child" data-live-search="true" aria-label=".form-select-lg example">
-					 <option selected>Select Menu</option>
-					
-					</select>
-					
-		 <div align="center">    			 
-     <div class="content">
-
-        <div class="row">
-            <div class="col-md-12">
-                <div class="panel_s">
-                    <div class="panel-body">
-                        <div class="clearfix"></div>
-							<div class="w3-row-padding" >
-								 <ul class="list-inline" id="display_img">
-									  
-									</ul>
-									<div class="pagination" id="pagination">
-									
-							</div>
-
-							
-
-									</div>
-								</div>
-							</div>
+					<?php if (!empty($drive_error)) { ?>
+					<div class="alert alert-warning"><?php echo htmlspecialchars($drive_error); ?>
+						<?php if (strpos($drive_error, 'not configured') === false) { ?>
+						<br><small>Share each employee snapshot folder with <strong>t2gworkroom@t2g-monitoring.iam.gserviceaccount.com</strong> (Viewer or higher).</small>
+						<?php } ?>
+					</div>
+					<?php } elseif (!empty($drive_hint)) { ?>
+					<div class="alert alert-info"><?php echo htmlspecialchars($drive_hint); ?></div>
+					<?php } ?>
+					<?php
+					$folderCount = isset($employee_folder_count) ? (int) $employee_folder_count : 0;
+					$snapshotSummary = isset($snapshot_summary) && is_array($snapshot_summary) ? $snapshot_summary : [
+						'total_active' => 0,
+						'logged_in_today' => 0,
+						'not_logged_in' => 0,
+					];
+					$departments = isset($departments) && is_array($departments) ? $departments : [];
+					$snapshotByDepartment = isset($snapshot_by_department) && is_array($snapshot_by_department) ? $snapshot_by_department : [];
+					$snapshotListBase = admin_url('Emt/getSnapshotStaffList');
+					$monitoringUrl = admin_url('Emt/monitoring');
+					?>
+					<p class="text-muted tw-mb-2" style="font-size:13px;">
+						<a href="<?php echo html_escape($monitoringUrl); ?>">Open Monitoring</a> to browse screenshots.
+					</p>
+					<div class="row snapshot-dashboard-filter">
+						<div class="col-md-4">
+							<label for="snapshot_dashboard_department">Filter counts by department</label>
+							<select class="selectpicker" data-live-search="true" data-width="100%" id="snapshot_dashboard_department" aria-label="Department filter">
+								<option value="">All departments</option>
+								<?php foreach ($departments as $department) {
+									$deptId = is_array($department) ? $department['departmentid'] : $department->departmentid;
+									$deptName = is_array($department) ? $department['name'] : $department->name;
+								?>
+								<option value="<?php echo (int) $deptId; ?>"><?php echo html_escape($deptName); ?></option>
+								<?php } ?>
+							</select>
 						</div>
 					</div>
-        
-        <!--modal body-->
-<div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
-<div class="modal-dialog modal-xl">
-<div class="modal-content">
-<div class="modal-header">
-<button type="button" class="close" data-dismiss="modal" title="Close">
-<span class="glyphicon glyphicon-remove"></span></button>
-</div>
-<div class="modal-body">
-
- <!-- carousel body-->
-<div id="myGallery" class="carousel slide" data-interval="false">
-<div class="carousel-inner" id="img_model"> 
-	
-    </div>
-
-<!-- Previous and Next buttons-->
-<a class="left carousel-control" href="#myGallery" role="button" data-slide="prev">
-<span class="glyphicon glyphicon-chevron-left"></span></a> 
-<a class="right carousel-control" href="#myGallery" role="button" data-slide="next">
-<span class="glyphicon glyphicon-chevron-right"></span></a>
-</div>
-</div>
-</div>
-</div>
-
-    </div>
-    </div></div>    
-        
-        
-       </div>
+					<div class="snapshot-ui-loading-target" id="snapshotDashboardMetrics">
+					<div class="row snapshot-stat-row">
+						<div class="col-md-4">
+							<a href="<?php echo html_escape($snapshotListBase . '?type=active'); ?>" class="snapshot-stat-card" data-snapshot-list="active" aria-label="Total active employees — view list">
+								<span class="snapshot-stat-card-head">
+									<span class="snapshot-stat-label">Total active employees</span>
+									<span class="snapshot-stat-card-eye" title="View list"><i class="fa fa-eye" aria-hidden="true"></i></span>
+								</span>
+								<span class="snapshot-stat-value" id="snapshotStatTotal"><?php echo (int) $snapshotSummary['total_active']; ?></span>
+							</a>
+						</div>
+						<div class="col-md-4">
+							<a href="<?php echo html_escape($snapshotListBase . '?type=logged_in'); ?>" class="snapshot-stat-card" data-snapshot-list="logged_in" aria-label="Today's snapshot logged-in — view list">
+								<span class="snapshot-stat-card-head">
+									<span class="snapshot-stat-label">Today's snapshot logged-in</span>
+									<span class="snapshot-stat-card-eye" title="View list"><i class="fa fa-eye" aria-hidden="true"></i></span>
+								</span>
+								<span class="snapshot-stat-value" id="snapshotStatLoggedIn"><?php echo (int) $snapshotSummary['logged_in_today']; ?></span>
+							</a>
+						</div>
+						<div class="col-md-4">
+							<a href="<?php echo html_escape($snapshotListBase . '?type=not_logged_in'); ?>" class="snapshot-stat-card" data-snapshot-list="not_logged_in" aria-label="Not logged-in — view list">
+								<span class="snapshot-stat-card-head">
+									<span class="snapshot-stat-label">Not logged-in</span>
+									<span class="snapshot-stat-card-eye" title="View list"><i class="fa fa-eye" aria-hidden="true"></i></span>
+								</span>
+								<span class="snapshot-stat-value" id="snapshotStatNotLoggedIn"><?php echo (int) $snapshotSummary['not_logged_in']; ?></span>
+							</a>
+						</div>
+					</div>
+					<h5 class="tw-font-semibold tw-mb-2">Department snapshot login</h5>
+					<div class="table-responsive snapshot-dept-table">
+						<table class="table table-bordered table-striped">
+							<thead>
+								<tr>
+									<th>Department</th>
+									<th class="text-center">Active employees</th>
+									<th class="text-center">Snapshot logged-in today</th>
+									<th class="text-center">Not logged-in</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php if (empty($snapshotByDepartment)) { ?>
+								<tr><td colspan="4" class="text-muted text-center">No department data.</td></tr>
+								<?php } else {
+									foreach ($snapshotByDepartment as $deptRow) {
+										$deptId = (int) ($deptRow['departmentid'] ?? 0);
+										$deptQ = $deptId > 0 ? ('&department_id=' . $deptId) : '';
+								?>
+								<tr>
+									<td><?php echo html_escape($deptRow['name'] ?? ''); ?></td>
+									<td class="text-center">
+										<a class="snapshot-dept-count" href="<?php echo html_escape($snapshotListBase . '?type=active' . $deptQ); ?>"><?php echo (int) ($deptRow['total_active'] ?? 0); ?></a>
+									</td>
+									<td class="text-center">
+										<a class="snapshot-dept-count" href="<?php echo html_escape($snapshotListBase . '?type=logged_in' . $deptQ); ?>"><?php echo (int) ($deptRow['logged_in_today'] ?? 0); ?></a>
+									</td>
+									<td class="text-center">
+										<a class="snapshot-dept-count" href="<?php echo html_escape($snapshotListBase . '?type=not_logged_in' . $deptQ); ?>"><?php echo (int) ($deptRow['not_logged_in'] ?? 0); ?></a>
+									</td>
+								</tr>
+								<?php }
+								} ?>
+							</tbody>
+						</table>
+					</div>
+					</div>
                     </div>
                 </div>
             </div>
         </div>
-    
-   
+    </div>
+</div>
+
+<?php $this->load->view('admin/emt/_snapshot_ui_loader'); ?>
+
 <?php init_tail(); ?>
+<?php $this->load->view('admin/emt/_snapshot_ui_loader_script'); ?>
 <script>
+var SNAPSHOT_SUMMARY_URL = <?php echo json_encode(admin_url('Emt/snapshot_dashboard_summary')); ?>;
+var SNAPSHOT_LIST_PAGE = <?php echo json_encode(admin_url('Emt/getSnapshotStaffList')); ?>;
 
-$( "#select_file" ).each(function(index) {
-		//$( "#select_file_child" ).empty();
-		$( "#select_file_child" ).empty();
-		 $("#select_file").change(function(event){
-		event.preventDefault(event);
-       //var boolKey = $(this).val();
-	  var boolKey = $(this).children("option:selected").val();
-		// var boolKey = $(this).v("name");
-		  // alert(boolKey);
-		 
-        $.ajax({
-                url: '<?php echo base_url('admin/Emt/getEmployeeDate');?>',
-                type: 'GET',
-				data: {date: boolKey},
-				 cache: false,
-                success: function(res) {
-						var emp = JSON.parse(res);
-						
-						let options = ''; 
-					for(var i = 0; i < emp.length; i++) {
-						//console.log(emp[0]['name']);
-				//$('.loader').removeClass('hidden');
-					options += '<option class="'+emp[i]['id']+'" value="'+emp[i]['id']+'">' + emp[i]['name'] + '</option>'; 
-				  }
-				  console.log(options);
-				  $('#select_file_child').html('<option>Select Menu</option>'+options);
-				  $('#select_file_child').selectpicker('destroy');	
-					$('#select_file_child').selectpicker();				  
-                }	
-                
-            });
- 
-});
-});
-
-function snapshotImgUrl(fileId) {
-	return '<?php echo base_url('admin/Emt/viewImg/'); ?>' + encodeURIComponent(fileId);
-}
-
-function snapshotTimeLabel(name) {
-	try {
-		var parts = String(name || '').split('_');
-		if (parts.length < 3) {
-			return name || '';
-		}
-		var timedata = parts[parts.length - 1].split('.')[0];
-		var chunks = timedata.match(/.{1,2}/g);
-		return chunks ? chunks.join(':') : timedata;
-	} catch (e) {
-		return name || '';
-	}
-}
-
-$( "#select_file_child" ).each(function(index) {	
-
-$("#select_file_child").change(function(event){
-	event.preventDefault();
-	$( "#display_img" ).empty();
-        var boolKey = $(this).children("option:selected").val();
-		if (!boolKey || boolKey === 'Select Menu') {
+function updateSnapshotStatCardLinks() {
+	var dept = ($('#snapshot_dashboard_department').val() || '').toString();
+	$('.snapshot-stat-card').each(function () {
+		var listType = ($(this).data('snapshot-list') || '').toString();
+		if (!listType) {
 			return;
 		}
-		$( "#img_model" ).empty();
-        $.ajax({
-                url: '<?php echo base_url('admin/Emt/getImg');?>',
-                type: 'GET',
-				async: true,
-				data: {date: boolKey},
-				 cache: false,
-                success: function(res) {
-					var emp = [];
-					try {
-						emp = (typeof res === 'string') ? JSON.parse(res) : res;
-					} catch (e) {
-						$('#display_img').html('<li class="text-danger">Could not load images.</li>');
-						return;
-					}
-					if (!emp || !emp.length) {
-						$('#display_img').html('<li class="text-muted">No screenshots found for this date.</li>');
-						return;
-					}
+		var url = SNAPSHOT_LIST_PAGE + '?type=' + encodeURIComponent(listType);
+		if (dept) {
+			url += '&department_id=' + encodeURIComponent(dept);
+		}
+		$(this).attr('href', url);
+	});
+}
 
-					for (var i = 0; i < emp.length; i++) {
-						var fileId = emp[i]['id'];
-						var string_value = snapshotTimeLabel(emp[i]['name']);
-						var src = snapshotImgUrl(fileId);
-						var activeClass = (i === 0) ? ' active' : '';
+function refreshSnapshotSummaryCounts() {
+	var dept = ($('#snapshot_dashboard_department').val() || '').toString();
+	var $metrics = $('#snapshotDashboardMetrics');
+	updateSnapshotStatCardLinks();
+	snapshotUiLoader.show();
+	snapshotUiLoader.setLoadingTarget($metrics, true);
+	$.ajax({
+		url: SNAPSHOT_SUMMARY_URL,
+		data: { department_id: dept },
+		dataType: 'json',
+	}).done(function (resp) {
+		if (!resp || !resp.success || !resp.summary) {
+			return;
+		}
+		$('#snapshotStatTotal').text(resp.summary.total_active);
+		$('#snapshotStatLoggedIn').text(resp.summary.logged_in_today);
+		$('#snapshotStatNotLoggedIn').text(resp.summary.not_logged_in);
+	}).always(function () {
+		snapshotUiLoader.setLoadingTarget($metrics, false);
+		snapshotUiLoader.hide();
+	});
+}
 
-						$('#display_img').append(
-							'<li><a href="#myGallery" data-slide-to="'+i+'">' +
-							'<img class="img-thumbnail" src="'+src+'" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a>' +
-							'<span class="date_class">'+string_value+'</span></li>'
-						);
-						$('#img_model').append(
-							'<div class="item'+activeClass+'">' +
-							'<button class="download" onClick="ImageidDataVal(\''+fileId+'\',\''+string_value+'\')"><i class="fa fa-download" aria-hidden="true"></i></button>' +
-							'<h4>'+string_value+'</h4>' +
-							'<img src="'+src+'" alt="item'+i+'" style="height:400px;width:600px;">' +
-							'<div class="carousel-caption"></div></div>'
-						);
-					}
-                },
-				error: function() {
-					$('#display_img').html('<li class="text-danger">Failed to load images from Drive.</li>');
-				}
-            });
- 
+$(function () {
+	var $dept = $('#snapshot_dashboard_department');
+	if ($dept.length) {
+		if ($dept.data('selectpicker')) {
+			$dept.selectpicker('destroy');
+		}
+		$dept.selectpicker({ liveSearch: true, width: '100%', container: 'body' });
+		$dept.on('changed.bs.select', function () {
+			refreshSnapshotSummaryCounts();
+		});
+	}
+	updateSnapshotStatCardLinks();
+	snapshotUiLoader.bindNavigation('a.snapshot-stat-card, a.snapshot-dept-count, a[href*="Emt/monitoring"]');
 });
-});
-function ImageidData(id,time){
-	 $(document).ready(function () {
-         //  let field = $(this).val();
-			//alert(time);
-           $.ajax({
-              url: '<?php echo base_url('admin/Emt/getDownload');?>',
-              type: 'POST',
-			  data: {date: id,time:time},
-			  xhrFields: {
-                responseType: 'blob'  // Important to handle binary data (image)
-            },
-              success: function(response) {
-               const blobUrl = URL.createObjectURL(response);
-
-                // Create an anchor element to trigger the download
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = 'modified-image.png';  // Set the filename
-                document.body.appendChild(a);  // Append anchor to the body
-                a.click();  // Simulate click to trigger download
-
-                // Clean up
-                a.remove();
-                URL.revokeObjectURL(blobUrl);  // Revoke the object URL
-               }
-            });
-	 });
-}
-
-  function ImageidDataVal(id,time){
-           $(document).ready(function () {
-         //  let field = $(this).val();
-			//alert(time);
-           $.ajax({
-              url: '<?php echo base_url('admin/Emt/getDownload');?>',
-              type: 'POST',
-			  data: {date: id,time:time},
-			  xhrFields: {
-                responseType: 'blob'  // Important to handle binary data (image)
-            },
-              success: function(response) {
-				  const blobUrl = URL.createObjectURL(response);
-
-                // Create an anchor element to trigger the download
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = 'modified-image.png';  // Set the filename
-                document.body.appendChild(a);  // Append anchor to the body
-                a.click();  // Simulate click to trigger download
-
-                // Clean up
-                a.remove();
-                URL.revokeObjectURL(blobUrl);  // Revoke the object URL
-               }
-            });
-	 });
-}
-
-/*	
- $('#next').on("click", function(){
-	var token =  $('#token').val();
-
-	$( "#display_img" ).empty();
-
-        $.ajax({
-                url: '<?php echo base_url('admin/Emt/nextToken');?>',
-                type: 'POST',
-				async: true,
-				data: {date: token},
-                success: function(res) {
-						var emp = JSON.parse(res);
-						
-						var i = 0;
-					if(i == 0){
-							$('#img_model').append('<div class="item active"><img src="https://lh3.googleusercontent.com/d/'+emp[0]['id']+'=w1000?authuser=0" alt="item0"  style="height:400px;width:600px;"><div class="carousel-caption"></div></div>');
-						}
-					for(var i = 1; i < emp.length; i++) {
-						console.log(emp[i]['name']);
-						let str=emp[i]['name'];
-						let string_data = str.split("_");
-						let timedata = string_data[2];
-						let timedata_con = timedata.split(".");
-						let string_match = timedata_con[0].match(/.{1,2}/g);
-						let string_value = string_match.join(":");
-						
-					if(emp[i]['nextPageToken']==''){
-					$('#display_img').append('<li><a href="#myGallery"data-slide-to="'+i+'"><img class="img-thumbnail"  src="https://lh3.googleusercontent.com/d/'+emp[i]['id']+'=w1000?authuser=0" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a><span class="date_class">'+string_value+'</span></li>');
-					$('#img_model').append('<div class="item"><img src="https://lh3.googleusercontent.com/d/'+emp[i]['id']+'=w1000?authuser=0" alt="item'+i+'"  style="height:400px;width:600px;"><div class="carousel-caption"></div></div>');
-					
-					}else{
-					
-					$('#display_img').append('<li><a href="#myGallery"data-slide-to="'+i+'"><img class="img-thumbnail"  src="https://lh3.googleusercontent.com/d/'+emp[i]['id']+'=w1000?authuser=0" data-toggle="modal" data-target="#myModal" style="height:200px;width:250px; margin:5px 0 5px 0;"></a><span class="date_class">'+string_value+'</span></li>');
-					}
-					
-					//$( "select_file_child" ).selectmenu( "refresh" );
-                }
-				$('#pagination').append('<button class="next">Next</a>');	
-				//	$('.loader').removeClass('hidden'); // Show loader
-					// top.location.href="/admin/Emt/getEmployeeDate?date="+boolKey;//redirection
-                    // window.location.href = '<?php base_url('admin/Emt/getChildId');?>';
-					//$('#emdata').append('<tr><td>' + res[0][i]['name'] + '</td></tr>');
-                }
-            });
- 
-
-});*/
-   var timesheetsTable = $('.table-timesheets-report');
-
-
-        timesheetsTable.DataTable({
-            dom: 'Bfrtip',
-            buttons: [
-                
-                
-            ]
-        });
-		
-		
-		
-	
-$('#select_file').selectpicker();
-
-
- /* $(document).ready(function() {
-
-        $('#link_status').change(function() {
-            let field = $('.inputid').val();
-			console.log(field);
-            $.ajax({
-                url: '<?php echo base_url('admin/emt/getChildId');?>',
-                type: 'POST',
-                success: function(data) {
-                   alert(data);
-                }
-            });
-        });
-    });
-    */
-
 </script>
-<script>
-function onClick(element) {
-  document.getElementById("img01").src = element.src;
-  document.getElementById("modal01").style.display = "block";
-}
-</script>
- 
-         
 </body>
-
 </html>

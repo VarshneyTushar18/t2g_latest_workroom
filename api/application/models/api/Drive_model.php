@@ -14,6 +14,7 @@ class Drive_model extends CI_Model{
          'directory_id' => $data['directory_id'],
          'parent_directory_id' => isset($data['parent_directory_id']) ? $data['parent_directory_id'] : null,
          'status' => isset($data['status']) ? $data['status'] : 0,
+         'date_time' => !empty($data['date_time']) ? $data['date_time'] : date('Y-m-d H:i:s'),
        ];
 
        if ($row['staff_id'] === null || $row['staff_id'] === '' || $row['file_id'] === null || $row['file_id'] === '' || $row['directory_id'] === null || $row['directory_id'] === '') {

@@ -11,6 +11,14 @@ $pedmaEvalReminderPopup = APPPATH . 'views/admin/includes/modals/pedma_eval_remi
 if (is_file($pedmaEvalReminderPopup)) {
     include_once($pedmaEvalReminderPopup);
 }
+$snapshotLoginReminderPopup = APPPATH . 'views/admin/includes/modals/snapshot_login_reminder_popup.php';
+if (is_file($snapshotLoginReminderPopup)) {
+    include_once($snapshotLoginReminderPopup);
+}
+$sopComposeModal = APPPATH . 'views/admin/includes/modals/sop_compose_modal.php';
+if (is_file($sopComposeModal) && is_staff_logged_in() && can_create_sop()) {
+    include_once($sopComposeModal);
+}
 ?>
 <div id="event"></div>
 <div id="newsfeed" class="animated fadeIn hide" <?php if ($this->session->flashdata('newsfeed_auto')) {

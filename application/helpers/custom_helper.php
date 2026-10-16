@@ -766,6 +766,23 @@ function is_manager() {
     return $role && strtolower(get_role_name($role->role)) === "manager";
 }
 
+/**
+ * Create / send SOP — managers (incl. Manager-* roles) and system admins only.
+ */
+function can_create_sop($staff_id = '')
+{
+    if (is_admin($staff_id)) {
+        return true;
+    }
+
+    $role = get_staff_role_slug($staff_id);
+    if (in_array($role, ['super admin', 'admin'], true)) {
+        return true;
+    }
+
+    return pedma_role_is_manager_family($role);
+}
+
 function can_manage_task_templates()
 {
     return is_admin() || is_admin2() || is_super_admin();
@@ -866,6 +883,51 @@ function can_evaluate_pedma($staff_id = '')
 {
     // Evaluation: Super Admin / Admin / Manager only
     return pedma_has_evaluation_role_access($staff_id);
+}
+
+function pedma_is_hod_role($staff_id = '')
+{
+    $role = get_staff_role_slug($staff_id);
+
+    return $role === 'leader' || $role === 'hod' || strpos($role, 'head of department') !== false;
+}
+
+/**
+ * Which PEDMA comment columns the current profile may see and edit.
+ * Admin and Super Admin see all three. Manager, HR, and HOD (Leader) see only their own.
+ */
+function pedma_comment_sections($staff_id = '')
+{
+    $role = get_staff_role_slug($staff_id);
+    if (is_admin($staff_id) || in_array($role, ['super admin', 'admin'], true)) {
+        return ['manager', 'hr', 'hod'];
+    }
+
+    $sections = [];
+    if (pedma_role_is_manager_family($role)) {
+        $sections[] = 'manager';
+    }
+    if (is_HR($staff_id)) {
+        $sections[] = 'hr';
+    }
+    if (pedma_is_hod_role($staff_id)) {
+        $sections[] = 'hod';
+    }
+
+    return $sections;
+}
+
+function can_open_pedma_evaluation($staff_id = '')
+{
+    return can_evaluate_pedma($staff_id) || is_HR($staff_id) || pedma_is_hod_role($staff_id);
+}
+
+/**
+ * Overall PEDMA feedback is entered by managers only (not HR/HOD).
+ */
+function pedma_can_edit_overall_feedback($staff_id = '')
+{
+    return pedma_role_is_manager_family(get_staff_role_slug($staff_id));
 }
 
 function can_manage_pedma_kra($staff_id = '')
@@ -1027,4 +1089,88 @@ function is_sales() {
     $role = $CI->db->get()->row();
 
     return $role && strtolower(get_role_name($role->role)) === "sales";
+}
+
+/**
+ * Snapshot desktop client capture interval (seconds between screenshots).
+ */
+function snapshot_capture_interval_seconds()
+{
+    return 600;
+}
+
+/**
+ * Interval stored in tbltimeinterval.time_interval (H:i:s, duration not clock time).
+ */
+function snapshot_capture_interval_time()
+{
+    return gmdate('H:i:s', snapshot_capture_interval_seconds());
+}
+
+/**
+ * Ensure one tbltimeinterval row per staff at the standard capture interval.
+ */
+function snapshot_ensure_staff_timeinterval($staffId)
+{
+    $staffId = (int) $staffId;
+    if ($staffId < 1) {
+        return;
+    }
+
+    $CI = &get_instance();
+    $CI->load->database();
+
+    $table = db_prefix() . 'timeinterval';
+    $interval = snapshot_capture_interval_time();
+
+    $row = $CI->db->where('staffid', $staffId)->get($table)->row();
+    if ($row) {
+        return;
+    }
+
+    $CI->db->insert($table, [
+        'staffid'       => $staffId,
+        'time_interval' => $interval,
+    ]);
+}
+
+/**
+ * Admin/manager may edit per-staff snapshot capture intervals.
+ */
+function can_manage_snapshot_interval($staff_id = '')
+{
+    if (is_admin($staff_id) || is_super_admin() || is_IT() || is_admin2()) {
+        return true;
+    }
+
+    return is_manager($staff_id);
+}
+
+/**
+ * Normalize interval to H:i:s duration for tbltimeinterval (60s–3600s).
+ */
+function snapshot_normalize_interval_time($time)
+{
+    $time = trim((string) $time);
+    if ($time === '') {
+        return false;
+    }
+
+    if (preg_match('/^\d+:\d{2}:\d{2}$/', $time)) {
+        $parts = explode(':', $time);
+        $seconds = ((int) $parts[0]) * 3600 + ((int) $parts[1]) * 60 + (int) $parts[2];
+    } elseif (preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+        $parts = explode(':', $time);
+        $seconds = ((int) $parts[0]) * 60 + (int) $parts[1];
+    } elseif (ctype_digit($time)) {
+        $seconds = (int) $time;
+    } else {
+        return false;
+    }
+
+    if ($seconds < 60 || $seconds > 3600) {
+        return false;
+    }
+
+    return gmdate('H:i:s', $seconds);
 }
