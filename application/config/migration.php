@@ -69,7 +69,7 @@ $config['migration_auto_latest'] = false;
 | be upgraded / downgraded to.
 |
 */
-$config['migration_version'] = 304; // 3.0.4
+$config['migration_version'] = 311; // includes 311_version_311 snapshot interval sync
 
 /*
 |--------------------------------------------------------------------------

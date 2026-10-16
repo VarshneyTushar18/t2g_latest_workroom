@@ -343,22 +343,23 @@ function app_init_admin_sidebar_menu_items()
 
 
 
-    if (is_admin() || is_admin2() || is_super_admin()) {
-
-        $CI->app_menu->add_sidebar_menu_item('Reports', [
+    if (is_admin() || is_admin2() || is_super_admin() || has_permission('reports', '', 'view')) {
+        $CI->app_menu->add_sidebar_menu_item('reports', [
             'collapse' => true,
             'name' => 'Reports',
             'position' => 100,
             'icon' => 'fa fa-file-text',
             'badge' => [],
         ]);
-        $CI->app_menu->add_sidebar_children_item('Reports', [
-            'slug' => 'send-report',
-            'name' => 'Manual Reports',
-            'href' => admin_url('manual_report'),
-            'position' => 4,
-            'badge' => [],
-        ]);
+        if (is_admin() || is_admin2() || is_super_admin()) {
+            $CI->app_menu->add_sidebar_children_item('reports', [
+                'slug' => 'send-report',
+                'name' => 'Manual Reports',
+                'href' => admin_url('manual_report'),
+                'position' => 4,
+                'badge' => [],
+            ]);
+        }
     }
 
     $CI->app_menu->add_sidebar_menu_item('performance', [
@@ -723,7 +724,7 @@ function app_init_admin_sidebar_menu_items()
             ]);
         }
 
-        if (can_evaluate_pedma()) {
+        if (function_exists('can_open_pedma_evaluation') && can_open_pedma_evaluation()) {
             $CI->app_menu->add_sidebar_children_item('pedma', [
                 'name'     => _l('Evaluation'),
                 'href'     => admin_url('staff/pedma_admin'),
@@ -753,23 +754,58 @@ function app_init_admin_sidebar_menu_items()
 
         if(is_admin() || is_super_admin() || is_IT() || is_admin2()){
             $CI->app_menu->add_sidebar_children_item('emt-review', [
-                'name'     => _l('Snapshot dashboard'),
+                'name'     => _l('Dashboard'),
                 'href'     => admin_url('Emt/getEmployeeId'),
                 'position' => 6,
                 'badge'    => [],
             ]);
 
             $CI->app_menu->add_sidebar_children_item('emt-review', [
-                'name'     => _l('Snapshot Interval'),
+                'name'     => 'Monitoring',
+                'href'     => admin_url('Emt/monitoring'),
+                'position' => 7,
+                'badge'    => [],
+            ]);
+
+            $CI->app_menu->add_sidebar_children_item('emt-review', [
+                'name'     => 'Report',
+                'href'     => admin_url('Emt/report'),
+                'position' => 8,
+                'badge'    => [],
+            ]);
+
+            $CI->app_menu->add_sidebar_children_item('emt-review', [
+                'name'     => _l('Interval'),
                 'href'     => admin_url('Emt/EmtInterval'),
                 'position' => 11,
                 'badge'    => [],
             ]);
         }else{
             $CI->app_menu->add_sidebar_children_item('emt-review', [
-                'name'     => _l('Snapshot dashboard'),
+                'name'     => _l('Dashboard'),
                 'href'     => admin_url('Emt/getDepartment'),
                 'position' => 6,
+                'badge'    => [],
+            ]);
+
+            $CI->app_menu->add_sidebar_children_item('emt-review', [
+                'name'     => 'Monitoring',
+                'href'     => admin_url('Emt/monitoring'),
+                'position' => 7,
+                'badge'    => [],
+            ]);
+
+            $CI->app_menu->add_sidebar_children_item('emt-review', [
+                'name'     => 'Report',
+                'href'     => admin_url('Emt/report'),
+                'position' => 8,
+                'badge'    => [],
+            ]);
+
+            $CI->app_menu->add_sidebar_children_item('emt-review', [
+                'name'     => _l('Interval'),
+                'href'     => admin_url('Emt/EmtInterval'),
+                'position' => 11,
                 'badge'    => [],
             ]);
         }
