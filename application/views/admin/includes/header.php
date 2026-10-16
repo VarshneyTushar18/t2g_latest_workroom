@@ -77,7 +77,12 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     $biometric_last_out_ts = (int) ($navbar_punch['biometric_last_out_ts'] ?? 0);
     $biometric_break_summary = $navbar_punch['biometric_break_summary'] ?? null;
     $on_wfh_today = !empty($navbar_punch['on_wfh_today']);
-    if ($on_wfh_today) {
+    $workroom_open_checkin = !empty($navbar_punch['workroom_open_checkin']);
+    $workroom_day_complete = !empty($navbar_punch['workroom_day_complete']);
+    if (!$workroom_day_complete && function_exists('timesheets_staff_completed_workroom_today')) {
+        $workroom_day_complete = timesheets_staff_completed_workroom_today(get_staff_user_id(), date('Y-m-d'));
+    }
+    if ($on_wfh_today || $workroom_open_checkin || $type_check_in_out == 1) {
         $biometric_navbar_active = false;
     }
 
@@ -234,7 +239,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                                     <?php } ?>
                                 <?php } else { ?>
                                     <?php
-                                    if ($type_check_in_out != 1 && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
+                                    if ($type_check_in_out != 1 && !$workroom_day_complete && ($on_wfh_today || $time_from_checkin >= 13 || $allows_updating_check_in_time == 1 || $type_check_in_out === '' || $type_check_in_out === 2)) {
                                         echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()', 'class' => 'header-action-form')); ?>
                                         <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
                                         <input type="hidden" name="type_check" value="1">
