@@ -20299,6 +20299,24 @@ public function add_requisition_ajax($data)
 				}
 			}
 
+			// Biometric staff: trust import "Present" + total hours (legacy green), not strict final OUT pairing.
+			if (
+				isset($bio_daily_by_date[$date])
+				&& $attendance_source === 'biometric'
+				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'future', 'night_carryover', 'regularised', 'pending'], true)
+				&& !($date === $today && $has_in && !$has_out)
+			) {
+				$legacy_hrs = $this->biometric_report_legacy_present_hours($bio_daily_by_date[$date]);
+				if ($legacy_hrs !== null) {
+					$status = 'ok';
+					$issues = [];
+					$can_regularise = false;
+					$calendar_hours = max($calendar_hours, $legacy_hrs);
+					$hours = max($hours, $legacy_hrs);
+					$code = 'P';
+				}
+			}
+
 			$display_check_in = $punch['check_in'] ?? '';
 			$display_check_out = $punch['check_out'] ?? '';
 			$workroom_fills_display = $attendance_source === 'workroom'
@@ -21094,6 +21112,50 @@ public function add_requisition_ajax($data)
 	 *
 	 * @param array<int, array{type?:string}> $events
 	 */
+	/**
+	 * Parse biometric_report work_duration / t_duration (e.g. "08:55" = 8h55m, or "9.01").
+	 */
+	protected function parse_biometric_report_hours($value)
+	{
+		$value = trim((string) $value);
+		if ($value === '') {
+			return null;
+		}
+		if (is_numeric($value)) {
+			return (float) $value;
+		}
+		if (preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $value, $m)) {
+			$h = (int) $m[1];
+			$min = (int) $m[2];
+			$sec = isset($m[3]) ? (int) $m[3] : 0;
+
+			return $h + ($min / 60) + ($sec / 3600);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Hours from biometric import row when device marked Present (legacy calendar green rule).
+	 */
+	protected function biometric_report_legacy_present_hours(array $bio_row)
+	{
+		$st = strtolower(trim((string) ($bio_row['status'] ?? '')));
+		if (!in_array($st, ['present', 'p'], true)) {
+			return null;
+		}
+		$hours = $this->parse_biometric_report_hours($bio_row['work_duration'] ?? '');
+		if ($hours === null) {
+			$hours = $this->parse_biometric_report_hours($bio_row['t_duration'] ?? '');
+		}
+		// Match pre–Attendance-Info behavior: ~8h+ on device report = Present (green).
+		if ($hours === null || $hours < 8.0) {
+			return null;
+		}
+
+		return $hours;
+	}
+
 	protected function biometric_punch_sequence_incomplete(array $events, $in_count, $out_count)
 	{
 		if (count($events) === 0) {
