@@ -32,10 +32,6 @@ function get_dashboard_widgets()
             'container' => 'left-8',
         ],
         [
-            'path'      => 'admin/dashboard/widgets/payments_chart',
-            'container' => 'left-8',
-        ],
-        [
             'path'      => 'admin/dashboard/widgets/todos',
             'container' => 'right-4',
         ],
@@ -48,20 +44,8 @@ function get_dashboard_widgets()
             'container' => 'right-4',
         ],
         [
-            'path'      => 'admin/dashboard/widgets/tickets_chart',
-            'container' => 'right-4',
-        ],
-        [
             'path'      => 'admin/dashboard/widgets/projects_activity',
             'container' => 'right-4',
-        ],
-        [
-            'path'      => 'admin/dashboard/widgets/contracts_expiring',
-            'container' => 'left-8',
-        ],
-        [
-            'path'      => 'admin/dashboard/widgets/tickets_report',
-            'container' => 'left-8',
         ],
     ];
 

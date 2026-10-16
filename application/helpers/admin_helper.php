@@ -33,7 +33,19 @@ function init_head($aside = true)
 {
     $CI = &get_instance();
     $CI->load->view('admin/includes/head');
-    $CI->load->view('admin/includes/header', ['startedTimers' => $CI->misc_model->get_staff_started_timers()]);
+    $headerData = [
+        'startedTimers' => $CI->misc_model->get_staff_started_timers(),
+        'unread_sops'   => 0,
+    ];
+    if (is_staff_logged_in()) {
+        try {
+            $CI->load->model('sop_model');
+            $headerData['unread_sops'] = (int) $CI->sop_model->count_unread_for_staff();
+        } catch (Throwable $e) {
+            log_message('error', 'SOP unread badge: ' . $e->getMessage());
+        }
+    }
+    $CI->load->view('admin/includes/header', $headerData);
     $CI->load->view('admin/includes/setup_menu');
     if ($aside == true) {
         $CI->load->view('admin/includes/aside');

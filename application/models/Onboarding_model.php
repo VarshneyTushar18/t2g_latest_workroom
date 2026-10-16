@@ -192,16 +192,10 @@ class Onboarding_model extends App_Model
 
             $this->db->update('tblstaff', $data, "staffid = $staffid ");
 
-            // Snapshot interval: every 10 minutes
-            $seconds = 10 * 60;
-            $formattedTime = gmdate("H:i:s", $seconds);
-
-            $emtData = [
-                'staffid' => $staffid,
-                'time_interval' => $formattedTime
-            ];
-
-            $this->db->insert('tbltimeinterval', $emtData);
+            if (!function_exists('snapshot_ensure_staff_timeinterval')) {
+                get_instance()->load->helper('custom');
+            }
+            snapshot_ensure_staff_timeinterval($staffid);
         }
         
     }

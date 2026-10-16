@@ -1367,12 +1367,6 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 	}
 
 	$CI = &get_instance();
-	$CI->load->model('staff_model');
-	if (method_exists($CI->staff_model, 'get_employment_category')
-		&& $CI->staff_model->get_employment_category($staff_id) === 'wfh') {
-		return true;
-	}
-
 	$row = $CI->db->query(
 		'SELECT id FROM ' . db_prefix() . 'timesheets_requisition_leave
 		 WHERE staff_id = ?
@@ -1393,6 +1387,7 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 		 LIMIT 1',
 		[$staff_id, $date]
 	)->row();
+
 	if ($ts) {
 		return true;
 	}
@@ -1902,6 +1897,11 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$workroom_day_complete = timesheets_staff_completed_workroom_today($staff_id, date('Y-m-d'));
 
 	try {
+		if (!$on_wfh_today) {
+			$on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
+				&& timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'));
+		}
+
 		$CI->load->model('biometric_model');
 		$biometric_row = null;
 		if (!$on_wfh_today && !$workroom_open_checkin && method_exists($CI->biometric_model, 'get_staff_active_punch')) {

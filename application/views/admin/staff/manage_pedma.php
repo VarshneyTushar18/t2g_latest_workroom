@@ -382,7 +382,43 @@
                         </div>
                     </div>
                     <div class="row" style="margin-bottom: 16px;">
+                        <div class="col-md-3 p-0">
+                            <div class="pedma-filter-item">
+                                <label for="pedma_top_month">Month</label>
+                                <input type="month" id="pedma_top_month" class="form-control" value="<?php echo date('Y-m'); ?>" max="<?php echo date('Y-m'); ?>" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" id="pedmaTopEmployeesWrap" style="margin-bottom: 20px;">
                         <div class="col-md-12 p-0">
+                            <div class="card">
+                                <div class="card-title" style="display:flex;justify-content:space-between;align-items:center; gap:10px;">
+                                    <span>Top employees — <span id="pedmaTopMonthLabel"><?php echo date('F Y'); ?></span></span>
+                                    <span id="pedmaTopEmployeesCount" style="font-weight:500; opacity:0.9;"></span>
+                                </div>
+                                <div class="card-body" style="padding:0; overflow-x:auto;">
+                                    <table class="table table-bordered table-striped" id="pedmaTopEmployeesTable" style="margin:0;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:70px;">Rank</th>
+                                                <th>Emp ID</th>
+                                                <th>Emp Name</th>
+                                                <th>Department</th>
+                                                <th>Score</th>
+                                                <th>Grade</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pedmaTopEmployeesBody">
+                                            <tr><td colspan="6" class="text-center">Loading top employees...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-bottom: 16px;">
+                        <div class="col-md-12 p-0">
+                            <p style="font-size:13px;font-weight:600;color:#475569;margin:0 0 10px;text-transform:uppercase;letter-spacing:0.04em;">Report filters</p>
                             <div class="pedma-filters-row">
                                 <div class="pedma-filter-item pedma-filter-dept">
                                     <label for="departmentFilter">Department</label>
@@ -887,6 +923,49 @@
             return empVal !== '' && empVal !== 'Filter By Employee';
         }
 
+        function loadPedmaTopEmployees() {
+            var month = ($('#pedma_top_month').val() || '').toString();
+            if (!/^\d{4}-\d{2}$/.test(month)) {
+                return;
+            }
+
+            $('#pedmaTopEmployeesBody').html('<tr><td colspan="6" class="text-center">Loading top employees...</td></tr>');
+            $.ajax({
+                url: "<?php echo base_url('admin/Staff/manage_pedma_top_employees'); ?>",
+                type: 'post',
+                dataType: 'json',
+                data: { month: month },
+                success: function (resp) {
+                    var body = $('#pedmaTopEmployeesBody');
+                    body.empty();
+                    if (!resp || !resp.success) {
+                        body.html('<tr><td colspan="6" class="text-center">Unable to load top employees.</td></tr>');
+                        return;
+                    }
+                    $('#pedmaTopMonthLabel').text(resp.month_label || month);
+                    var rows = resp.rows || [];
+                    $('#pedmaTopEmployeesCount').text(rows.length + ' employee(s)');
+                    if (!rows.length) {
+                        body.html('<tr><td colspan="6" class="text-center">No PEDMA scores for this month.</td></tr>');
+                        return;
+                    }
+                    rows.forEach(function (row) {
+                        var tr = $('<tr></tr>');
+                        tr.append($('<td></td>').text(row.rank || ''));
+                        tr.append($('<td></td>').text(row.emp_id || ''));
+                        tr.append($('<td></td>').text(row.emp_name || ''));
+                        tr.append($('<td></td>').text(row.department || '-'));
+                        tr.append($('<td></td>').html('<b>' + (row.score || '-') + '%</b>'));
+                        tr.append($('<td></td>').text(row.grade || '-'));
+                        body.append(tr);
+                    });
+                },
+                error: function () {
+                    $('#pedmaTopEmployeesBody').html('<tr><td colspan="6" class="text-center">Unable to load top employees.</td></tr>');
+                }
+            });
+        }
+
         function loadPedmaListResults() {
             if (!$('#pedmaGradeResultsWrap').length) {
                 return;
@@ -1151,6 +1230,16 @@
         let kraDoughnutChart = null;
 
         $(document).ready(function () {
+            if (!$('#pedma_top_month').val()) {
+                var now = new Date();
+                var month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+                $('#pedma_top_month').val(month);
+            }
+            loadPedmaTopEmployees();
+            $('#pedma_top_month').on('change', function () {
+                loadPedmaTopEmployees();
+            });
+
             $('#pedma_range_preset').on('change', function () {
                 var preset = $(this).val();
                 if (preset === 'custom') {

@@ -436,6 +436,14 @@ class App_mailer extends CI_Email
 
     public function send($auto_clear = true)
     {
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_message('info', 'Email blocked because this is the local server.');
+            if (!empty($auto_clear)) {
+                $this->clear(true);
+            }
+            return true;
+        }
+
         $auto_clear = !empty($auto_clear);
         if ($this->mailer_engine == 'phpmailer') {
             if ($this->mailtype == 'html') {

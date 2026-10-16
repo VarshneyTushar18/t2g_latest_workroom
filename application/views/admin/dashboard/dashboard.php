@@ -222,12 +222,6 @@ document.addEventListener('mousemove', e => {
     }
 
 
-    #birthdayeventsList,
-    #anniversaryeventsList,
-    #newjoineeeventsList {
-        max-height: 300px;
-        overflow-y: scroll;
-    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
@@ -275,7 +269,7 @@ document.addEventListener('mousemove', e => {
     </div>
 
 
-    <div class="content">
+    <div class="content admin-dashboard-hrms-content">
         <div class="row">
 
             
@@ -324,124 +318,6 @@ document.addEventListener('mousemove', e => {
             <div class="col-md-4" data-container="bottom-right-4">
                 <?php render_dashboard_widgets('bottom-right-4'); ?>
             </div> -->
-            <?php if (is_staff_member()) { ?>
-                    <div class="row col-md-12" id="celebrantWidget" style="display: none;">
-                        <div class="col-md-12">
-                            <div class="panel_s">
-                                <div class="panel-body padding-10">
-
-                                    <p
-                                        class="tw-font-medium tw-flex tw-items-center tw-mb-0 tw-space-x-1.5 rtl:tw-space-x-reverse tw-p-1.5">
-                                        <i id="spotlighticon" class="fa fa-birthday-cake" aria-hidden="true"></i>
-
-                                        <span class="tw-text-neutral-700" id="spotlight">
-                                            <?php echo 'Spotlight on this month\'s birthdays'; ?>
-                                        </span>
-                                    </p>
-
-                                    <!-- @DATE: 2024-OCT-15 -->
-                                    <!-- Tab Navigation -->
-                                    <ul class="nav nav-tabs" id="eventTabs" role="tablist">
-                                        <li class="nav-item active">
-                                            <a class="nav-link active" id="birthday-tab" data-toggle="tab" href="#birthday" role="tab" aria-controls="birthday" aria-selected="true">Birthday</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a class="nav-link" id="work-anniversary-tab" data-toggle="tab" href="#workAnniversary" role="tab" aria-controls="workAnniversary" aria-selected="false">Work Anniversary</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a class="nav-link" id="new-joinee-tab" data-toggle="tab" href="#newJoinee" role="tab" aria-controls="newJoinee" aria-selected="false">New Joinee</a>
-                                        </li>
-                                    </ul>
-                                    <!-- Tab Content -->
-                                    <div class="tab-content" id="eventTabContent">
-                                        <!-- Birthday Tab -->
-                                        <div class="tab-pane fade active in" id="birthday" role="tabpanel" aria-labelledby="birthday-tab">
-                                            <div class="">
-                                                <!-- Left column for the list of announcements -->
-                                                <div class="card col-md-5 px-0">
-                                                    <div class="card-body">
-                                                        <div id="birthdayeventsList" class="list-group"></div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Right column for detailed greeting message -->
-                                                <div class="col-md-7 bfull-view d-flex align-items-center justify-content-center">
-                                                    <div id="bgreetingDisplay" class="text-center">
-                                                        <img id="bemployeeImg" src="https://t2gworkroom.com/assets/images/user-placeholder.jpg"
-                                                            alt="Employee Image">
-                                                        <div id="bemployeeName" class="employee-name">Employee Name</div>
-                                                        <div id="bemployeeDept" class="employee-dept">Department</div>
-                                                        <div id="bemployeeDate" class="employee-date">Date</div>
-                                                        <div id="bgreetingMessage" class="greeting-message">Wishing you a very Happy Birthday 🎉🥳! May your
-                                                            day be filled with joy and laughter.</div>
-                                                        <div class="emoji">🎂🎁🎈</div>
-                                                    </div>
-
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <!-- Work Anniversary Tab -->
-                                        <div class="tab-pane fade" id="workAnniversary" role="tabpanel" aria-labelledby="work-anniversary-tab">
-                                            <div class="">
-                                                <!-- Left column for the list of announcements -->
-                                                <div class="card col-md-5 px-0">
-                                                    <div class="card-body">
-                                                        <div id="anniversaryeventsList" class="list-group"></div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Right column for detailed greeting message -->
-                                                <div class="col-md-7 afull-view d-flex align-items-center justify-content-center">
-                                                    <div id="agreetingDisplay" class="text-center">
-                                                        <img id="aemployeeImg" src="https://t2gworkroom.com/assets/images/user-placeholder.jpg"
-                                                            alt="Employee Image">
-                                                        <div id="aemployeeName" class="employee-name">Employee Name</div>
-                                                        <div id="aemployeeDept" class="employee-dept">Department</div>
-                                                        <div id="aemployeeDate" class="employee-date">Date</div>
-                                                        <div id="agreetingMessage" class="greeting-message">Wishing you a very Happy Birthday 🎉🥳! May your
-                                                            day be filled with joy and laughter.</div>
-                                                        <div class="emoji">🎂🎁🎈</div>
-                                                    </div>
-
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <!-- New Joinee Tab -->
-                                        <div class="tab-pane fade" id="newJoinee" role="tabpanel" aria-labelledby="new-joinee-tab">
-                                            <div class="">
-                                                <!-- Left column for the list of announcements -->
-                                                <div class="card col-md-5 px-0">
-                                                    <div class="card-body">
-                                                        <div id="newjoineeeventsList" class="list-group"></div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Right column for detailed greeting message -->
-                                                <div class="col-md-7 nfull-view d-flex align-items-center justify-content-center">
-                                                    <div id="greetingDisplay" class="text-center">
-                                                        <img id="nemployeeImg" src="https://t2gworkroom.com/assets/images/user-placeholder.jpg"
-                                                            alt="Employee Image">
-                                                        <div id="nemployeeName" class="employee-name">Employee Name</div>
-                                                        <div id="nemployeeDept" class="employee-dept">Department</div>
-                                                        <div id="nemployeeDate" class="employee-date">Date</div>
-                                                        <div id="ngreetingMessage" class="greeting-message">Wishing you a very Happy Birthday 🎉🥳! May your
-                                                            day be filled with joy and laughter.</div>
-                                                        <div class="emoji">🎂🎁🎈</div>
-                                                    </div>
-
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-
-
-                        </div>
-                    </div>
-                <?php } ?>
-
                 <?php $this->load->view('admin/includes/alerts'); ?>
 
             <?php hooks()->do_action('after_dashboard'); ?>
@@ -452,43 +328,47 @@ document.addEventListener('mousemove', e => {
     app.calendarIDs = '<?php echo json_encode($google_ids_calendars); ?>';
 </script>
 <?php init_tail(); ?>
-<?php $this->load->view('admin/utilities/calendar_template'); ?>
+<?php if (!is_staff_member()) {
+    $this->load->view('admin/utilities/calendar_template');
+} ?>
 <?php $this->load->view('admin/dashboard/dashboard_js'); ?>
 
 
 
+<?php if (is_staff_member()) { ?>
 <script>
     var employees = [];
 
     $(document).ready(function() {
+        if (!document.getElementById('celebrantWidget')) {
+            return;
+        }
         $.ajax({
             type: "GET",
-            url: "/birthdays/get_data",
+            url: "<?php echo site_url('birthdays/get_data'); ?>",
             dataType: "json",
             success: function(data) {
-                employees = data;
-
-                console.log(employees);
+                employees = Array.isArray(data) ? data : [];
                 checkForData();
                 active_style();
-
+            },
+            error: function() {
+                employees = [];
+                checkForData();
             }
-
-        })
-
-
-    })
+        });
+    });
 
     function checkForData() {
+        var widget = document.getElementById('celebrantWidget');
+        if (!widget) {
+            return;
+        }
+        widget.style.display = 'block';
         if (employees.length > 0) {
-            // Show the widget if there's data
-            document.getElementById('celebrantWidget').style.display = 'block';
-
-            // Populate the eventsList or other elements with employee data
             generateAnnouncements();
-        } else {
-            // Hide the widget if there's no data
-            document.getElementById('celebrantWidget').style.display = 'none';
+        } else if (typeof birthday_eventsList !== 'undefined' && birthday_eventsList) {
+            birthday_eventsList.innerHTML = '<p class="text-muted text-center" style="padding:14px;margin:0;">No celebrations this month.</p>';
         }
     }
 
@@ -506,10 +386,7 @@ document.addEventListener('mousemove', e => {
         // Return formatted date
         return `${day}-${month}`;
     }
-</script>
 
-
-<script>
     // const employees = [{
     //         name: 'Navneet Baid',
     //         department: 'Software',
@@ -551,9 +428,9 @@ document.addEventListener('mousemove', e => {
     const anniversary_eventList = document.getElementById('anniversaryeventsList');
     const new_joinee_eventList = document.getElementById('newjoineeeventsList');
 
-    const bfullView = document.getElementsByClassName('bfull-view')[0];
-    const afullView = document.getElementsByClassName('afull-view')[0];
-    const nfullView = document.getElementsByClassName('nfull-view')[0];
+    const bfullView = document.querySelector('#birthday .dashboard-birthday-greeting');
+    const afullView = document.querySelector('#workAnniversary .dashboard-birthday-greeting');
+    const nfullView = document.querySelector('#newJoinee .dashboard-birthday-greeting');
 
     const bgreetingDisplay = document.getElementById('bgreetingDisplay');
     const agreetingDisplay = document.getElementById('agreetingDisplay');
@@ -621,8 +498,10 @@ document.addEventListener('mousemove', e => {
             bemployeeImg.src = employee.img;
             bemployeeName.textContent = employee.name + " (" + employee.emp_id + ")";
             bemployeeDept.textContent = employee.department;
-            bfullView.classList.remove('anniversary-view');
-            bfullView.classList.add('birthday-view');
+            if (bfullView) {
+                bfullView.classList.remove('anniversary-view');
+                bfullView.classList.add('birthday-view');
+            }
             bgreetingMessage.innerHTML = `🎉 Wishing you a very Happy Birthday, ${employee.name}! 🎂 Enjoy your special day and have a wonderful year ahead! 🥳🎈`;
             bemployeeDate.textContent = formatDate(employee.birthday);
         } else {
@@ -630,8 +509,10 @@ document.addEventListener('mousemove', e => {
                 aemployeeImg.src = employee.img;
                 aemployeeName.textContent = employee.name + " (" + employee.emp_id + ")";
                 aemployeeDept.textContent = employee.department;
-                afullView.classList.remove('birthday-view');
-                afullView.classList.add('anniversary-view');
+                if (afullView) {
+                    afullView.classList.remove('birthday-view');
+                    afullView.classList.add('anniversary-view');
+                }
                 agreetingMessage.innerHTML = `🎊 Congratulations on your ${years}-year work anniversary, ${employee.name}! 🎉 Thank you for being such a valuable part of our team. 🎖️`;
                 aemployeeDate.textContent = formatDate(employee.workAnniversary);
             } else {
@@ -639,8 +520,10 @@ document.addEventListener('mousemove', e => {
                 nemployeeImg.src = employee.img;
                 nemployeeName.textContent = employee.name + " (" + employee.emp_id + ")";
                 nemployeeDept.textContent = employee.department;
-                nfullView.classList.remove('birthday-view');
-                nfullView.classList.add('anniversary-view');
+                if (nfullView) {
+                    nfullView.classList.remove('birthday-view');
+                    nfullView.classList.add('anniversary-view');
+                }
                 ngreetingMessage.innerHTML = `We are thrilled to introduce our newest team member, ${employee.name}! 🎉 Join us in welcoming ${employee.name} to the Tech2Globe Team — we’re excited to have you on board!`;
                 nemployeeDate.textContent = formatDate(employee.workAnniversary);
 
@@ -697,39 +580,37 @@ document.addEventListener('mousemove', e => {
             new_joinee_eventList.appendChild(noEventDiv);
         }
     }
-</script>
 
-
-<script>
     function active_style() {
-        document.querySelectorAll('.list-group-item').forEach(item => {
+        document.querySelectorAll('.dashboard-birthday-spotlight .list-group-item').forEach(item => {
             item.addEventListener('click', function() {
-                document.querySelectorAll('.list-group-item').forEach(i => i.classList.remove('current'));
+                document.querySelectorAll('.dashboard-birthday-spotlight .list-group-item').forEach(i => i.classList.remove('current'));
                 this.classList.add('current');
             });
         });
     }
 
     $('#eventTabs a').on('shown.bs.tab', function(e) {
-        var activeTab = $(e.target).attr('id'); // get active tab ID
+        var activeTab = $(e.target).attr('id');
 
         if (activeTab == 'work-anniversary-tab') {
             $("#anniversaryeventsList .list-group-item:first").click();
             $('#spotlight').text('Spotlight on this month\'s anniversary');
-            $('#spotlighticon').attr('class', 'fa fa-award')
+            $('#spotlighticon').attr('class', 'fa fa-award');
         }
         if (activeTab == 'new-joinee-tab') {
             $("#newjoineeeventsList .list-group-item:first").click();
             $('#spotlight').text('Spotlight on this month\'s new joinees');
-            $('#spotlighticon').attr('class', 'fa fa-user')
+            $('#spotlighticon').attr('class', 'fa fa-user');
         }
         if (activeTab == 'birthday-tab') {
             $("#birthdayeventsList .list-group-item:first").click();
             $('#spotlight').text('Spotlight on this month\'s birthdays');
-            $('#spotlighticon').attr('class', 'fa fa-birthday-cake')
+            $('#spotlighticon').attr('class', 'fa fa-birthday-cake');
         }
     });
 </script>
+<?php } ?>
 
 <script type="module">
     // Wait for the module to load and define Fireworks

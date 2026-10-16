@@ -259,6 +259,30 @@ class assets_model extends App_Model
         ];
     }
 
+    public function get_asset_revoke_context($asset_id)
+    {
+        $asset = $this->get($asset_id);
+        if (!$asset) {
+            return false;
+        }
+
+        $allocation = $this->db
+            ->where('assets', $asset_id)
+            ->where('type', 'allocation')
+            ->order_by('id', 'DESC')
+            ->get(db_prefix() . 'assets_acction_1')
+            ->row();
+
+        return [
+            'id' => (int) $asset->id,
+            'assets_name' => $asset->assets_name,
+            'assets_code' => $asset->assets_code,
+            'allocated_quantity' => max(0, (int) $asset->total_allocation),
+            'assigned_staff_id' => $allocation ? (int) $allocation->acction_to : null,
+            'status' => (int) $asset->status,
+        ];
+    }
+
     public function sell_asset($data)
     {
         $this->db->trans_start();
@@ -954,7 +978,7 @@ class assets_model extends App_Model
         $this->db->join(
             $prefix . 'assets_acction_1',
             $prefix . 'assets_acction_1.acction_to = ' . $prefix . 'staff.staffid',
-            'inner'
+            'left'
         );
         $this->db->where($prefix . 'staff.active', 1);
         $this->db->order_by($prefix . 'staff.firstname', 'ASC');
@@ -1165,21 +1189,18 @@ class assets_model extends App_Model
 	{
         $prefix = db_prefix();
 
-        $this->db->distinct();
-        $this->db->select($prefix . 'assets.*, ' . $prefix . 'staff.firstname, ' . $prefix . 'staff.lastname, ' . $prefix . 'staff.staff_identifi, ' . $prefix . 'staff.email');
-        $this->db->from($prefix . 'assets');
-        $this->db->join(
-            $prefix . 'assets_acction_1',
-            $prefix . 'assets_acction_1.assets = ' . $prefix . 'assets.id',
-            'inner'
-        );
-        $this->db->join(
-            $prefix . 'staff',
-            $prefix . 'assets_acction_1.acction_to = ' . $prefix . 'staff.staffid',
-            'inner'
-        );
-        $this->db->where($prefix . 'assets_acction_1.acction_to', (int) $empid);
+        $sql = 'SELECT ' . $prefix . 'assets.*, ' . $prefix . 'staff.firstname, ' . $prefix . 'staff.lastname, '
+            . $prefix . 'staff.staff_identifi, ' . $prefix . 'staff.email '
+            . 'FROM ' . $prefix . 'assets '
+            . 'INNER JOIN ('
+            . 'SELECT assets, acction_to '
+            . 'FROM ' . $prefix . 'assets_acction_1 '
+            . 'WHERE acction_to = ? AND type IN (\'allocation\', \'revoke\') '
+            . 'GROUP BY assets, acction_to '
+            . 'HAVING SUM(CASE WHEN type = \'allocation\' THEN amount ELSE -amount END) > 0'
+            . ') current_assignments ON current_assignments.assets = ' . $prefix . 'assets.id '
+            . 'INNER JOIN ' . $prefix . 'staff ON current_assignments.acction_to = ' . $prefix . 'staff.staffid';
 
-        return $this->db->get()->result_array();
+        return $this->db->query($sql, [(int) $empid])->result_array();
 	}
 }

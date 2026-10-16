@@ -341,8 +341,7 @@
 
   function gapDays() {
     return calendarData.filter(function(d) {
-      return d.can_regularise || d.status === 'absent' || d.status === 'punch_missing'
-        || d.status === 'short_hours' || d.status === 'half_day' || d.code === 'HD';
+      return d.can_regularise || d.status === 'absent' || d.status === 'punch_missing' || d.status === 'short_hours';
     });
   }
 
@@ -491,12 +490,10 @@
       html += '<div class="' + cls + '" data-date="' + ds + '">';
       html += '<span class="t2g-att-cal-num">' + d + '</span>';
       if (day && day.code) html += dayCodeHtml(day);
-      if (day && day.attendance_source && day.attendance_source !== 'none' && (day.check_in || day.first_in)) {
+      if (day && day.attendance_source === 'biometric' && (day.check_in || day.first_in) && (day.check_out || day.last_out)) {
         var calIn = day.check_in || day.first_in;
         var calOut = day.check_out || day.last_out;
-        if (calIn) {
-          html += '<span class="t2g-att-cal-io">' + esc(calIn) + (calOut ? '–' + esc(calOut) : '') + '</span>';
-        }
+        html += '<span class="t2g-att-cal-io">' + esc(calIn) + '–' + esc(calOut) + '</span>';
       }
       html += '</div>';
       cell++;
@@ -533,8 +530,6 @@
     }
     if (day.attendance_source === 'wfh') {
       html += '<div class="t2g-att-day-shift t2g-att-source-wfh">Attendance source : WFH (Workroom)</div>';
-    } else if (day.attendance_source === 'biometric+workroom') {
-      html += '<div class="t2g-att-day-shift t2g-att-source-bio">Attendance source : Biometric + Workroom</div>';
     } else if (day.attendance_source === 'biometric') {
       html += '<div class="t2g-att-day-shift t2g-att-source-bio">Attendance source : Biometric</div>';
     } else if (day.attendance_source === 'workroom') {

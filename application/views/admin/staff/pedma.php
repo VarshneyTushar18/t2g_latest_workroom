@@ -28,6 +28,25 @@ $staffData = json_encode($performance_values);
         padding-bottom: 0;
     }
 
+    .pedma-rating-group {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .pedma-rating-group label {
+        margin: 0;
+        font-weight: 500;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    #pedmaEmployeeKraTable td {
+        vertical-align: top;
+    }
+
     .score {
         font-size: 1.2rem;
         font-weight: 500;
@@ -199,6 +218,27 @@ $staffData = json_encode($performance_values);
                             <div class="bg-primary text-white px-4 py-2 text-end rounded" style="padding:10px ;">
                                 <span>OVERALL PERFORMANCE SCORE</span>
                                 <h4 id="avg_score"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" id="pedmaEmployeeKraTableWrap" style="display:none; margin-bottom:16px;">
+                        <div class="col-md-12 p-0">
+                            <div class="card">
+                                <div class="card-title">KRA evaluation</div>
+                                <div class="card-body" style="padding:0; overflow-x:auto;">
+                                    <table class="table table-bordered" id="pedmaEmployeeKraTable" style="margin:0;">
+                                        <thead>
+                                            <tr>
+                                                <th>KRA name</th>
+                                                <th>Rating</th>
+                                                <th>Manager comment</th>
+                                                <th>HR comment</th>
+                                                <th>HOD comment</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -529,6 +569,7 @@ $staffData = json_encode($performance_values);
                                             <th>KPI</th>
                                             <th>Max Score</th>
                                             <th>Score</th>
+                                            <th>HOD Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody>`;
@@ -551,13 +592,15 @@ $staffData = json_encode($performance_values);
 
                                 // If kpiData is present, display the sum; otherwise, use kraItem.get_score
                                 const scoreToDisplay = kraItem.kpiData ? totalKpiGetScore : kraItem.get_score;
+                                const maxScoreToDisplay = kraItem.kpiData ? kraItem.max_score : 5;
 
                                 tableContent += `
                                 <tr>
                                     <td rowspan="${kraItem.kpiData ? kraItem.kpiData.length + 1 : 1}">${kraItem.name}</td>
                                     <td></td>
-                                    <td><b>${kraItem.max_score}</b></td>
+                                    <td><b>${maxScoreToDisplay}</b></td>
                                     <td><b>${scoreToDisplay}</b></td>
+                                    <td>${kraItem.hod_remarks || '-'}</td>
                                 </tr>`;
 
                                 // Display KPI details if they exist
@@ -568,6 +611,7 @@ $staffData = json_encode($performance_values);
                                             <td>${kpi.name}</td>
                                             <td>${kpi.max_score}</td>
                                             <td>${kpi.get_score}</td>
+                                            <td>${kpi.hod_remarks || '-'}</td>
                                         </tr>`;
                                     });
                                 }
@@ -665,9 +709,26 @@ $staffData = json_encode($performance_values);
             });
 
             let cardHTML = '';
+            let kraTableRows = '';
+
+            function pedmaEscapeText(value) {
+                return $('<div>').text(value == null ? '' : String(value)).html();
+            }
+
+            function pedmaReadonlyRating(value) {
+                var html = '<div class="pedma-rating-group">';
+                for (var r = 1; r <= 5; r++) {
+                    var checked = String(value) === String(r) ? 'checked' : '';
+                    html += '<label><input type="radio" disabled ' + checked + '> ' + r + '</label>';
+                }
+                html += '</div>';
+                return html;
+            }
 
             if (filteredData.length === 0) { // Check if there are any entries for the selected month
                 kraCardData.html("No Data available for this month");
+                $('#pedmaEmployeeKraTableWrap').hide();
+                $('#pedmaEmployeeKraTable tbody').empty();
                 $('#avg_score').html('-');
                 $('#overall_feedback').html('-');
                 $('#feedback_acknowledge_box').hide();
@@ -705,9 +766,10 @@ $staffData = json_encode($performance_values);
                         }
 
                         const scoreToDisplay = (data.type === "custom" && item.kpiData) ? totalKpiGetScore : item.get_score;
+                        const maxScoreToDisplay = (data.type === "custom" && item.kpiData) ? item.max_score : 5;
 
                         cardHTML += `
-                                                ${scoreToDisplay}/${item.max_score}
+                                                ${scoreToDisplay}/${maxScoreToDisplay}
                                                 </div>
                                                 <div class="hr"></div>
                         `;
@@ -719,6 +781,7 @@ $staffData = json_encode($performance_values);
                                     <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${kpi.max_score}</b></p>
                                     <p class="">Manager Comment: ${kpi.comment || '-'}</p>
                                     <p class="">HR Remarks: ${kpi.hr_remarks || '-'}</p>
+                                    <p class="">HOD Remarks: ${kpi.hod_remarks || '-'}</p>
                                 `;
                             });
                         } else {
@@ -729,7 +792,20 @@ $staffData = json_encode($performance_values);
                                 <div class="comment">
                                     <span style="font-weight: bold;">HR Remarks : </span>${item.hr_remarks || '-'}
                                 </div>
+                                <div class="comment">
+                                    <span style="font-weight: bold;">HOD Remarks : </span>${item.hod_remarks || '-'}
+                                </div>
                             `;
+                            var ratingShown = (item.get_score !== undefined && item.get_score !== null && item.get_score !== '') ? item.get_score : '';
+                            kraTableRows += '<tr>' +
+                                '<td><b>' + pedmaEscapeText(item.name) + '</b>' +
+                                    (item.description ? '<br><span class="text-muted">' + pedmaEscapeText(item.description) + '</span>' : '') +
+                                '</td>' +
+                                '<td>' + pedmaReadonlyRating(ratingShown) + '</td>' +
+                                '<td>' + pedmaEscapeText(item.comment || '-') + '</td>' +
+                                '<td>' + pedmaEscapeText(item.hr_remarks || '-') + '</td>' +
+                                '<td>' + pedmaEscapeText(item.hod_remarks || '-') + '</td>' +
+                                '</tr>';
                         }
 
                         cardHTML += `
@@ -743,6 +819,13 @@ $staffData = json_encode($performance_values);
                 });
 
                 kraCardData.html(cardHTML);
+                if (kraTableRows) {
+                    $('#pedmaEmployeeKraTable tbody').html(kraTableRows);
+                    $('#pedmaEmployeeKraTableWrap').show();
+                } else {
+                    $('#pedmaEmployeeKraTable tbody').empty();
+                    $('#pedmaEmployeeKraTableWrap').hide();
+                }
                 var ascore = filteredData[0].avg_score;
                 var fscore = filteredData[0].fatal_error_score ? (filteredData[0].fatal_error_score / 100) * ascore : 0;
                 var addscore = filteredData[0].add_on_score ? (filteredData[0].add_on_score / 100) * ascore : 0;
@@ -767,8 +850,10 @@ $staffData = json_encode($performance_values);
                 });
 
                 const kraMaxScores = kraData[0].map(item => {
-                    return item.max_score != null ? Number(item.max_score) :
-                        item.kpiData.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
+                    if (item.kpiData && item.kpiData.length) {
+                        return item.kpiData.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
+                    }
+                    return 5;
                 });
 
                 // Destroy the previous chart instances before creating new ones
@@ -798,29 +883,28 @@ $staffData = json_encode($performance_values);
                     },
                     options: {
                         scales: {
-                            x: {
-                                stacked: true,
-                                grid: {
+                            xAxes: [{
+                                gridLines: {
                                     display: false
                                 }
-                            },
-                            y: {
-                                stacked: true,
-                                beginAtZero: true,
-                                grid: {
+                            }],
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true,
+                                    min: 0
+                                },
+                                gridLines: {
                                     display: true
                                 },
-                                title: {
+                                scaleLabel: {
                                     display: true,
-                                    text: 'Score'
+                                    labelString: 'Score'
                                 }
-                            }
+                            }]
                         },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: 'KRA Performance: Achieved vs Max Score'
-                            }
+                        title: {
+                            display: true,
+                            text: 'KRA Performance: Achieved vs Max Score'
                         }
                     }
                 });

@@ -174,7 +174,7 @@ function assets_module_init_menu_items()
         // ]);
 
         // $CI->app_menu->add_sidebar_children_item('emt-review', [
-        //     'name'     => _l('Snapshot dashboard'),
+        //     'name'     => _l('Dashboard'),
         //     'href'     => admin_url('Emt/getEmployeeId'),
         //     'position' => 1,
         //     'badge'    => [],

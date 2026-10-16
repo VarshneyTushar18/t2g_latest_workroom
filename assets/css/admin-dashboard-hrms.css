@@ -1,0 +1,539 @@
+/**
+ * Main admin dashboard — HRMS-aligned layout + compact attendance calendar.
+ */
+body.hrms-ui.dashboard #wrapper > .content {
+  background: var(--hrms-bg, #f1f5f9) !important;
+}
+
+body.hrms-ui.dashboard .admin-dashboard-hrms-content {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-bottom: 28px;
+}
+
+body.hrms-ui.dashboard .widget .panel_s > .panel-body {
+  border-radius: var(--hrms-radius, 16px);
+}
+
+.dashboard-hrms-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--hrms-ink, #0f172a);
+}
+
+.dashboard-hrms-panel-head i {
+  color: var(--hrms-muted, #64748b);
+  margin-right: 6px;
+}
+
+.dashboard-hrms-panel-head a {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--hrms-muted, #64748b);
+  text-decoration: none !important;
+}
+
+.dashboard-hrms-panel-head a:hover {
+  color: var(--hrms-blue, #2563eb);
+}
+
+.dashboard-hrms-cal-wrap {
+  max-width: 380px;
+}
+
+.dashboard-hrms-cal .hrms-cal-nav button {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.dashboard-hrms-cal .hrms-cal-month {
+  font-size: 12.5px;
+}
+
+.dashboard-hrms-cal .hrms-cal-weekdays,
+.dashboard-hrms-cal .hrms-cal-grid {
+  gap: 2px;
+}
+
+.dashboard-hrms-cal .hrms-cal-dow {
+  font-size: 9px;
+  padding: 0 0 4px;
+}
+
+.dashboard-hrms-cal .hrms-cal-day {
+  min-height: 32px;
+  border-radius: 5px;
+  padding: 2px 2px 3px;
+}
+
+.dashboard-hrms-cal .hrms-cal-num {
+  font-size: 10px;
+}
+
+.dashboard-hrms-cal .hrms-cal-code {
+  font-size: 9px;
+  margin-top: 1px;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.today .hrms-cal-num {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend {
+  margin-top: 8px;
+  font-size: 10px;
+  gap: 8px;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend i {
+  width: 8px;
+  height: 8px;
+}
+
+.dashboard-hrms-cal .hrms-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dashboard-hrms-cal .hrms-cal-nav button {
+  border: 1px solid var(--hrms-line, #e2e8f0);
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.dashboard-hrms-cal .hrms-cal-weekdays,
+.dashboard-hrms-cal .hrms-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.dashboard-hrms-cal .hrms-cal-dow {
+  text-align: center;
+  font-weight: 700;
+  color: var(--hrms-muted, #64748b);
+  text-transform: uppercase;
+}
+
+.dashboard-hrms-cal .hrms-cal-day {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.muted {
+  opacity: 0.35;
+  cursor: default;
+  background: #f8fafc;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-off {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-ok {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-half {
+  background: #ffedd5;
+  border-color: #fdba74;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-bad {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-leave {
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+
+.dashboard-hrms-cal .hrms-cal-day.tone-holiday {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.dashboard-hrms-cal .hrms-cal-code.code-off {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  color: var(--hrms-muted, #64748b);
+}
+
+.dashboard-hrms-cal .hrms-cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend i {
+  display: inline-block;
+  border-radius: 2px;
+  border: 1px solid transparent;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-ok {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-half {
+  background: #ffedd5;
+  border-color: #fdba74;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-bad {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-leave {
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-off {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.dashboard-hrms-cal .hrms-cal-legend .lg-holiday {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.dashboard-hrms-cal-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dashboard-hrms-cal-footer a {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* Legacy FullCalendar widget (non-staff) — reduced height */
+body.hrms-ui.dashboard .dashboard-fc-compact #calendar {
+  max-height: 380px;
+}
+
+body.hrms-ui.dashboard .dashboard-fc-compact .fc {
+  font-size: 12px;
+}
+
+body.hrms-ui.dashboard .dashboard-fc-compact .fc-toolbar-title {
+  font-size: 1.05em;
+}
+
+body.hrms-ui.dashboard .dashboard-fc-compact .fc-daygrid-day-number {
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+body.hrms-ui.dashboard .dashboard-fc-compact .fc-col-header-cell-cushion {
+  font-size: 11px;
+  padding: 4px 2px;
+}
+
+body.hrms-ui.dashboard .dashboard-fc-compact .fc-daygrid-day-frame {
+  min-height: 2.6em;
+}
+
+/* Calendar + birthday spotlight — aligned row heights */
+.dashboard-cal-birthday-row {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 20px 48px;
+  align-items: start;
+}
+
+.dashboard-cal-col {
+  width: 340px;
+  max-width: 100%;
+}
+
+.dashboard-birthday-col {
+  min-width: 0;
+  width: 100%;
+}
+
+.dashboard-hrms-cal-wrap.dashboard-hrms-cal {
+  min-height: 0;
+}
+
+.dashboard-birthday-spotlight {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.dashboard-birthday-tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.dashboard-birthday-tab-content > .tab-pane.active {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.dashboard-birthday-spotlight-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--hrms-ink, #0f172a);
+}
+
+.dashboard-birthday-spotlight-title i {
+  color: #ec4899;
+}
+
+.dashboard-birthday-tabs {
+  margin-bottom: 10px;
+  border-bottom-color: var(--hrms-line, #e2e8f0);
+  width: 100%;
+}
+
+.dashboard-birthday-tabs > li > a {
+  font-size: 12px;
+  font-weight: 650;
+  padding: 8px 12px;
+}
+
+.dashboard-birthday-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+.dashboard-birthday-list-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-birthday-list {
+  flex: 1 1 auto;
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--hrms-line, #e2e8f0);
+}
+
+.dashboard-birthday-list .list-group-item {
+  border-left: 0;
+  border-right: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.dashboard-birthday-list .list-group-item:first-child {
+  border-top: 0;
+}
+
+.dashboard-birthday-greeting {
+  flex: 0 0 300px;
+  width: 300px;
+  max-width: 300px;
+  min-height: 200px;
+  max-height: 200px;
+  margin: 0;
+  padding: 14px 16px !important;
+  overflow-y: auto;
+  border-radius: 12px;
+  background-color: #f9fafb;
+  background-image: url("https://www.transparenttextures.com/patterns/arches.png");
+  box-sizing: border-box;
+}
+
+.dashboard-birthday-greeting-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-birthday-greeting-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dashboard-birthday-greeting-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dashboard-birthday-greeting-head img {
+  flex: 0 0 56px;
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #1e293b;
+}
+
+.dashboard-birthday-greeting .greeting-message {
+  text-align: left;
+  margin: 0;
+  line-height: 1.45;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-birthday-greeting .emoji {
+  text-align: left;
+  margin: 0;
+}
+
+.dashboard-birthday-greeting.birthday-view {
+  background-color: #ffe4e1;
+}
+
+.dashboard-birthday-greeting.anniversary-view {
+  background-color: #e1f5fe;
+  background-image: url("https://www.transparenttextures.com/patterns/my-little-plaid.png");
+}
+
+.dashboard-birthday-greeting.birthday-view img {
+  border-color: #ff4081;
+}
+
+.dashboard-birthday-greeting.anniversary-view img {
+  border-color: #1e90ff;
+}
+
+.dashboard-birthday-spotlight .dashboard-birthday-greeting .employee-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #1e293b;
+  margin: 0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.dashboard-birthday-spotlight .dashboard-birthday-greeting .employee-dept,
+.dashboard-birthday-spotlight .dashboard-birthday-greeting .employee-date {
+  font-size: 11px;
+  color: #64748b;
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+
+.dashboard-birthday-greeting .greeting-message {
+  font-size: 12px;
+  font-style: italic;
+  color: #0f172b;
+  line-height: 1.45;
+}
+
+.dashboard-birthday-greeting.birthday-view .employee-name,
+.dashboard-birthday-greeting.birthday-view .employee-dept,
+.dashboard-birthday-greeting.birthday-view .employee-date,
+.dashboard-birthday-greeting.birthday-view .greeting-message {
+  color: #ff4081;
+}
+
+.dashboard-birthday-greeting.anniversary-view .employee-name,
+.dashboard-birthday-greeting.anniversary-view .employee-dept,
+.dashboard-birthday-greeting.anniversary-view .employee-date,
+.dashboard-birthday-greeting.anniversary-view .greeting-message {
+  color: #1e90ff;
+}
+
+.dashboard-birthday-greeting .emoji {
+  font-size: 1.25rem;
+  margin-top: 6px;
+}
+
+.dashboard-birthday-spotlight .event-icon {
+  color: #1e293b;
+  margin-right: 8px;
+}
+
+.dashboard-birthday-spotlight .birthday .event-icon {
+  color: #ff4081;
+}
+
+.dashboard-birthday-spotlight .anniversary .event-icon {
+  color: #1e90ff;
+}
+
+.dashboard-birthday-spotlight .newjoinee .event-icon {
+  color: #3cb371;
+}
+
+.dashboard-birthday-spotlight .event-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.dashboard-birthday-spotlight .event-date {
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dashboard-birthday-spotlight .list-group-item.current {
+  background-color: #f1f5f9;
+}
+
+@media (max-width: 992px) {
+  .dashboard-cal-birthday-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-cal-col {
+    width: 100%;
+  }
+
+  .dashboard-birthday-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-birthday-greeting {
+    max-width: 100%;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .dashboard-birthday-list {
+    max-height: 160px;
+  }
+}

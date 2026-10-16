@@ -65,8 +65,30 @@ class Announcements_model extends App_Model
         } else {
             $sql .= ' AND showtousers=1';
         }
+        if ($this->db->field_exists('is_sop', db_prefix() . 'announcements')) {
+            $sql .= ' AND (is_sop = 0 OR is_sop IS NULL)';
+        }
 
         return $this->db->query($sql)->row()->total_undismissed;
+    }
+
+    /**
+     * Optional audience columns for announcement / SOP email targeting.
+     */
+    public function ensure_email_audience_columns()
+    {
+        $table = db_prefix() . 'announcements';
+        if (!$this->db->table_exists($table)) {
+            return;
+        }
+        if (!$this->db->field_exists('email_roles', $table)) {
+            $this->db->query('ALTER TABLE `' . $table . '`
+                ADD `email_roles` VARCHAR(255) NULL DEFAULT NULL AFTER `userid`');
+        }
+        if (!$this->db->field_exists('email_departments', $table)) {
+            $this->db->query('ALTER TABLE `' . $table . '`
+                ADD `email_departments` VARCHAR(255) NULL DEFAULT NULL AFTER `email_roles`');
+        }
     }
 
     /**
@@ -76,6 +98,8 @@ class Announcements_model extends App_Model
      */
     public function add($data)
     {
+        $this->ensure_email_audience_columns();
+
         $data['dateadded'] = date('Y-m-d H:i:s');
 
         if (isset($data['showname'])) {
@@ -190,6 +214,12 @@ class Announcements_model extends App_Model
             $this->db->where('showtousers', 1);
         } elseif (is_staff_logged_in()) {
             $this->db->where('showtostaff', 1);
+        }
+        if ($this->db->field_exists('is_sop', db_prefix() . 'announcements')) {
+            $this->db->group_start();
+            $this->db->where('is_sop', 0);
+            $this->db->or_where('is_sop IS NULL', null, false);
+            $this->db->group_end();
         }
         $this->db->order_by('dateadded', 'desc');
     }

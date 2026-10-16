@@ -1,7 +1,5 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <script>
-var weekly_payments_statistics;
-var monthly_payments_statistics;
 var user_dashboard_visibility = <?php echo $user_dashboard_visibility; ?>;
 $(function() {
     $("[data-container]").sortable({
@@ -123,30 +121,9 @@ $(function() {
         });
     });
 
-    var tickets_chart_departments = $('#tickets-awaiting-reply-by-department');
-    var tickets_chart_status = $('#tickets-awaiting-reply-by-status');
     var leads_chart = $('#leads_status_stats');
     var projects_chart = $('#projects_status_stats');
 
-    if (tickets_chart_departments.length > 0) {
-        // Tickets awaiting reply by department chart
-        var tickets_dep_chart = new Chart(tickets_chart_departments, {
-            type: 'doughnut',
-            data: <?php echo $tickets_awaiting_reply_by_department; ?>,
-        });
-    }
-    if (tickets_chart_status.length > 0) {
-        // Tickets awaiting reply by department chart
-        new Chart(tickets_chart_status, {
-            type: 'doughnut',
-            data: <?php echo $tickets_reply_by_status; ?>,
-            options: {
-                onClick: function(evt) {
-                    onChartClickRedirect(evt, this);
-                }
-            },
-        });
-    }
     if (leads_chart.length > 0) {
         // Leads overview status
         new Chart(leads_chart, {
@@ -174,36 +151,10 @@ $(function() {
         });
     }
 
-    if ($(window).width() < 500) {
-        // Fix for small devices weekly payment statistics
-        $('#payment-statistics').attr('height', '250');
-    }
-
     fix_user_data_widget_tabs();
     $(window).on('resize', function() {
         $('.horizontal-scrollable-tabs ul.nav-tabs-horizontal').removeAttr('style');
         fix_user_data_widget_tabs();
-    });
-    // Payments statistics
-    init_weekly_payment_statistics(<?php echo $weekly_payment_stats; ?>);
-
-    $('select[name="currency"]').on('change', function() {
-        let $activeChart = $('#Payment-chart-name').data('active-chart');
-
-        if (typeof(weekly_payments_statistics) !== 'undefined') {
-            weekly_payments_statistics.destroy();
-        }
-
-        if (typeof(monthly_payments_statistics) !== 'undefined') {
-            monthly_payments_statistics.destroy();
-        }
-
-        if ($activeChart == 'weekly') {
-            init_weekly_payment_statistics();
-        } else if ($activeChart == 'monthly') {
-            init_monthly_payment_statistics();
-        }
-
     });
 });
 
@@ -215,110 +166,231 @@ function fix_user_data_widget_tabs() {
     }
 }
 
-function init_weekly_payment_statistics(data) {
-    if ($('#payment-statistics').length > 0) {
+(function initDashboardAttendanceCalendar() {
+    var grid = document.getElementById('dashboardHrmsCalGrid');
+    if (!grid) {
+        return;
+    }
 
-        if (typeof(weekly_payments_statistics) !== 'undefined') {
-            weekly_payments_statistics.destroy();
+    var attStaffId = <?php echo (int) get_staff_user_id(); ?>;
+    var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var calView = new Date();
+    calView.setDate(1);
+    var monthLabel = document.getElementById('dashboardHrmsCalMonthLabel');
+    var dayMap = {};
+    var calLoading = false;
+
+    function pad(n) {
+        return (n < 10 ? '0' : '') + n;
+    }
+
+    function ymd(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    function monthKey(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+    }
+
+    function parseHrs(val) {
+        if (!val || val === '—') {
+            return null;
         }
-        if (typeof(data) == 'undefined') {
-            var currency = $('select[name="currency"]').val();
-            $.get(admin_url + 'dashboard/weekly_payments_statistics/' + currency, function(response) {
-                weekly_payments_statistics = new Chart($('#payment-statistics'), {
-                    type: 'bar',
-                    data: response,
-                    options: {
-                        responsive: true,
-                        scales: {
-                            yAxes: [{
-                                ticks: {
-                                    beginAtZero: true,
-                                }
-                            }]
-                        },
-                    },
-                });
-            }, 'json');
-        } else {
-            weekly_payments_statistics = new Chart($('#payment-statistics'), {
-                type: 'bar',
-                data: data,
-                options: {
-                    responsive: true,
-                    scales: {
-                        yAxes: [{
-                            ticks: {
-                                beginAtZero: true,
-                            }
-                        }]
-                    },
-                },
+        var n = parseFloat(String(val).replace('h', ''));
+        return isNaN(n) ? null : n;
+    }
+
+    function dayHours(day) {
+        if (!day) {
+            return 0;
+        }
+        if (typeof day.hours === 'number' && day.hours > 0) {
+            return day.hours;
+        }
+        var aw = parseHrs(day.actual_work_hrs);
+        if (aw !== null) {
+            return aw;
+        }
+        return parseHrs(day.total_work_hrs) || 0;
+    }
+
+    function dayHealthTone(day) {
+        if (!day || day.status === 'future') {
+            return 'neutral';
+        }
+        var code = day.code || '';
+        if (day.status === 'night_carryover' || code === 'NC') {
+            return 'off';
+        }
+        if (day.status === 'weekend' || code === 'O') {
+            return 'off';
+        }
+        if (day.status === 'holiday' || code === 'HO' || code === 'H') {
+            return 'holiday';
+        }
+        if (day.status === 'leave' || day.status === 'saturday_leave') {
+            return 'leave';
+        }
+        if (['EL', 'PL', 'L', 'SL', 'UL', 'LOP', 'CO', 'MAL', 'PHD', 'UHD', 'PAL', 'SHL'].indexOf(code) >= 0) {
+            return 'leave';
+        }
+        if (day.status === 'regularised') {
+            return 'ok';
+        }
+        if (day.status === 'pending') {
+            return 'neutral';
+        }
+        var presentMin = day.present_min_hours || 8.0;
+        var halfMin = day.half_day_min_hours || 5;
+        var hrs = dayHours(day);
+        if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') {
+            return 'bad';
+        }
+        if (day.status === 'rejected') {
+            if (hrs + 0.001 >= presentMin) {
+                return 'ok';
+            }
+            if (hrs + 0.001 >= halfMin) {
+                return 'half';
+            }
+            return 'bad';
+        }
+        if (day.status === 'half_day' || code === 'HD') {
+            return 'half';
+        }
+        if (day.status === 'ok' || code === 'P') {
+            return hrs + 0.001 >= presentMin ? 'ok' : (hrs + 0.001 >= halfMin ? 'half' : (hrs > 0 ? 'bad' : 'neutral'));
+        }
+        if (day.status === 'short_hours') {
+            return hrs + 0.001 >= halfMin ? 'half' : 'bad';
+        }
+        if (hrs + 0.001 >= presentMin) {
+            return 'ok';
+        }
+        if (hrs + 0.001 >= halfMin) {
+            return 'half';
+        }
+        if (hrs > 0) {
+            return 'bad';
+        }
+        return 'neutral';
+    }
+
+    function dayCodeClass(tone) {
+        if (tone === 'ok') {
+            return 'code-ok';
+        }
+        if (tone === 'half') {
+            return 'code-half';
+        }
+        if (tone === 'bad') {
+            return 'code-bad';
+        }
+        if (tone === 'leave') {
+            return 'code-leave';
+        }
+        if (tone === 'holiday') {
+            return 'code-holiday';
+        }
+        if (tone === 'off') {
+            return 'code-off';
+        }
+        return '';
+    }
+
+    function dayCodeLabel(code) {
+        if (code === 'AB') {
+            return 'A';
+        }
+        if (code === 'NC') {
+            return 'NC';
+        }
+        return code || '';
+    }
+
+    function renderAttendanceCalendar() {
+        var y = calView.getFullYear();
+        var m = calView.getMonth();
+        if (monthLabel) {
+            monthLabel.textContent = months[m] + ' ' + y;
+        }
+        var firstDow = new Date(y, m, 1).getDay();
+        var daysInMonth = new Date(y, m + 1, 0).getDate();
+        var prevDays = new Date(y, m, 0).getDate();
+        var todayKey = ymd(new Date());
+        var html = '';
+        var i;
+        for (i = 0; i < firstDow; i++) {
+            html += '<div class="hrms-cal-day muted"><span class="hrms-cal-num">' + (prevDays - firstDow + i + 1) + '</span></div>';
+        }
+        for (var day = 1; day <= daysInMonth; day++) {
+            var key = y + '-' + pad(m + 1) + '-' + pad(day);
+            var d = dayMap[key];
+            var tone = d ? dayHealthTone(d) : 'neutral';
+            var cls = 'hrms-cal-day tone-' + tone;
+            if (key === todayKey) {
+                cls += ' today';
+            }
+            html += '<div class="' + cls + '" data-date="' + key + '">';
+            html += '<span class="hrms-cal-num">' + day + '</span>';
+            if (d && d.code) {
+                html += '<span class="hrms-cal-code ' + dayCodeClass(tone) + '">' + dayCodeLabel(d.code) + '</span>';
+            }
+            html += '</div>';
+        }
+        var cells = firstDow + daysInMonth;
+        var trailing = (7 - (cells % 7)) % 7;
+        for (var t = 1; t <= trailing; t++) {
+            html += '<div class="hrms-cal-day muted"><span class="hrms-cal-num">' + t + '</span></div>';
+        }
+        grid.innerHTML = html;
+    }
+
+    function loadAttendanceCalendar() {
+        if (calLoading) {
+            return;
+        }
+        calLoading = true;
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:14px;text-align:center;color:#64748b;font-size:12px;"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+        $.getJSON(admin_url + 'timesheets/my_attendance_calendar', {
+            month: monthKey(calView),
+            staff_id: attStaffId
+        }).done(function(res) {
+            dayMap = {};
+            (res.days || []).forEach(function(d) {
+                dayMap[d.date] = d;
             });
+            renderAttendanceCalendar();
+        }).fail(function() {
+            grid.innerHTML = '<div style="grid-column:1/-1;padding:14px;text-align:center;color:#dc2626;font-size:12px;">Could not load attendance calendar.</div>';
+        }).always(function() {
+            calLoading = false;
+        });
+    }
+
+    var prevBtn = document.getElementById('dashboardHrmsCalPrev');
+    var nextBtn = document.getElementById('dashboardHrmsCalNext');
+    if (prevBtn) {
+        prevBtn.addEventListener('click', function() {
+            calView.setMonth(calView.getMonth() - 1);
+            loadAttendanceCalendar();
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function() {
+            calView.setMonth(calView.getMonth() + 1);
+            loadAttendanceCalendar();
+        });
+    }
+    grid.addEventListener('click', function(e) {
+        var cell = e.target.closest('.hrms-cal-day[data-date]');
+        if (!cell || cell.classList.contains('muted')) {
+            return;
         }
-
-    }
-}
-
-function init_monthly_payment_statistics() {
-    if ($('#payment-statistics').length > 0) {
-
-        if (typeof(monthly_payments_statistics) !== 'undefined') {
-            monthly_payments_statistics.destroy();
-        }
-
-        var currency = $('select[name="currency"]').val();
-        $.get(admin_url + 'dashboard/monthly_payments_statistics/' + currency, function(response) {
-            monthly_payments_statistics = new Chart($('#payment-statistics'), {
-                type: 'bar',
-                data: response,
-                options: {
-                    responsive: true,
-                    scales: {
-                        yAxes: [{
-                            ticks: {
-                                beginAtZero: true,
-                            }
-                        }]
-                    },
-                },
-            });
-        }, 'json');
-    }
-}
-
-function update_payment_statistics(el) {
-    let type = $(el).data('type');
-    let $chartNameWrapper = $('#Payment-chart-name');
-    $chartNameWrapper.data('active-chart', type);
-    $chartNameWrapper.text($(el).text());
-
-    if (typeof(weekly_payments_statistics) !== 'undefined') {
-        weekly_payments_statistics.destroy();
-    }
-
-    if (typeof(monthly_payments_statistics) !== 'undefined') {
-        monthly_payments_statistics.destroy();
-    }
-
-    console.log(type);
-
-    if (type == 'weekly') {
-        init_weekly_payment_statistics();
-    } else if (type == 'monthly') {
-        init_monthly_payment_statistics();
-    }
-
-}
-
-function update_tickets_report_table(el) {
-    var $el = $(el);
-    var type = $el.data('type')
-    $('#tickets-report-mode-name').text($el.text())
-
-    $('#tickets-report-table-wrapper').load(admin_url + 'dashboard/ticket_widget/' + type, function(data) {
-        $('.table-ticket-reports').dataTable().fnDestroy()
-        initDataTableInline('.table-ticket-reports')
+        var ds = cell.getAttribute('data-date');
+        var my = ds ? ds.slice(0, 7) : monthKey(calView);
+        window.location.href = admin_url + 'timesheets/my_attendance?month=' + encodeURIComponent(my);
     });
-    return false
-}
+    loadAttendanceCalendar();
+})();
 </script>

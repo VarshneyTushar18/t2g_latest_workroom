@@ -11,9 +11,13 @@ $sIndexColumn = 'announcementid';
 $sTable       = db_prefix() . 'announcements';
 $where        = [];
 $is_admin     = is_admin();
+$CI           = &get_instance();
+if ($CI->db->field_exists('is_sop', db_prefix() . 'announcements')) {
+    $where[] = 'AND (is_sop = 0 OR is_sop IS NULL)';
+}
 
 if (!is_admin()) {
-    $where = ['AND showtostaff=1'];
+    $where[] = 'AND showtostaff=1';
 }
 
 $result = data_tables_init($aColumns, $sIndexColumn, $sTable, [], $where, [

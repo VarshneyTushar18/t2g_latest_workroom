@@ -85,6 +85,7 @@
                                     <input type="file" extension="gif,jpg,jpeg,pdf" filesize="<?php echo file_upload_max_size(); ?>" name="images[]" id="allocation_images" multiple required style="display: none;" accept=".gif,.jpg,.jpeg,.pdf">
                                     <span id="allocation_attachment_count" class="text-muted mleft10">No files selected</span>
                                 </div>
+                                <div id="allocation_selected_files" class="mtop10"></div>
                             </div>
                         </div>
                     </div>
@@ -137,11 +138,67 @@
     });
     $('.selectpicker').selectpicker({});
 
-    $('#allocation_images').on('change', function() {
-        var count = this.files ? this.files.length : 0;
-        $('#allocation_attachment_count').text(count ? count + ' file' + (count === 1 ? '' : 's') + ' selected' : 'No files selected');
+    var allocationSelectedFiles = [];
+
+    function syncAllocationInputFiles() {
+        var input = document.getElementById('allocation_images');
+        if (!input) return;
+
+        var dataTransfer = new DataTransfer();
+        allocationSelectedFiles.forEach(function(file) {
+            dataTransfer.items.add(file);
+        });
+        input.files = dataTransfer.files;
+        updateAllocationSelectedFiles(input.files);
+    }
+
+    function updateAllocationSelectedFiles(fileList) {
+        var $container = $('#allocation_selected_files');
+        var files = Array.from(fileList || []);
+
+        $container.empty();
+
+        if (!files.length) {
+            $('#allocation_attachment_count').text('No files selected');
+            return;
+        }
+
+        $('#allocation_attachment_count').text(files.length + ' file' + (files.length === 1 ? '' : 's') + ' selected');
+
+        files.forEach(function(file, index) {
+            var $row = $('<div class="selected-file-row" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:6px; padding:6px 10px; border:1px solid #ddd; border-radius:4px; background:#fafafa;"></div>');
+            var $name = $('<span style="display:inline-block; max-width:80%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;">').text(file.name);
+            var $remove = $('<button type="button" class="btn btn-xs btn-danger remove-allocation-file" style="padding:2px 8px;">Remove</button>');
+            $remove.attr('data-index', index);
+            $row.append($name).append($remove);
+            $container.append($row);
+        });
+    }
+
+    $('#allocation_images').on('change', function(event) {
+        var newFiles = Array.from(event.target.files || []);
+        var existingFiles = allocationSelectedFiles || [];
+
+        allocationSelectedFiles = existingFiles.concat(newFiles.filter(function(file) {
+            return !existingFiles.some(function(existingFile) {
+                return existingFile.name === file.name && existingFile.size === file.size && existingFile.lastModified === file.lastModified;
+            });
+        }));
+
+        syncAllocationInputFiles();
     });
 
+    $('#allocation_selected_files').on('click', '.remove-allocation-file', function() {
+        var index = parseInt($(this).data('index'), 10);
+        var input = document.getElementById('allocation_images');
+        var files = Array.from(input.files || []);
+
+        if (index >= 0 && index < files.length) {
+            files.splice(index, 1);
+            allocationSelectedFiles = files;
+            syncAllocationInputFiles();
+        }
+    });
 
     // function will put the manager ud
     function set_manager_id() {

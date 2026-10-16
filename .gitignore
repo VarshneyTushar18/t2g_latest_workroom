@@ -10,6 +10,7 @@ yarn.lock
 *.sublime-workspace
 phpunit.xml
 .env
+application/config/app-config-local.php
 logs/
 cache/
 *.sql

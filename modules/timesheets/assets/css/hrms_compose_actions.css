@@ -1,0 +1,110 @@
+/**
+ * Announcements / SOP compose actions (HRMS pill group).
+ */
+.hrms-compose-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  margin: 0 0 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(20, 30, 70, 0.12);
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+
+.hrms-compose-actions .hrms-btn-announcement,
+.hrms-compose-actions .hrms-btn-sop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 650;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  line-height: 1.25;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.hrms-compose-actions .hrms-btn-announcement {
+  background: #141e46 !important;
+  color: #fff !important;
+}
+
+.hrms-compose-actions .hrms-btn-announcement:hover,
+.hrms-compose-actions .hrms-btn-announcement:focus {
+  background: #1e2f6e !important;
+  color: #fff !important;
+}
+
+.hrms-compose-actions .hrms-btn-sop {
+  background: #fff !important;
+  color: #141e46 !important;
+  border-left: 1px solid #e2e8f0 !important;
+}
+
+.hrms-compose-actions .hrms-btn-sop:hover,
+.hrms-compose-actions .hrms-btn-sop:focus {
+  background: #f8fafc !important;
+  color: #141e46 !important;
+}
+
+.hrms-compose-actions .hrms-btn-announcement i,
+.hrms-compose-actions .hrms-btn-sop i {
+  font-size: 14px;
+  opacity: 0.95;
+}
+
+/* SOP modal — match announcement message editor */
+#sopComposeModal .modal-content {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+#sopComposeModal .modal-header {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+#sopComposeModal .modal-footer {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+#sopComposeModal .announcement-message-field {
+  margin-top: 4px;
+}
+
+#sopComposeModal .sop-message-label {
+  margin: 12px 0 8px;
+  font-weight: 600;
+  color: #334155;
+}
+
+#sopComposeModal #message,
+#sopComposeModal .mce-tinymce,
+#sopComposeModal .tox-tinymce {
+  visibility: visible !important;
+}
+
+#sopComposeModal .mce-tinymce,
+#sopComposeModal .tox-tinymce {
+  border-radius: 4px !important;
+  border-color: #d1d5db !important;
+  width: 100% !important;
+}
+
+#sopComposeModal .mce-container-body,
+#sopComposeModal .tox-editor-container {
+  width: 100% !important;
+}
+
+#sopComposeModal .modal-body {
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}

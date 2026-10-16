@@ -1054,7 +1054,9 @@ class Staff_model extends App_Model
 
             hooks()->do_action('staff_member_created', $staffid);
 
-
+            if (function_exists('snapshot_ensure_staff_timeinterval')) {
+                snapshot_ensure_staff_timeinterval($staffid);
+            }
 
             return $staffid;
         }
@@ -3169,6 +3171,30 @@ class Staff_model extends App_Model
         return $kraResult;
     }
 
+    public function get_global_default_kra() {
+        $this->db->select('kra.*');
+        $this->db->from('tblstaff_performance_kra kra');
+        $this->db->where('kra.departmentid IS NULL', null, false);
+        $this->db->where('kra.type', '0');
+        $this->db->order_by('kra.id', 'ASC');
+
+        return $this->db->get()->result();
+    }
+
+    public function get_department_default_kra($departmentId) {
+        if (empty($departmentId)) {
+            return [];
+        }
+
+        $this->db->select('kra.*');
+        $this->db->from('tblstaff_performance_kra kra');
+        $this->db->where('kra.departmentid', $departmentId);
+        $this->db->where('kra.type', '0');
+        $this->db->order_by('kra.id', 'ASC');
+
+        return $this->db->get()->result();
+    }
+
     public function get_default_kra_based_on_department($departmentId) {
         
         // Initialize the query and bind parameters
@@ -3641,7 +3667,7 @@ class Staff_model extends App_Model
      * Optional grade filter; optional department filter.
      * Empty grade = all scores.
      */
-    public function get_pedma_rows_by_grade($grade, $fromMonth, $toMonth, $departmentId = '', $staffActive = '1')
+    public function get_pedma_rows_by_grade($grade, $fromMonth, $toMonth, $departmentId = '', $staffActive = '1', $allowAll = false)
     {
         $grade = strtoupper(trim((string) $grade));
         $bounds = $grade !== '' ? $this->pedma_grade_score_bounds($grade) : [0, 100];
@@ -3651,7 +3677,7 @@ class Staff_model extends App_Model
         }
 
         // Department listing requires a department (or grade for admin/HR).
-        if ($grade === '' && ($departmentId === '' || $departmentId === null)) {
+        if (!$allowAll && $grade === '' && ($departmentId === '' || $departmentId === null)) {
             return [];
         }
 

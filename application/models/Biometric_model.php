@@ -265,13 +265,18 @@ class Biometric_model extends App_Model
      *
      * @param string $attendance_ymd Y-m-d (session start / attendance_date)
      * @param array<int, array{time:string}> $punches in sheet order
+     * @param bool|null $allow_midnight_rollover null = infer (night shift / evening start only)
      * @return array<int, array{time:string,at:int}>
      */
-    public function attach_punch_timestamps($attendance_ymd, array $punches)
+    public function attach_punch_timestamps($attendance_ymd, array $punches, $allow_midnight_rollover = null)
     {
         $attendance_ymd = date('Y-m-d', strtotime((string) $attendance_ymd));
+        if ($allow_midnight_rollover === null) {
+            $allow_midnight_rollover = $this->infer_midnight_rollover_from_punch_tokens($punches);
+        }
         $last_at = null;
         $resolved = [];
+        $day_end = strtotime($attendance_ymd . ' 23:59:59');
 
         foreach ($punches as $pr) {
             $time = trim((string) ($pr['time'] ?? ''));
@@ -281,20 +286,113 @@ class Biometric_model extends App_Model
             if (strlen($time) === 5) {
                 $time .= ':00';
             }
-            $at = strtotime($attendance_ymd . ' ' . substr($time, 0, 8));
+            $time_hms = substr($time, 0, 8);
+            $at = strtotime($attendance_ymd . ' ' . $time_hms);
             if ($at === false) {
                 continue;
             }
+            if (!$allow_midnight_rollover) {
+                $at = $this->adjust_day_shift_punch_timestamp($at, $time_hms, $attendance_ymd, $last_at);
+            }
             while ($last_at !== null && $at <= $last_at) {
-                $at = strtotime('+1 day', $at);
+                if ($allow_midnight_rollover) {
+                    $at = strtotime('+1 day', $at);
+                } else {
+                    $at = min($last_at + 60, $day_end);
+                    if ($at <= $last_at) {
+                        $at = $last_at + 1;
+                    }
+                }
             }
             $last_at = $at;
-            $pr['time'] = substr($time, 0, 8);
+            $pr['time'] = date('H:i:s', $at);
             $pr['at'] = $at;
             $resolved[] = $pr;
         }
 
         return $resolved;
+    }
+
+    /**
+     * Night-shift rows may include after-midnight exits; day-shift rows should stay on the sheet date.
+     *
+     * @param array<int, array{time?:string,type?:string}> $punches
+     */
+    public function infer_midnight_rollover_from_punch_tokens(array $punches)
+    {
+        $first_hour = null;
+        $has_evening = false;
+        $has_early_morning = false;
+        foreach ($punches as $pr) {
+            $h = $this->punch_time_hour((string) ($pr['time'] ?? ''));
+            if ($h < 0) {
+                continue;
+            }
+            if ($first_hour === null) {
+                $first_hour = $h;
+            }
+            if ($h >= 15) {
+                $has_evening = true;
+            }
+            if ($h < 6) {
+                $has_early_morning = true;
+            }
+        }
+        if ($first_hour !== null && $first_hour >= 15) {
+            return true;
+        }
+        if ($has_evening && $has_early_morning) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Biometric export sometimes stores afternoon punches as 00:30 instead of 12:30 on day-shift rows.
+     */
+    protected function adjust_day_shift_punch_timestamp($at, $time_hms, $attendance_ymd, $last_at)
+    {
+        $hour = (int) date('G', $at);
+        if ($hour >= 6 || $last_at === null) {
+            return $at;
+        }
+        if ((int) date('G', $last_at) < 11) {
+            return $at;
+        }
+        if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $time_hms, $m)) {
+            return $at;
+        }
+        $h = (int) $m[1];
+        if ($h >= 6) {
+            return $at;
+        }
+        $pm_hour = $h + 12;
+        if ($pm_hour > 23) {
+            return $at;
+        }
+        $fixed = sprintf('%02d:%02d:%02d', $pm_hour, (int) $m[2], (int) ($m[3] ?? 0));
+
+        return strtotime($attendance_ymd . ' ' . $fixed) ?: $at;
+    }
+
+    /**
+     * @param array $row biometric_report row (shift, punch_records, …)
+     * @param array<int, array{time?:string}> $parsed_punches
+     */
+    public function biometric_row_allows_midnight_rollover(array $row, array $parsed_punches = [])
+    {
+        $shift = strtolower(trim((string) ($row['shift'] ?? '')));
+        if ($shift !== '') {
+            if (strpos($shift, 'night') !== false || preg_match('/\bns\b/', $shift)) {
+                return true;
+            }
+            if (strpos($shift, 'day') !== false || strpos($shift, 'general') !== false || strpos($shift, 'morning') !== false) {
+                return false;
+            }
+        }
+
+        return $this->infer_midnight_rollover_from_punch_tokens($parsed_punches);
     }
 
     /**
@@ -829,7 +927,17 @@ class Biometric_model extends App_Model
                 ];
             }
 
-            $resolved_punches = $this->attach_punch_timestamps($att_dt->format('Y-m-d'), $parsed_punches);
+            $allow_rollover = $this->biometric_row_allows_midnight_rollover($row, $parsed_punches);
+            if (!empty($filters['staff']) && function_exists('is_night_shift')) {
+                $allow_rollover = is_night_shift((int) $filters['staff'])
+                    ? true
+                    : false;
+            }
+            $resolved_punches = $this->attach_punch_timestamps(
+                $att_dt->format('Y-m-d'),
+                $parsed_punches,
+                $allow_rollover
+            );
             foreach ($resolved_punches as $pr) {
                 $time = (string) ($pr['time'] ?? '');
                 $dir = strtoupper((string) ($pr['type'] ?? ''));
@@ -838,6 +946,7 @@ class Biometric_model extends App_Model
                     continue;
                 }
                 $swipe_ymd = date('Y-m-d', $at);
+                $sheet_ymd = $att_dt->format('Y-m-d');
                 $swipes[] = [
                     'employee_name' => $name,
                     'employee_code' => $row['employee_code'],
@@ -845,6 +954,7 @@ class Biometric_model extends App_Model
                     'swipe_time' => $time,
                     'swipe_date' => date('d M, Y', $at),
                     'swipe_sort' => date('Y-m-d H:i:s', $at),
+                    'attendance_ymd' => $sheet_ymd,
                     'shift' => $row['shift'] ?: '',
                     'in_out' => $dir,
                     'received_on' => date('d M, Y H:i:s', $at),
@@ -1844,7 +1954,8 @@ class Biometric_model extends App_Model
         }
 
         $ymd = $this->attendance_date_to_ymd($date_str);
-        $with_at = $this->attach_punch_timestamps($ymd, $raw_punches);
+        $allow_rollover = $this->biometric_row_allows_midnight_rollover($row, $raw_punches);
+        $with_at = $this->attach_punch_timestamps($ymd, $raw_punches, $allow_rollover);
 
         $events = [];
         foreach ($with_at as $pr) {

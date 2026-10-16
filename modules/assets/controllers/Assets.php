@@ -234,20 +234,31 @@ class Assets extends AdminController
 
     public function table_assets($status = '')
     {
-        if ('' == $status || 'all_asset' == $status) {
+        $status_filter = $this->input->post('status_filter');
+
+        if ($status_filter !== null && $status_filter !== '') {
+            $status = (string) $status_filter;
+        }
+
+        if ('' == $status || 'all_asset' == $status || 'all' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'));
-        } elseif ('not_pending_yet' == $status) {
+        } elseif ('not_pending_yet' == $status || '1' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 1]);
-        } elseif ('using' == $status) {
-            $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 2]);
-        } elseif ('liquidation' == $status) {
+        } elseif ('using' == $status || '2' == $status) {
+            $this->app->get_table_data(module_views_path('assets', 'table_assets'), [
+                'status' => 2,
+                'show_allocation_info' => true,
+            ]);
+        } elseif ('liquidation' == $status || '3' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 3]);
-        } elseif ('warranty_repair' == $status) {
+        } elseif ('warranty_repair' == $status || '4' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 4]);
-        } elseif ('lost' == $status) {
+        } elseif ('lost' == $status || '5' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 5]);
-        } elseif ('broken' == $status) {
+        } elseif ('broken' == $status || '6' == $status) {
             $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 6]);
+        } elseif ('7' == $status) {
+            $this->app->get_table_data(module_views_path('assets', 'table_assets'), ['status' => 7]);
         }
     }
 
@@ -285,6 +296,19 @@ class Assets extends AdminController
         }
 
         $context = $this->assets_model->get_asset_sale_context((int) $asset_id);
+        $this->output->set_content_type('application/json')->set_output(json_encode([
+            'success' => (bool) $context,
+            'asset' => $context,
+        ]));
+    }
+
+    public function get_asset_revoke_context($asset_id)
+    {
+        if (!has_permission('assets', '', 'edit') && !is_admin()) {
+            access_denied('assets');
+        }
+
+        $context = $this->assets_model->get_asset_revoke_context((int) $asset_id);
         $this->output->set_content_type('application/json')->set_output(json_encode([
             'success' => (bool) $context,
             'asset' => $context,

@@ -19,10 +19,18 @@
                 <?php } ?> -->
 
                 <!-- anyone can do annuncement -->
-                <a href="<?php echo admin_url('announcements/announcement'); ?>" class="btn btn-primary tw-mb-2 sm:tw-mb-4">
-                    <i class="fa-regular fa-plus tw-mr-1"></i>
-                    <?php echo _l('new_announcement'); ?>
-                </a>
+                <div class="hrms-compose-actions">
+                    <a href="<?php echo admin_url('announcements/announcement'); ?>" class="btn btn-primary hrms-btn-announcement">
+                        <i class="fa-regular fa-plus" aria-hidden="true"></i>
+                        <?php echo _l('new_announcement'); ?>
+                    </a>
+                    <?php if (can_create_sop()) { ?>
+                    <button type="button" class="btn btn-default hrms-btn-sop" data-toggle="modal" data-target="#sopComposeModal">
+                        <i class="fa fa-file-text-o" aria-hidden="true"></i>
+                        <?php echo _l('sop'); ?>
+                    </button>
+                    <?php } ?>
+                </div>
 
                 <div class="panel_s">
                     <div class="panel-body panel-table-full">

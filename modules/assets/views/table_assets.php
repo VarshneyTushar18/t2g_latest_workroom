@@ -18,6 +18,32 @@ $aColumns = [
     'belongs_to',
     // 'images'
 ];
+
+$show_allocation_info = !empty($show_allocation_info);
+if ($show_allocation_info) {
+    $alloc_table = db_prefix() . 'assets_acction_1';
+    $staff_table = db_prefix() . 'staff';
+    $assets_table = db_prefix() . 'assets';
+    $allocation_employee_sql = '(SELECT TRIM(CONCAT(COALESCE(' . $staff_table . '.firstname, \'\'), \' \', COALESCE(' . $staff_table . '.lastname, \'\')))
+        FROM ' . $alloc_table . ' alloc
+        INNER JOIN ' . $staff_table . ' ON ' . $staff_table . '.staffid = alloc.acction_to
+        WHERE alloc.assets = ' . $assets_table . '.id AND alloc.type = \'allocation\'
+        ORDER BY alloc.time_acction DESC, alloc.id DESC
+        LIMIT 1) as allocation_employee_name';
+    $allocation_time_sql = '(SELECT alloc.time_acction
+        FROM ' . $alloc_table . ' alloc
+        WHERE alloc.assets = ' . $assets_table . '.id AND alloc.type = \'allocation\'
+        ORDER BY alloc.time_acction DESC, alloc.id DESC
+        LIMIT 1) as allocation_time';
+    $date_buy_idx = array_search('date_buy', $aColumns, true);
+    $total_allocation_idx = array_search('total_allocation', $aColumns, true);
+    if ($date_buy_idx !== false) {
+        $aColumns[$date_buy_idx] = $allocation_employee_sql;
+    }
+    if ($total_allocation_idx !== false) {
+        $aColumns[$total_allocation_idx] = $allocation_time_sql;
+    }
+}
 $sIndexColumn = 'id';
 $sTable       = db_prefix() . 'assets';
 $join         = [
@@ -27,6 +53,36 @@ $join         = [
     'LEFT JOIN ' . db_prefix() . 'clients on find_in_set(' . db_prefix() . 'clients.userid, ' . db_prefix() . 'assets.belongs_to)'
 ];
 $where = [];
+$CI = &get_instance();
+
+$asset_code_filter = trim($CI->input->post('asset_code_filter'));
+$asset_name_filter = trim($CI->input->post('asset_name_filter'));
+$asset_group_filter = trim($CI->input->post('asset_group_filter'));
+$date_buy_filter = trim($CI->input->post('date_buy_filter'));
+$department_filter = trim($CI->input->post('department_filter'));
+$belongs_to_filter = trim($CI->input->post('belongs_to_filter'));
+
+if ($asset_code_filter !== '') {
+    $where[] = 'AND ' . db_prefix() . 'assets.assets_code LIKE "%' . $CI->db->escape_like_str($asset_code_filter) . '%" ESCAPE "!"';
+}
+if ($asset_name_filter !== '') {
+    $where[] = 'AND ' . db_prefix() . 'assets.assets_name LIKE "%' . $CI->db->escape_like_str($asset_name_filter) . '%" ESCAPE "!"';
+}
+if ($asset_group_filter !== '') {
+    $where[] = 'AND ' . db_prefix() . 'assets.asset_group = ' . (int) $asset_group_filter;
+}
+if ($date_buy_filter !== '') {
+    $parsed_date = date('Y-m-d', strtotime($date_buy_filter));
+    if ($parsed_date && $parsed_date !== '1970-01-01') {
+        $where[] = 'AND DATE(' . db_prefix() . 'assets.date_buy) = ' . $CI->db->escape($parsed_date);
+    }
+}
+if ($department_filter !== '') {
+    $where[] = 'AND ' . db_prefix() . 'assets.department = ' . (int) $department_filter;
+}
+if ($belongs_to_filter !== '') {
+    $where[] = 'AND ' . db_prefix() . 'assets.belongs_to LIKE "%' . $CI->db->escape_like_str($belongs_to_filter) . '%" ESCAPE "!"';
+}
 
 if (isset($status)) {
     if (1 == $status) {
@@ -45,8 +101,29 @@ if (isset($status)) {
         array_push($where, 'AND status = 3 AND status_override = 1');
     }
 }
-// $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['id', 'description', 'warranty_period', 'asset_location', 'depreciation', 'series', 'supplier_name', 'supplier_address', 'supplier_phone', 'unit_name', 'group_name', db_prefix() . 'departments.name as dpm_name', 'visible_to_client', 'company'], ' GROUP BY ' . db_prefix() . 'assets.id');
- $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, ['id', 'description', 'warranty_period', 'asset_location', 'depreciation', 'series', 'supplier_name', 'supplier_address', 'supplier_phone', 'unit_name', 'group_name', db_prefix() . 'departments.name as dpm_name', 'visible_to_client', 'company', 'total_lost', 'total_liquidation', 'total_warranty', 'status', 'status_override'], ' GROUP BY tblassets.id, file_id, asset_image, assets_code, assets_name, asset_group, date_buy, total_allocation, amount, total_damages, unit_price, unit, department, belongs_to, description, warranty_period, asset_location, depreciation, series, supplier_name, supplier_address, supplier_phone, unit_name, group_name, tbldepartments.name, visible_to_client, company, total_lost, total_liquidation, total_warranty, status, status_override');
+$additionalSelect = [
+    'id',
+    'description',
+    'warranty_period',
+    'asset_location',
+    'depreciation',
+    'series',
+    'supplier_name',
+    'supplier_address',
+    'supplier_phone',
+    'unit_name',
+    'group_name',
+    db_prefix() . 'departments.name as dpm_name',
+    'visible_to_client',
+    'company',
+    'total_lost',
+    'total_liquidation',
+    'total_warranty',
+    'status',
+    'status_override',
+];
+
+$result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, $additionalSelect, ' GROUP BY tblassets.id, file_id, asset_image, assets_code, assets_name, asset_group, date_buy, total_allocation, amount, total_damages, unit_price, unit, department, belongs_to, description, warranty_period, asset_location, depreciation, series, supplier_name, supplier_address, supplier_phone, unit_name, group_name, tbldepartments.name, visible_to_client, company, total_lost, total_liquidation, total_warranty, status, status_override');
 
 
 $output  = $result['output'];
@@ -71,6 +148,11 @@ foreach ($rResult as $aRow) {
             $_data = $aRow['dpm_name'];
         } elseif ('amount' == $aColumns[$i]) {
             $_data = $aRow['amount'] - $aRow['total_allocation'];
+        } elseif (stripos($aColumns[$i], 'allocation_employee_name') !== false) {
+            $name = trim((string) ($aRow['allocation_employee_name'] ?? ''));
+            $_data = $name !== '' ? htmlspecialchars($name) : '—';
+        } elseif (stripos($aColumns[$i], 'allocation_time') !== false) {
+            $_data = !empty($aRow['allocation_time']) ? _dt($aRow['allocation_time']) : '—';
         } elseif ('total_damages' == $aColumns[$i]) {
             $status_labels = [
                 1 => ['Available', '#dcfce7', '#22c55e', '#166534'],

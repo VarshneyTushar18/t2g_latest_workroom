@@ -747,12 +747,10 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
       if (d && d.code) {
         html += '<span class="hrms-cal-code ' + dayCodeClass(tone) + '">' + dayCodeLabel(d.code) + '</span>';
       }
-      if (d && d.attendance_source && d.attendance_source !== 'none' && (d.check_in || d.first_in)) {
+      if (d && d.attendance_source === 'biometric' && (d.check_in || d.first_in) && (d.check_out || d.last_out)) {
         var calIn = d.check_in || d.first_in;
         var calOut = d.check_out || d.last_out;
-        if (calIn) {
-          html += '<span class="hrms-cal-io">' + calIn + (calOut ? '–' + calOut : '') + '</span>';
-        }
+        html += '<span class="hrms-cal-io">' + calIn + '–' + calOut + '</span>';
       }
       html += '</div>';
     }

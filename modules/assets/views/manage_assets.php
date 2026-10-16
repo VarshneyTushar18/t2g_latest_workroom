@@ -1,4 +1,17 @@
-<?php init_head(); ?>
+<?php
+$asset_filter_groups = [];
+foreach ($group as $group_item) {
+    $asset_filter_groups[] = ['value' => (string) $group_item['group_id'], 'label' => (string) $group_item['group_name']];
+}
+
+$asset_filter_departments = [
+    ['value' => '', 'label' => 'All'],
+];
+foreach ($departments as $department_item) {
+    $asset_filter_departments[] = ['value' => (string) $department_item['departmentid'], 'label' => (string) $department_item['name']];
+}
+init_head();
+?>
 <style>
   .assets-manage-page {
     --am-ink: #0f172a;
@@ -46,10 +59,11 @@
   }
 
   .assets-manage-panel table.dataTable thead th:first-child,
-  .assets-manage-panel table.dataTable tbody td:first-child {
-    width: 90px !important;
-    min-width: 90px !important;
-    max-width: 90px !important;
+  .assets-manage-panel table.dataTable tbody td:first-child,
+  .assets-manage-panel #th-consent {
+    width: 140px !important;
+    min-width: 140px !important;
+    max-width: 140px !important;
     padding-left: 8px;
     padding-right: 8px;
     text-align: center;
@@ -57,8 +71,8 @@
 
   .assets-manage-panel table.dataTable tbody td:first-child img,
   .assets-manage-panel table.dataTable tbody td:first-child .img-thumbnail {
-    width: 58px !important;
-    height: 58px !important;
+    width: 140px !important;
+    height: 140px !important;
     object-fit: cover;
     display: block;
     margin: 0 auto;
@@ -511,8 +525,8 @@
                   _l('asset_name'),
                   _l('asset_group'),
                   'Asset Status',
-                  _l('date_buy'),
-                  _l('amount_allocate'),
+                  _l('allocation_employee_name'),
+                  _l('allocation_date'),
                   _l('amount_rest'),
                   _l('original_price'),
                   _l('unit'),
@@ -1289,22 +1303,81 @@
       }
     }
   });
-  var table = initDataTable('.table-table_assets1', admin_url + 'assets/table_assets/' + 'all_asset');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets2', admin_url + 'assets/table_assets/' + 'not_pending_yet');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets3', admin_url + 'assets/table_assets/' + 'using');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets4', admin_url + 'assets/table_assets/' + 'liquidation');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets5', admin_url + 'assets/table_assets/' + 'warranty_repair');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets6', admin_url + 'assets/table_assets/' + 'lost');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets7', admin_url + 'assets/table_assets/' + 'broken');
-  table.column(1).visible(false);
-  var table = initDataTable('.table-table_assets8', admin_url + 'assets/table_assets/' + 'sold');
-  table.column(1).visible(false);
+  function hideAssetInventoryColumn(table) {
+    if (!table || !table.columns) {
+      return;
+    }
+    table.columns().every(function(index) {
+      var label = $.trim($(table.column(index).header()).text()).toLowerCase();
+      if (label === 'inventory' || label === 'invertaris') {
+        table.column(index).visible(false, false);
+      }
+    });
+  }
+
+  function configureAssetListTable(table) {
+    if (!table) {
+      return;
+    }
+    table.column(1).visible(false, false);
+    hideAssetInventoryColumn(table);
+    bindAssetStatusHeaderFilter(table);
+    table.columns.adjust();
+  }
+
+  function bindAssetStatusHeaderFilter(table) {
+    if (!table || !table.columns || !table.columns().header) {
+      return;
+    }
+
+    var statusHeaderIndex = -1;
+    table.columns().header().toArray().forEach(function(header, index) {
+      if ($.trim($(header).text()).toLowerCase() === 'asset status') {
+        statusHeaderIndex = index;
+      }
+    });
+
+    if (statusHeaderIndex < 0) {
+      return;
+    }
+
+    var $statusHeader = $(table.columns().header()[statusHeaderIndex]);
+    if ($statusHeader.find('.asset-status-header-filter').length) {
+      return;
+    }
+
+    var $wrapper = $('<div style="display:flex; align-items:center; gap:8px; min-width:180px; white-space:nowrap;"></div>');
+    var $label = $('<span style="font-weight:600; line-height:1.2;">Asset Status</span>');
+    var $filter = $('<select class="form-control input-sm asset-status-header-filter" style="width:92px; min-width:92px; display:inline-block; font-size:12px; padding:4px 22px 4px 8px; height:28px; line-height:1.2;">' +
+      '<option value="">All</option>' +
+      '<option value="1">Available</option>' +
+      '<option value="2">Allocated</option>' +
+      '<option value="3">Sold</option>' +
+      '<option value="4">Liquidated</option>' +
+      '<option value="5">Lost</option>' +
+      '<option value="6">Broken</option>' +
+      '<option value="7">Under repair</option>' +
+      '</select>');
+
+    $wrapper.append($label).append($filter);
+    $statusHeader.empty().append($wrapper);
+
+    $filter.on('change', function() {
+      var selectedValue = $(this).val();
+      table.data('statusFilter', selectedValue || '');
+      applyAssetTableAjaxData(table);
+      table.search('').draw();
+    });
+  }
+
+  configureAssetListTable(initDataTable('.table-table_assets1', admin_url + 'assets/table_assets/' + 'all_asset'));
+  configureAssetListTable(initDataTable('.table-table_assets2', admin_url + 'assets/table_assets/' + 'not_pending_yet'));
+  configureAssetListTable(initDataTable('.table-table_assets3', admin_url + 'assets/table_assets/' + 'using'));
+  configureAssetListTable(initDataTable('.table-table_assets4', admin_url + 'assets/table_assets/' + 'liquidation'));
+  configureAssetListTable(initDataTable('.table-table_assets5', admin_url + 'assets/table_assets/' + 'warranty_repair'));
+  configureAssetListTable(initDataTable('.table-table_assets6', admin_url + 'assets/table_assets/' + 'lost'));
+  configureAssetListTable(initDataTable('.table-table_assets7', admin_url + 'assets/table_assets/' + 'broken'));
+  configureAssetListTable(initDataTable('.table-table_assets8', admin_url + 'assets/table_assets/' + 'sold'));
 
   $(document).on('change', '.asset-status-select', function() {
     var select = $(this);
@@ -1313,6 +1386,37 @@
 
     if (typeof previousValue === 'undefined') {
       previousValue = select.val();
+    }
+
+    if (select.val() === '1') {
+      select.val(previousValue);
+      init_asset(assetId, function() {
+        $.getJSON(admin_url + 'assets/get_asset_revoke_context/' + assetId)
+          .done(function(response) {
+            if (!response.success || !response.asset) {
+              alert_float('danger', 'Unable to load revoke details.');
+              return;
+            }
+
+            $('#recalled_modal').modal('show');
+            $('#recalled_modal input[name="assets"]').val(response.asset.id);
+            $('#recalled_modal input[name="amount"]').val(response.asset.allocated_quantity || 1);
+            $('#recalled_modal input[name="amount"]').attr('max', response.asset.allocated_quantity || 1);
+
+            if (response.asset.assigned_staff_id) {
+              var $staffSelect = $('#recalled_modal select[name="acction_to"]');
+              $staffSelect.val(response.asset.assigned_staff_id);
+              $staffSelect.selectpicker('refresh');
+            }
+
+            $('#recalled_modal .selectpicker').selectpicker('refresh');
+            init_datepicker();
+          })
+          .fail(function() {
+            alert_float('danger', 'Unable to load revoke details.');
+          });
+      });
+      return;
     }
 
     if (select.val() === '2') {
@@ -1602,69 +1706,122 @@
     $('#toggleFilter').on('click', function() {
       $('#dynamicFilterContainer').toggle();
     });
+  }
 
+  function getVisibleAssetTable() {
+    var $activeTable = $('.table.table-table_assets1:visible, .table.table-table_assets2:visible, .table.table-table_assets3:visible, .table.table-table_assets4:visible, .table.table-table_assets5:visible, .table.table-table_assets6:visible, .table.table-table_assets7:visible, .table.table-table_assets8:visible').first();
+    if (!$activeTable.length) {
+      return null;
+    }
+
+    return $activeTable.DataTable();
   }
 
   function customFilterSearch() {
     hideShowFilter();
 
-    var projectTable = $('#DataTables_Table_0').DataTable();
-    // Generate search inputs for each column
-    var filters = []; // Store filter values
-    function applyFilters() {
-      projectTable.columns().every(function(index) {
-        if (typeof filters[index] !== 'undefined') {
-          this.search(filters[index]);
-        } else {
-          this.search('');
-        }
-      });
+    var $container = $('#dynamicFilterContainer');
+    $container.empty();
 
-      projectTable.draw(); // Redraw the table
+    var filterFields = [
+      { key: 'assets_code', label: 'Asset code', type: 'text', placeholder: 'Asset code' },
+      { key: 'assets_name', label: 'Asset name', type: 'text', placeholder: 'Asset name' },
+      { key: 'asset_group', label: 'Asset group', type: 'select', placeholder: 'Asset group', options: <?php echo json_encode($asset_filter_groups, JSON_HEX_APOS | JSON_HEX_QUOT); ?> },
+      { key: 'date_buy', label: 'Date of Purchase', type: 'date', placeholder: 'Date of Purchase' },
+      { key: 'department', label: 'Department', type: 'select', placeholder: 'Department', options: <?php echo json_encode($asset_filter_departments, JSON_HEX_APOS | JSON_HEX_QUOT); ?> },
+      { key: 'belongs_to', label: 'Assigned to Customer', type: 'text', placeholder: 'Assigned to Customer' }
+    ];
+
+    $.each(filterFields, function(index, field) {
+      var $row = $('<div class="filter-row"></div>');
+      $row.append('<label for="asset_filter_' + field.key + '">' + field.label + ': </label>');
+
+      if (field.type === 'select') {
+        var $select = $('<select id="asset_filter_' + field.key + '" class="form-control" style="width: 160px; display: inline-block;"></select>');
+        $.each(field.options, function(_, option) {
+          var selected = option.value === '' ? ' selected' : '';
+          $select.append('<option value="' + option.value + '"' + selected + '>' + option.label + '</option>');
+        });
+        $row.append($select);
+      } else {
+        $row.append('<input id="asset_filter_' + field.key + '" type="' + field.type + '" class="form-control" placeholder="' + field.placeholder + '" style="width: 160px; display: inline-block;">');
+      }
+
+      $container.append($row);
+    });
+
+    var $applyButton = $('<button type="button" class="btn btn-primary" id="assetFilterApplyBtn" style="margin-left: 10px; margin-top: 10px;">Go</button>');
+    $container.append($applyButton);
+
+    function normalizeDateForTableFilter(value) {
+      if (!value) {
+        return '';
+      }
+
+      var parsedDate = new Date(value + 'T00:00:00');
+      if (isNaN(parsedDate.getTime())) {
+        return value;
+      }
+
+      var day = String(parsedDate.getDate()).padStart(2, '0');
+      var month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      var year = parsedDate.getFullYear();
+
+      return day + '/' + month + '/' + year;
     }
 
-    function isDateColumn(title) {
-      const dateKeywords = ['date', 'deadline']; // Add more keywords as needed
-      title = title.toLowerCase();
-
-      return dateKeywords.some(keyword => title.includes(keyword));
+    function getAssetFilterValues() {
+      return {
+        asset_code_filter: $.trim($('#asset_filter_assets_code').val()),
+        asset_name_filter: $.trim($('#asset_filter_assets_name').val()),
+        asset_group_filter: $('#asset_filter_asset_group').val() || '',
+        date_buy_filter: $('#asset_filter_date_buy').val() || '',
+        department_filter: $('#asset_filter_department').val() || '',
+        belongs_to_filter: $.trim($('#asset_filter_belongs_to').val())
+      };
     }
 
-    projectTable.columns().every(function(index) {
-      var column = this;
-      var title = $(column.header()).text();
-      var input;
-      var excludedFilterTitles = ['Asset Image', 'Asset Status', 'Quantity allocated', 'Inventory', 'Unit'];
-      if (excludedFilterTitles.indexOf($.trim(title)) !== -1) {
+    function applyAssetTableAjaxData(table) {
+      if (!table || !table.settings) {
         return;
       }
-      if (title == '#' || title == ' - ') {
-        return false;
+
+      var settings = table.settings()[0];
+      var statusFilter = table.data('statusFilter') || '';
+      var filterValues = getAssetFilterValues();
+
+      settings.ajax.data = function(d) {
+        d.status_filter = statusFilter;
+        d.asset_code_filter = filterValues.asset_code_filter;
+        d.asset_name_filter = filterValues.asset_name_filter;
+        d.asset_group_filter = filterValues.asset_group_filter;
+        d.date_buy_filter = filterValues.date_buy_filter;
+        d.department_filter = filterValues.department_filter;
+        d.belongs_to_filter = filterValues.belongs_to_filter;
+      };
+    }
+
+    function applyAssetFilters() {
+      var table = getVisibleAssetTable();
+      if (!table) {
+        return;
       }
 
-      if (isDateColumn(title)) {
-        input = $('<div class="filter-row"><label for="filter_' + index + '">' + title + ': </label><input type="date" class="form-control" placeholder="' + title + '"></div>')
-          .appendTo($('#dynamicFilterContainer'));
-      } else {
-        input = $('<div class="filter-row"><label for="filter_' + index + '">' + title + ': </label><input type="text" class="form-control" placeholder="' + title + '"></div>')
-          .appendTo($('#dynamicFilterContainer'));
-      }
+      applyAssetTableAjaxData(table);
+      table.search('').draw();
+    }
 
-
-      input.find('input').on('keyup change', function() {
-        filters[index] = $(this).val(); // Store the filter value
-        applyFilters(); // Apply filters and redraw the table
-
-      });
+    $('#assetFilterApplyBtn').on('click', function() {
+      applyAssetFilters();
     });
-    // $('#applyFiltersBtn').on('click', function() {
-    //     applyFilters(); // Apply filters and redraw the table
-    // });
 
+    $('#dynamicFilterContainer').find('input, select').on('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyAssetFilters();
+      }
+    });
   }
-
-
-
 
   function generateFilter() {
     // Generate dynamic filter form fields

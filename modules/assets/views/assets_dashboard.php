@@ -183,11 +183,23 @@
         color: #0ea5e9;
         font-weight: 600;
     }
-    .it-dash .department-panel .panel-heading {
+    .it-dash .panel_s.types-panel,
+    .it-dash .panel_s.department-panel {
+        border: 1px solid var(--it-border);
+        border-radius: 12px;
+        box-shadow: none;
+        margin: 0;
+        overflow: hidden;
+    }
+    .it-dash .department-panel .panel-heading,
+    .it-dash .types-panel .panel-heading {
+        background: #fff;
+        border-bottom: 1px solid var(--it-border);
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+        padding: 14px 18px;
     }
     .it-dash .department-panel .panel-heading::after {
         content: 'Inventory allocation';
@@ -197,8 +209,17 @@
         letter-spacing: .04em;
         text-transform: uppercase;
     }
+    .it-dash .types-panel .panel-body,
+    .it-dash .department-panel .panel-body {
+        padding: 0;
+    }
+    .it-dash .types-panel .panel-body {
+        padding: 12px 18px 8px;
+    }
     .it-dash .asset-department-table {
         border: 0;
+        margin: 0;
+        width: 100%;
     }
     .it-dash .asset-department-table thead th {
         background: #f8fafc;
@@ -207,7 +228,7 @@
         font-size: 11px;
         font-weight: 700;
         letter-spacing: .05em;
-        padding: 11px 14px;
+        padding: 12px 14px;
         text-transform: uppercase;
         white-space: nowrap;
     }
@@ -286,12 +307,8 @@
             max-width: 54px;
         }
     }
-    .it-dash .types-panel .panel-heading {
-        background: #fff;
-        border-bottom: 1px solid var(--it-border);
-        padding: 14px 18px;
-    }
-    .it-dash .types-panel .panel-title {
+    .it-dash .types-panel .panel-title,
+    .it-dash .department-panel .panel-title {
         font-size: 15px;
         font-weight: 700;
         color: var(--it-navy);
@@ -628,12 +645,12 @@
             <div class="col-md-5">
                 <div class="panel_s department-panel" >
 
-                    <div class="panel-heading" style="background:#fff;border-bottom:1px solid #9fb7d6;padding:14px 18px;">
-                        <h4 class="panel-title" style="margin:0;font-size:15px;font-weight:700;color:#141e46;">Assets by department</h4>
+                    <div class="panel-heading">
+                        <h4 class="panel-title">Assets by department</h4>
                     </div>
-                    <div class="panel-body" style="padding:0;">
+                    <div class="panel-body">
                         <div class="table-responsive">
-                            <table class="table asset-department-table" style="margin:0;">
+                            <table class="table asset-department-table">
                                 <thead>
                                     <tr>
                                         <th>Department</th>

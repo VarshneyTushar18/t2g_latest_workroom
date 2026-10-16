@@ -283,13 +283,6 @@ function timesheets_module_init_menu_items() {
 					'icon' => 'fa fa-calendar',
 					'position' => 4,
 				]);
-				$CI->app_menu->add_sidebar_children_item('timesheets_leave', [
-					'slug' => 'timesheets_manage_wfh',
-					'name' => 'Manage WFH',
-					'href' => admin_url('holiday/manageWfh'),
-					'icon' => 'fa fa-home',
-					'position' => 4.5,
-				]);
 			}
 
 			if (is_admin() || is_super_admin() || is_HR() || is_super_hr()) {
@@ -514,9 +507,25 @@ function timesheets_add_head_components() {
 			break;
 		}
 	}
-	if ($load_hrms_ui) {
+	$load_dashboard_hrms = isset($CI->router)
+		&& $CI->router->class === 'dashboard'
+		&& $CI->router->method === 'index';
+	if ($load_hrms_ui || $load_dashboard_hrms) {
 		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+	}
+	if ($load_hrms_ui) {
 		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '" defer></script>';
+	}
+	if ($load_dashboard_hrms) {
+		echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+	}
+
+	$load_compose_css = (strpos($viewuri, '/admin/announcements') !== false || strpos($viewuri, '/admin/sop') !== false);
+	if (!$load_compose_css && function_exists('can_create_sop') && is_staff_logged_in() && can_create_sop()) {
+		$load_compose_css = true;
+	}
+	if ($load_compose_css) {
+		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_compose_actions.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
 	}
 
 	if (!(strpos($viewuri, '/admin/timesheets/timekeeping') === false)) {

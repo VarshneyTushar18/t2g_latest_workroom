@@ -14,7 +14,7 @@ $(window).on("load", function () {
 // Set datatables error throw console log
 $.fn.dataTable.ext.errMode = "throw";
 $.fn.dataTableExt.oStdClasses.sWrapper =
-  "dataTables_wrapper form-inline dt-bootstrap table-loading";
+  "able-loading";
 
 if (app.options.enable_google_picker == "1") {
   $.fn.googleDrivePicker.defaults.clientId = app.options.google_client_id;
@@ -1422,6 +1422,11 @@ $(function () {
       };
 
       calendar_settings.headerToolbar.left += ",viewFullCalendar";
+
+      if ($(".dashboard-fc-compact").length) {
+        calendar_settings.height = 380;
+        calendar_settings.expandRows = false;
+      }
     }
 
     calendar_settings.customButtons.calendarFilter = {

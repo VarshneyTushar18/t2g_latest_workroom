@@ -59,6 +59,11 @@ class App_Email extends App_mailer
      */
     public function send($skip_job = false)
     {
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_message('info', 'Email blocked because this is the local server.');
+            return true;
+        }
+
         $attachments = $this->mailer_engine == 'codeigniter' ? $this->_attachments : $this->phpmailer->getAttachments();
 
         $emailQueue          = get_option('email_queue_enabled');

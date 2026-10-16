@@ -145,6 +145,57 @@
         display: none !important;
     }
 
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu {
+        padding: 6px 0;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li a {
+        position: relative;
+        padding: 8px 12px 8px 38px;
+        white-space: normal;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li a span.text {
+        margin-right: 0;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li a span.check-mark {
+        display: none !important;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li a:before {
+        content: '';
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        width: 16px;
+        height: 16px;
+        margin-top: -8px;
+        border: 1.5px solid #94a3b8;
+        border-radius: 3px;
+        background: #fff;
+        box-sizing: border-box;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li.selected a:before {
+        background: #2563eb;
+        border-color: #2563eb;
+    }
+
+    #pedmaKraSelectors .bootstrap-select.show-tick .dropdown-menu li.selected a:after {
+        content: '';
+        position: absolute;
+        left: 17px;
+        top: 50%;
+        width: 5px;
+        height: 9px;
+        margin-top: -6px;
+        border: solid #fff;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+        box-sizing: border-box;
+    }
+
     .form-check {
         margin-right: 8px;
     }
@@ -276,11 +327,272 @@
         cursor: pointer;
         white-space: nowrap;
     }
+
+    .pedma-filters-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 20px 20px 8px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+
+    .pedma-filters-card .pedma-filters-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+        margin: 0 0 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .pedma-filters-hint {
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        padding: 28px 20px;
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 16px;
+    }
+
+    .pedma-evaluation-panel {
+        margin-top: 8px;
+    }
+
+    .pedma-kra-layout {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        margin-top: 12px;
+    }
+
+    .pedma-kra-col {
+        width: 230px;
+        flex: 0 0 230px;
+    }
+
+    .pedma-kra-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .pedma-kra-sidebar {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+    }
+
+    .pedma-section-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-weight: 600;
+        color: #1e293b;
+        cursor: pointer;
+    }
+
+    .pedma-section-note {
+        display: block;
+        margin: 2px 0 8px 22px;
+        color: #64748b;
+        font-size: 12px;
+    }
+
+    .pedma-kra-check-list {
+        margin: 0 0 12px 8px;
+        max-height: 280px;
+        overflow: auto;
+    }
+
+    .pedma-kra-selectors .form-group {
+        margin-bottom: 14px;
+    }
+
+    .pedma-kra-selectors .control-label {
+        font-weight: 600;
+        color: #334155;
+        font-size: 13px;
+    }
+
+    .pedma-kra-sidebar-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #334155;
+        margin: 0 0 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .pedma-kra-sidebar .kra-list-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f1f5f9;
+        margin: 0;
+    }
+
+    .pedma-kra-sidebar .kra-list-item:last-child {
+        border-bottom: 0;
+    }
+
+    .pedma-kra-sidebar .form-check-label {
+        font-weight: 500;
+        color: #1e293b;
+        cursor: pointer;
+        line-height: 1.35;
+    }
+
+    .pedma-evaluation-mount {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .pedma-kra-table-wrap {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px;
+        width: 100%;
+        max-width: none;
+        box-sizing: border-box;
+    }
+
+    .pedma-evaluation-mount .pedma-employee-bar,
+    .pedma-evaluation-mount #default_performance_score,
+    .pedma-evaluation-mount .pedma-form-actions {
+        width: 100%;
+        max-width: none;
+    }
+
+    .pedma-evaluation-mount .performance-table {
+        table-layout: auto;
+        width: 100%;
+    }
+
+    .pedma-evaluation-mount .performance-table .comment {
+        min-height: 52px;
+    }
+
+    .pedma-rating-group {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        justify-content: flex-start;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .pedma-rating-group label {
+        margin: 0;
+        font-weight: 500;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .pedma-employee-bar {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        color: #475569;
+    }
+
+    .pedma-employee-bar strong {
+        color: #0f172a;
+    }
+
+    .mleft15 {
+        margin-left: 14px;
+    }
+
+    .pedma-kra-accordion {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .pedma-kra-panel {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .pedma-kra-panel-head {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        margin: 0;
+        border: 0;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .pedma-kra-panel-head:hover {
+        background: #f1f5f9;
+    }
+
+    .pedma-kra-chevron {
+        display: inline-block;
+        width: 12px;
+        flex-shrink: 0;
+        color: #64748b;
+        transition: transform 0.15s ease;
+    }
+
+    .pedma-kra-panel.is-open .pedma-kra-chevron {
+        transform: rotate(90deg);
+    }
+
+    .pedma-kra-panel-title {
+        flex: 1 1 auto;
+    }
+
+    .pedma-kra-panel-meta {
+        font-size: 10px;
+        font-weight: 500;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .pedma-kra-panel-body {
+        padding: 8px 12px 12px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .pedma-kra-all-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 12px;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+    }
+
+    #pedmaKraSidebar .pedma-kra-check-list {
+        margin: 0;
+        max-height: 220px;
+    }
 </style>
-<!-- <script src="https://cdn.ckeditor.com/ckeditor5/41.3.1/classic/ckeditor.js"></script> -->
-<script src="https://cdn.ckeditor.com/4.8.0/full-all/ckeditor.js"></script>
-
-
 <div id="wrapper">
     <div class="content col-md-12">
         <div class="panel-body">
@@ -300,197 +612,28 @@
                         <path d="M28.055 8.42641H18.5397C18.1088 8.42641 17.7592 8.77597 17.7592 9.20688C17.7592 9.6378 18.1088 9.98736 18.5397 9.98736H28.055C28.486 9.98736 28.8356 9.6378 28.8356 9.20688C28.8356 8.77597 28.486 8.42641 28.055 8.42641Z" fill="#1E293B" />
                         <path d="M22.2885 33.0554H18.5403C18.1094 33.0554 17.7598 33.405 17.7598 33.8359C17.7598 34.2668 18.1094 34.6164 18.5403 34.6164H22.2885C22.7194 34.6164 23.069 34.2668 23.069 33.8359C23.069 33.405 22.7194 33.0554 22.2885 33.0554Z" fill="#1E293B" />
                     </svg> Performance Evaluation and Discussion Management (PEDMA)</h4>
-                <?php echo form_open('admin/staff/staff_performance', array('id' => 'pedma-form')); ?>
-                <div class="row">
-                    <div class="col-md-6">
-                        <!-- <form action=""> -->
-
-                        <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
-                        <?php echo render_select('staffid', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee');
-                        ?>
-                        <div class="form-group" app-field-wrapper="performance_month">
-                            <label class="control-label" for="performance_month">Please select a month</label>
-                            <div class="dropdown bootstrap-select bs3" style="width: 100%;">
-                                <input type="month" class="selectpicker form-control" id="performance_month" name="performance_month" style="width: 100%; padding:6px 12px;" required />
+                <div class="pedma-filters-card">
+                    <p class="pedma-filters-title">Evaluation filters</p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group" app-field-wrapper="performance_month">
+                                <label class="control-label" for="performance_month">Please select a month</label>
+                                <input type="month" class="form-control" id="performance_month" name="performance_month" value="<?php echo date('Y-m'); ?>" required />
                             </div>
                         </div>
-
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label class="control-label">KRA Type</label>
-                                <div class="radio-options">
-                                    <!-- Default Option -->
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="kraOption" id="defaultOption" value="default" checked>
-                                        <label class="form-check-label" for="defaultOption">
-                                            Default
-                                        </label>
-                                    </div>
-
-                                    <!-- Custom Option -->
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="kraOption" id="customOption" value="custom">
-                                        <label class="form-check-label" for="customOption">
-                                            Custom
-                                        </label>
-                                    </div>
-
-                                    <!-- Previous Month Template -->
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="kraOption" id="previousMonthOption" value="previous">
-                                        <label class="form-check-label" for="previousMonthOption">
-                                            Previous Month
-                                        </label>
-                                    </div>
-                                    <input type="hidden" name="previous_kra_save_type" id="previous_kra_save_type" value="">
-                                    <small id="previousMonthHint" class="text-muted" style="display:none;margin-top:4px;">
-                                        Loads last month's KRA as a blank template (scores/comments cleared).
-                                    </small>
-                                </div>
-                            </div>
+                        <div class="col-md-4">
+                            <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
                         </div>
-
-                    </div>
-                    <div class="col-md-6">
-                        <table class="table table-bordered">
-
-                            <tbody>
-                                <tr>
-                                    <td class="left-header">Employee Name:</td>
-                                    <td class="text-right" id='full-name'></td>
-                                </tr>
-                                <tr>
-                                    <td class="left-header">Date:</td>
-                                    <td class="text-right"><?php echo date("Y-m-d"); ?></td>
-                                </tr>
-                                <tr>
-                                    <td class="left-header">Designation:</td>
-                                    <td class="text-right" id='designation'></td>
-                                </tr>
-                                <tr>
-                                    <td class="left-header">Department:</td>
-                                    <td class="text-right" id='department-name'></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="col-md-12" id="defaultKraSelectWrapper" style="margin-left: 12px; display:none;">
-                        <label for="defaultKraSelect">Select Default KRAs</label>
-                        <small class="text-muted" style="display:block;margin-bottom:6px;">
-                            Items stay <i class="fa fa-lock"></i> locked until you tick the checkbox to unlock.
-                        </small>
-                        <div id="defaultKraSelectionSummary" class="alert alert-info tw-py-2 tw-mb-2" style="padding:10px 14px;margin-bottom:10px;">
-                            <strong>Selected:</strong> <span id="defaultKraSelectedCount">0</span> KRA(s)
-                            &nbsp;|&nbsp;
-                            <strong>Total Max Score:</strong> <span id="defaultKraTotalMaxScore">0</span> / 100
-                        </div>
-                        <div id="defaultKraSelect"></div>
-                    </div>
-
-                    <div class="col-md-12" id="customKraSelectWrapper" style="margin-left: 12px;">
-                        <label for="customKraSelect">Select KRAs</label>
-                        <div id="customKraSelect">
-
-                        </div>
-                    </div>
-                </div>
-                <div class="loader hidden">
-                    <img src="https://www.icegif.com/wp-content/uploads/2023/07/icegif-1263.gif" alt="Loading...">
-                </div>
-
-                <!-- Default KRA Table -->
-                <div id="defaultKraWrapper" style="display: block;">
-                    <table class="table performance-table table-bordered" id="defaultKraTable">
-                        <thead>
-                            <tr>
-                                <th style="width: 3%;">S. NO.</th>
-                                <th style="width: 28%;">Performance Criteria</th>
-                                <th style="width: 10%;">Max Score</th>
-                                <th style="width: 10%">Score</th>
-                                <th style="width: 24%;">Manager Comment</th>
-                                <th style="width: 25%;">HR Remarks / Notes</th>
-                            </tr>
-                        </thead>
-                        <tbody id="default-kra-table-body">
-
-
-                        </tbody>
-                        <tfoot id="default-kra-table-foot" style="display:none;">
-                            <tr class="active" style="background:#f8fafc;font-weight:600;">
-                                <td colspan="2" class="text-right">Total</td>
-                                <td id="defaultKraTableTotalMax">0</td>
-                                <td id="defaultKraTableTotalEntered">0</td>
-                                <td></td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-
-                <!-- Custom KRA Table -->
-                <div id="customKraWrapper" style="display: none;">
-                    <table class="table performance-table table-bordered">
-                        <thead>
-                            <tr>
-                                <th rowspan="2">S.No.</th>
-                                <th rowspan="2" style="width:220px;">KRA</th>
-                                <th colspan="3">KPI</th>
-                                <th rowspan="2" style="width:180px;">Manager Comment</th>
-                                <th rowspan="2" style="width:180px;">HR Remarks / Notes</th>
-                            </tr>
-                            <tr>
-                                <th style="width:200px;">KPI</th>
-                                <th>Max Score</th>
-                                <th style="width:150px;">Score</th>
-                            </tr>
-                        </thead>
-                        <tbody id="custom-kra-table-body">
-                            <!-- Table rows will be dynamically inserted here -->
-
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="row justify-content-between align-items-center mb-4" style="margin-bottom:15px;" id="default_performance_score">
-                    <div class="col-md-5">
-                        <div class="bg-primary text-white px-4 py-2 text-end rounded" style="padding: 10px; border-radius:10px; width: fit-content;">
-                            <span>OVERALL PERFORMANCE SCORE : </span>
-                            <h4 id="avg_score_display1" style="margin: 0; margin-top:px"></h4>
-                            <input type="hidden" name="avg_score1" id="avg_score1" />
+                        <div class="col-md-4">
+                            <?php echo render_select('staffid', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee'); ?>
                         </div>
                     </div>
                 </div>
 
-                <div class="row justify-content-between align-items-center mb-4" style="margin-bottom:15px;" id="custom_performance_score">
-                    <div class="col-md-5">
-                        <div class="bg-primary text-white px-4 py-2 text-end rounded" style="padding: 10px; border-radius:10px; width: fit-content;">
-                            <span>OVERALL PERFORMANCE SCORE : </span>
-                            <h4 id="avg_score_display2" style="margin: 0; margin-top:px"></h4>
-                            <input type="hidden" name="avg_score2" id="avg_score2" />
-                        </div>
-                    </div>
-                </div>
-
-                <button class="btn btn-outline-danger" id="fatalButton"><i class="fas fa-exclamation-triangle"></i>&nbsp;&nbsp; Fatal Error</button>
-                <button class="btn btn-outline-success disabledbtn" id="addOnButton" disabled><i class="fas fa-trophy"></i>&nbsp;&nbsp; Add-on</button>
-
-                <div class="form-group" style="margin-top: 15px;">
-                    <label for="editor" class="control-label">Overall Feedback</label>
-                    <textarea name="overall_feedback" id="editor"></textarea>
-                </div>
-
-                <div class="form-group" id="staffResponseArea" style="display: none;">
-                    <label class="control-label">Staff Response</label>
-                    <textarea class="form-control" rows="4" readonly id="staffResp"></textarea>
-                </div>
-
-                <!-- <input id="submitBtn" type="submit" class="btn btn-primary" value="Submit"> -->
-                <button class="btn btn-primary submitBtn nonEditButton" name="status" type="submit" value="1">Publish</button>
-                <button class="btn btn-warning submitBtn nonEditButton" name="status" type="submit" value="0">Draft</button>
-                <button class="btn btn-primary submitBtn editButton" name="status" type="submit" value="2" style="display: none;">Update</button>
-
-                </form>
+                <?php $this->load->view('admin/staff/pedma_admin_evaluation_workspace', [
+                    'pedma_comment_sections' => isset($pedma_comment_sections) ? $pedma_comment_sections : pedma_comment_sections(),
+                    'pedma_can_overall_feedback' => isset($pedma_can_overall_feedback) ? $pedma_can_overall_feedback : pedma_can_edit_overall_feedback(),
+                ]); ?>
 
             </div>
         </div>
@@ -581,1673 +724,495 @@
     </div>
 </div>
 <?php init_tail(); ?>
-
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    $(document).ready(function() {
-        var today = new Date();
-        var month = (today.getMonth() + 1).toString().padStart(2, '0'); // Get current month and add leading zero
-        var year = today.getFullYear();
+(function($) {
+    'use strict';
 
-        // Set the value of the input to the current year and month in "YYYY-MM" format
-        $('#performance_month').val(`${year}-${month}`);
-    });
+    var pedmaDefaultKras = [];
+    var pedmaCustomKras = [];
+    var pedmaScoreMap = {};
+    var pedmaSelectedDefault = [];
+    var pedmaSelectedCustom = [];
+    var pedmaExistingPerformance = null;
+    var pedmaIsUpdate = false;
 
+    function pedmaScoreKey(kind, index) {
+        return kind + ':' + index;
+    }
 
-    const defaultOption = document.getElementById('defaultOption');
-    const customOption = document.getElementById('customOption');
-    const previousMonthOption = document.getElementById('previousMonthOption');
-    const defaultKraWrapper = document.getElementById('defaultKraWrapper');
-    const customKraWrapper = document.getElementById('customKraWrapper');
-    const customKraSelectWrapper = document.getElementById('customKraSelectWrapper');
-    const default_performance_score = document.getElementById('default_performance_score');
-    const custom_performance_score = document.getElementById('custom_performance_score');
-    const previousMonthHint = document.getElementById('previousMonthHint');
-    const defaultKraSelectWrapper = document.getElementById('defaultKraSelectWrapper');
+    function pedmaSetOverallFeedback(value) {
+        value = value || '';
+        if (window.pedmaCanOverallFeedback) {
+            $('#pedma_overall_feedback').val(value);
+        } else {
+            $('#pedma_overall_feedback_hidden').val(value);
+            $('#pedma_overall_feedback_readonly').text(value || '—');
+        }
+    }
 
     function hasValue(v) {
         return !(v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0));
     }
 
-    function syncKraListLockIcon($checkbox) {
-        var $item = $checkbox.closest('.kra-list-item');
-        var unlocked = $checkbox.is(':checked');
-        var $icon = $item.find('.kra-lock-icon');
-        if (unlocked) {
-            $item.removeClass('locked').addClass('unlocked');
-            $icon.html('<i class="fa fa-unlock"></i>');
+    function pedmaFiltersReady() {
+        return hasValue($('#departments').val())
+            && hasValue($('#staffid').val())
+            && hasValue($('#performance_month').val());
+    }
+
+    function pedmaPostData(extra) {
+        var data = $.extend({}, extra || {});
+        if (typeof csrfData !== 'undefined') {
+            data[csrfData.token_name] = csrfData.hash;
+        }
+        return data;
+    }
+
+    function pedmaShowWorkspace(show) {
+        $('#pedmaEvalWorkspace').toggle(!!show);
+        $('#pedmaEvalPlaceholder').toggle(!show);
+    }
+
+    function pedmaSyncHiddenFilters() {
+        $('#pedma_hidden_staffid').val($('#staffid').val());
+        $('#pedma_hidden_performance_month').val($('#performance_month').val());
+    }
+
+    function pedmaEscapeHtml(text) {
+        return $('<div>').text(text == null ? '' : String(text)).html();
+    }
+
+    function pedmaRowRatingValue($row) {
+        var checked = $row.find('.pedma-rating-input:checked').val();
+        if (checked !== undefined) {
+            return checked;
+        }
+        return $row.find('.pedma-rating-input').val();
+    }
+
+    function pedmaRatingInputHtml(fieldPrefix, displayIndex, scoreVal) {
+        scoreVal = (scoreVal === undefined || scoreVal === null) ? '' : String(scoreVal);
+        var html = '<div class="pedma-rating-group">';
+        for (var r = 1; r <= 5; r++) {
+            var checked = scoreVal === String(r) ? ' checked' : '';
+            html += '<label><input type="radio" class="pedma-rating-input" name="' + fieldPrefix + '[' + displayIndex + '][get_score]" value="' + r + '"' + checked + '> ' + r + '</label>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function pedmaHiddenCommentFields(fieldPrefix, displayIndex, scored) {
+        var html = '';
+        if (!window.pedmaCanManagerComment) {
+            html += '<input type="hidden" name="' + fieldPrefix + '[' + displayIndex + '][comment]" value="' + pedmaEscapeHtml(scored.comment || '') + '">';
+        }
+        if (!window.pedmaCanHrComment) {
+            html += '<input type="hidden" name="' + fieldPrefix + '[' + displayIndex + '][hr_remarks]" value="' + pedmaEscapeHtml(scored.hr_remarks || '') + '">';
+        }
+        if (!window.pedmaCanHodComment) {
+            html += '<input type="hidden" name="' + fieldPrefix + '[' + displayIndex + '][hod_remarks]" value="' + pedmaEscapeHtml(scored.hod_remarks || '') + '">';
+        }
+        return html;
+    }
+
+    function pedmaCommentCell(commentKind, fieldPrefix, displayIndex, scored) {
+        var val = '';
+        if (commentKind === 'manager') {
+            val = scored.comment || '';
+            if (!window.pedmaCanManagerComment) {
+                return '';
+            }
+            return '<td><textarea class="form-control comment" name="' + fieldPrefix + '[' + displayIndex + '][comment]" placeholder="Manager comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+        }
+        if (commentKind === 'hod') {
+            val = scored.hod_remarks || '';
+            if (!window.pedmaCanHodComment) {
+                return '';
+            }
+            return '<td><textarea class="form-control hod-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hod_remarks]" placeholder="HOD comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+        }
+        val = scored.hr_remarks || '';
+        if (!window.pedmaCanHrComment) {
+            return '';
+        }
+        return '<td><textarea class="form-control hr-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hr_remarks]" placeholder="HR comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+    }
+
+    function pedmaRecalcScore() {
+        var sum = 0;
+        var maxTotal = 0;
+        $('#default-kra-table-body tr[data-kra-key]').each(function() {
+            var $row = $(this);
+            var max = parseInt($row.find('[name$="[max_score]"]').val(), 10) || 0;
+            var rating = parseInt(pedmaRowRatingValue($row), 10);
+            if (!isNaN(rating) && rating >= 1) {
+                sum += (rating / 5) * max;
+            }
+            maxTotal += max;
+        });
+        if (maxTotal > 0) {
+            var pct = ((sum / maxTotal) * 100).toFixed(2);
+            $('#avg_score_display1').text(pct + '%');
+            $('#avg_score1').val(pct);
         } else {
-            $item.removeClass('unlocked').addClass('locked');
-            $icon.html('<i class="fa fa-lock"></i>');
+            $('#avg_score_display1').text('');
+            $('#avg_score1').val('');
         }
     }
 
-    function updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes) {
-        selectedIndexes = (selectedIndexes || []).map(String);
-        var selectedCount = selectedIndexes.length;
-        var totalMax = checkDefaultMaxScoreSum(allDefaultKra || [], selectedIndexes);
-        var $summary = $('#defaultKraSelectionSummary');
+    function pedmaBuildEvalTable() {
+        var $body = $('#default-kra-table-body');
+        $body.empty();
+        var hasAny = pedmaSelectedDefault.length || pedmaSelectedCustom.length;
 
-        $('#defaultKraSelectedCount').text(selectedCount);
-        $('#defaultKraTotalMaxScore').text(totalMax);
-        $('#defaultKraTableTotalMax').text(totalMax);
-
-        if (!$summary.length) {
+        if (!hasAny) {
+            $body.html('<tr class="pedma-kra-empty-row"><td colspan="' + window.pedmaEvalTableColspan + '" class="text-muted text-center" style="padding:18px;">Select one or more KRAs on the left.</td></tr>');
+            pedmaRecalcScore();
             return;
         }
 
-        $summary.removeClass('alert-info alert-success alert-danger');
-        if (totalMax > 100) {
-            $summary.addClass('alert-danger');
-        } else if (totalMax === 100) {
-            $summary.addClass('alert-success');
-        } else {
-            $summary.addClass('alert-info');
-        }
+        var useCustomPayload = pedmaSelectedCustom.length > 0;
+        var fieldPrefix = useCustomPayload ? 'kraData2' : 'kraData1';
+        var displayIndex = 0;
 
-        if (selectedCount > 0) {
-            $('#default-kra-table-foot').show();
-        } else {
-            $('#default-kra-table-foot').hide();
-            $('#defaultKraTableTotalEntered').text('0');
-        }
-    }
-
-    function updateDefaultTableEnteredTotal() {
-        var enteredTotal = 0;
-        $('#default-kra-table-body .rating1').each(function() {
-            var value = $(this).val();
-            if (value !== '') {
-                enteredTotal += parseFloat(value) || 0;
-            }
-        });
-        $('#defaultKraTableTotalEntered').text(enteredTotal);
-    }
-
-    function renderDefaultKraList(allDefaultKra, selectedIndexes) {
-        selectedIndexes = (selectedIndexes || []).map(String);
-        var html = '';
-        $.each(allDefaultKra || [], function(index, option) {
-            var isSelected = selectedIndexes.indexOf(String(index)) !== -1;
-            var lockClass = isSelected ? 'unlocked' : 'locked';
-            var lockIcon = isSelected ? 'fa-unlock' : 'fa-lock';
-            var checkedAttr = isSelected ? 'checked' : '';
-            html += `
-                <div class="form-check kra-list-item ${lockClass}">
-                    <input type="checkbox" class="form-check-input default-kra-check" id="default_kra_${index}" value="${index}" ${checkedAttr}>
-                    <span class="kra-lock-icon"><i class="fa ${lockIcon}"></i></span>
-                    <label class="form-check-label" for="default_kra_${index}">${option.name} (Max Score:${option.max_score})</label>
-                </div>
-            `;
-        });
-        $('#defaultKraSelect').html(html);
-        updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes);
-    }
-
-    function buildDefaultTableFromSelection(allDefaultKra, selectedIndexes, scoreMap) {
-        const default_tableBody = $('#default-kra-table-body');
-        default_tableBody.empty();
-        scoreMap = scoreMap || {};
-        selectedIndexes = (selectedIndexes || []).map(Number);
-
-        selectedIndexes.forEach(function(originalIndex, displayIndex) {
-            var item = allDefaultKra[originalIndex];
+        function appendRow(kind, listIndex, item, rowPrefix, rowDisplayIndex) {
             if (!item) {
                 return;
             }
-            var scored = scoreMap[originalIndex] || scoreMap[item.name] || {};
+            var key = pedmaScoreKey(kind, listIndex);
+            var scored = pedmaScoreMap[key] || pedmaScoreMap[item.name] || {};
             var scoreVal = (scored.get_score !== undefined && scored.get_score !== null && scored.get_score !== '')
                 ? scored.get_score
-                : ((item.get_score !== undefined && item.get_score !== null) ? item.get_score : '');
-            var commentVal = (scored.comment !== undefined)
-                ? scored.comment
-                : (item.comment || '');
-            var hrRemarksVal = (scored.hr_remarks !== undefined)
-                ? scored.hr_remarks
-                : (item.hr_remarks || '');
-            var safeName = String(item.name || '').replace(/"/g, '&quot;');
-            var safeDesc = String(item.description || '').replace(/"/g, '&quot;');
-            var rowHTML = `
-                <tr data-original-index="${originalIndex}">
-                    <td>${displayIndex + 1}</td>
-                    <td class="performance-criteria">
-                        <b>${item.name}</b>
-                        <input type="hidden" name="kraData1[${displayIndex}][name]" value="${safeName}">
-                        <br>${item.description || ''}
-                        <input type="hidden" name="kraData1[${displayIndex}][description]" value="${safeDesc}">
-                    </td>
-                    <td>${item.max_score}</td>
-                    <input type="hidden" name="kraData1[${displayIndex}][max_score]" value="${item.max_score}">
-                    <td><input type="number" class="form-control rating1" name="kraData1[${displayIndex}][get_score]" max="${item.max_score}" min="0" value="${scoreVal}"></td>
-                    <td><textarea class="form-control comment" name="kraData1[${displayIndex}][comment]" placeholder="Manager comment...">${commentVal}</textarea></td>
-                    <td><textarea class="form-control hr-remarks" name="kraData1[${displayIndex}][hr_remarks]" placeholder="HR remarks / notes...">${hrRemarksVal}</textarea></td>
-                </tr>
-            `;
-            default_tableBody.append(rowHTML);
+                : '';
+            var desc = item.description ? '<br><span class="text-muted">' + pedmaEscapeHtml(item.description) + '</span>' : '';
+            var typeBadge = kind === 'custom' ? ' <span class="label label-default">Custom</span>' : '';
+            var row = '<tr data-kra-key="' + key + '" data-kra-kind="' + kind + '">' +
+                '<td class="performance-criteria"><b>' + pedmaEscapeHtml(item.name) + '</b>' + typeBadge + desc +
+                '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][name]" value="' + pedmaEscapeHtml(item.name) + '">' +
+                '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][description]" value="' + pedmaEscapeHtml(item.description || '') + '">' +
+                '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][max_score]" value="' + pedmaEscapeHtml(item.max_score) + '">' +
+                pedmaHiddenCommentFields(rowPrefix, rowDisplayIndex, scored) +
+                '</td>' +
+                '<td>' + pedmaRatingInputHtml(rowPrefix, rowDisplayIndex, scoreVal) + '</td>' +
+                pedmaCommentCell('manager', rowPrefix, rowDisplayIndex, scored) +
+                pedmaCommentCell('hod', rowPrefix, rowDisplayIndex, scored) +
+                pedmaCommentCell('hr', rowPrefix, rowDisplayIndex, scored) +
+                '</tr>';
+            $body.append(row);
+        }
+
+        pedmaSelectedDefault.forEach(function(listIndex) {
+            appendRow('default', listIndex, pedmaDefaultKras[listIndex], fieldPrefix, displayIndex++);
         });
-        updateDefaultKraSelectionSummary(allDefaultKra, selectedIndexes.map(String));
-        updateDefaultTableEnteredTotal();
-        recalculateDefaultScore();
+        pedmaSelectedCustom.forEach(function(listIndex) {
+            appendRow('custom', listIndex, pedmaCustomKras[listIndex], fieldPrefix, displayIndex++);
+        });
+
+        $('#pedma_kra_option').val(useCustomPayload ? 'custom' : 'default');
+        pedmaRecalcScore();
     }
 
-    function getSelectedDefaultIndexes() {
-        return $('#defaultKraSelect .default-kra-check:checked').map(function() {
-            return $(this).val();
-        }).get();
-    }
-
-    function checkDefaultMaxScoreSum(allDefaultKra, selectedIndexes) {
-        var total = 0;
-        selectedIndexes.forEach(function(idx) {
-            var item = allDefaultKra[parseInt(idx, 10)];
-            if (item) {
-                total += parseInt(item.max_score, 10) || 0;
+    function pedmaSyncKraAllCheckbox(scope) {
+        var list = scope === 'custom' ? pedmaCustomKras : pedmaDefaultKras;
+        var selected = scope === 'custom' ? pedmaSelectedCustom : pedmaSelectedDefault;
+        var $all = scope === 'custom' ? $('#pedmaCustomKraAll') : $('#pedmaDefaultKraAll');
+        if (!$all.length || !list.length) {
+            if ($all.length) {
+                $all.prop('checked', false).prop('indeterminate', false);
             }
-        });
-        return total;
+            return;
+        }
+        $all.prop('checked', selected.length === list.length);
+        $all.prop('indeterminate', selected.length > 0 && selected.length < list.length);
     }
 
-    function recalculateDefaultScore() {
-        let sum = 0;
-        let count = 0;
-        $('#default-kra-table-body .rating1').each(function() {
-            let value = $(this).val();
-            let maxScore = parseInt($(this).attr('max'), 10) || 0;
-            if (value !== '') {
-                sum += parseFloat(value) || 0;
-                count += maxScore;
-            }
+    function pedmaRenderKraList(scope, containerSelector, list, selected, pickClass) {
+        var html = '';
+        $.each(list, function(index, item) {
+            var checked = selected.indexOf(index) !== -1;
+            html += '<label class="kra-list-item' + (checked ? ' unlocked' : '') + '">' +
+                '<input type="checkbox" class="' + pickClass + '" data-scope="' + scope + '" value="' + index + '"' + (checked ? ' checked' : '') + '>' +
+                '<span>' + pedmaEscapeHtml(item.name) + '</span>' +
+                '</label>';
         });
-        if (count > 0) {
-            let avg = ((sum / count) * 100).toFixed(2);
-            $('#avg_score_display1').html(avg + '%');
-            $('#avg_score1').val(avg);
+        if (!html) {
+            html = '<p class="text-muted" style="margin:4px 0 8px;">None for this department.</p>';
+        }
+        $(containerSelector).html(html);
+        pedmaSyncKraAllCheckbox(scope);
+    }
+
+    function pedmaSetKraPanelOpen(scope, open) {
+        var $panel = scope === 'custom' ? $('#pedmaCustomKraPanel') : $('#pedmaDefaultKraPanel');
+        var $body = scope === 'custom' ? $('#pedmaCustomKraPanelBody') : $('#pedmaDefaultKraPanelBody');
+        var $head = $panel.find('.pedma-kra-panel-head');
+        if (open) {
+            $panel.addClass('is-open');
+            $body.prop('hidden', false);
+            $head.attr('aria-expanded', 'true');
         } else {
-            $('#avg_score_display1').html('');
-            $('#avg_score1').val('');
+            $panel.removeClass('is-open');
+            $body.prop('hidden', true);
+            $head.attr('aria-expanded', 'false');
         }
-        updateDefaultTableEnteredTotal();
     }
 
-    function getPreviousMonthValue(ym) {
-        if (!ym || ym.indexOf('-') === -1) {
-            return '';
-        }
-        let [year, month] = ym.split('-');
-        year = parseInt(year, 10);
-        month = parseInt(month, 10) - 1;
-        if (month < 1) {
-            month = 12;
-            year = year - 1;
-        }
-        return `${year}-${String(month).padStart(2, '0')}`;
+    function pedmaSyncKraAccordionOpen() {
+        pedmaSetKraPanelOpen('default', pedmaSelectedDefault.length > 0);
+        pedmaSetKraPanelOpen('custom', pedmaSelectedCustom.length > 0);
     }
 
-    // Keep only KRAs/KPIs that had a score in the previous month.
-    function filterPreviousMonthKraWithScores(kraList, isCustom) {
-        if (!Array.isArray(kraList)) {
-            return [];
+    function pedmaRenderKraSidebar() {
+        pedmaRenderKraList('default', '#pedmaDefaultKraList', pedmaDefaultKras, pedmaSelectedDefault, 'pedma-kra-pick');
+        pedmaRenderKraList('custom', '#pedmaCustomKraList', pedmaCustomKras, pedmaSelectedCustom, 'pedma-kra-pick');
+        pedmaSyncKraAccordionOpen();
+    }
+
+    function pedmaApplyPerformanceData(perf) {
+        pedmaExistingPerformance = perf;
+        pedmaScoreMap = {};
+        pedmaSelectedDefault = [];
+        pedmaSelectedCustom = [];
+        pedmaIsUpdate = false;
+        $('#pedmaPublishBtn, #pedmaDraftBtn').show();
+        $('#pedmaUpdateBtn').hide();
+        $('#pedmaStaffResponseArea').hide();
+        pedmaSetOverallFeedback('');
+        $('#pedmaStaffResp').val('');
+
+        if (!perf) {
+            pedmaRenderKraSidebar();
+            pedmaBuildEvalTable();
+            return;
         }
 
-        return kraList.filter(function(item) {
-            if (!item) {
-                return false;
+        var kraRows = [];
+        try {
+            kraRows = JSON.parse(perf.kra_data || '[]');
+        } catch (e) {
+            kraRows = [];
+        }
+
+        var perfIsCustom = perf.type && perf.type !== 'default';
+        kraRows.forEach(function(row) {
+            if (!row || !row.name) {
+                return;
             }
-
-            if (isCustom) {
-                if (Array.isArray(item.kpiData) && item.kpiData.length > 0) {
-                    return item.kpiData.some(function(kpi) {
-                        return kpi && kpi.get_score !== undefined && kpi.get_score !== null && String(kpi.get_score).trim() !== '';
-                    });
+            var matched = false;
+            pedmaDefaultKras.forEach(function(def, idx) {
+                if (def.name === row.name) {
+                    pedmaSelectedDefault.push(idx);
+                    pedmaScoreMap[pedmaScoreKey('default', idx)] = row;
+                    pedmaScoreMap[row.name] = row;
+                    matched = true;
                 }
-
-                return item.get_score !== undefined && item.get_score !== null && String(item.get_score).trim() !== '';
-            }
-
-            return item.get_score !== undefined && item.get_score !== null && String(item.get_score).trim() !== '';
-        });
-    }
-
-    // Clear scores/comments so previous month is used as a blank template.
-    function stripScoresAsTemplate(kraList) {
-        if (!Array.isArray(kraList)) {
-            return [];
-        }
-        return kraList.map(function(item) {
-            var copy = Object.assign({}, item);
-            delete copy.get_score;
-            delete copy.comment;
-            delete copy.hr_remarks;
-            if (Array.isArray(copy.kpiData)) {
-                copy.kpiData = copy.kpiData.map(function(kpi) {
-                    var k = Object.assign({}, kpi);
-                    delete k.get_score;
-                    delete k.comment;
-                    delete k.hr_remarks;
-                    return k;
+            });
+            if (!matched || perfIsCustom) {
+                pedmaCustomKras.forEach(function(def, idx) {
+                    if (def.name === row.name) {
+                        if (pedmaSelectedCustom.indexOf(idx) === -1) {
+                            pedmaSelectedCustom.push(idx);
+                        }
+                        pedmaScoreMap[pedmaScoreKey('custom', idx)] = row;
+                        pedmaScoreMap[row.name] = row;
+                    }
                 });
             }
-            return copy;
         });
-    }
+        pedmaSelectedDefault = pedmaSelectedDefault.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        pedmaSelectedCustom = pedmaSelectedCustom.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
-    function normalizePreviousMonthCustomTemplate(kraList) {
-        if (!Array.isArray(kraList)) {
-            return [];
+        if (perf.status && String(perf.status) !== '0') {
+            pedmaIsUpdate = true;
+            $('#pedmaPublishBtn, #pedmaDraftBtn').hide();
+            $('#pedmaUpdateBtn').show();
         }
 
-        return kraList.map(function(item) {
-            var copy = Object.assign({}, item);
-            delete copy.get_score;
-            delete copy.comment;
-            delete copy.hr_remarks;
-            if (Array.isArray(copy.kpiData)) {
-                copy.kpiData = copy.kpiData
-                    .filter(function(kpi) {
-                        return kpi && kpi.get_score !== undefined && kpi.get_score !== null && String(kpi.get_score).trim() !== '';
-                    })
-                    .map(function(kpi) {
-                        var k = Object.assign({}, kpi);
-                        delete k.get_score;
-                        delete k.comment;
-                        delete k.hr_remarks;
-                        return k;
-                    });
-            }
-            return copy;
-        });
+        pedmaSetOverallFeedback(perf.overall_feedback || '');
+        if (perf.staff_comment) {
+            $('#pedmaStaffResponseArea').show();
+            $('#pedmaStaffResp').val(perf.staff_comment);
+        }
+
+        if (perf.avg_score) {
+            $('#avg_score_display1').text(parseFloat(perf.avg_score).toFixed(2) + '%');
+            $('#avg_score1').val(perf.avg_score);
+            $('#avg_score2').val(perf.avg_score);
+        }
+
+        pedmaRenderKraSidebar();
+        pedmaBuildEvalTable();
     }
 
-    function applyPreviousMonthTemplate(response, kraBasedOnDepartment) {
-        var existingData = {
-            default_kra: '',
-            custom_kra: [],
-            isUpdate: false,
-            isDraft: false
-        };
-
-        if (!response || !response.kra_data) {
-            alert('No previous month PEDMA found for this employee. Using Default KRA.');
-            $('#previous_kra_save_type').val('');
-            $("#defaultOption").prop('checked', true);
-            toggleKraWrapper();
-            updateKraTable(kraBasedOnDepartment, existingData);
+    function pedmaLoadEmployeeEvaluation() {
+        if (!pedmaFiltersReady()) {
+            pedmaShowWorkspace(false);
             return;
         }
 
-        var kraData = [];
-        try {
-            kraData = JSON.parse(response.kra_data);
-        } catch (e) {
-            kraData = [];
-        }
+        pedmaSyncHiddenFilters();
+        pedmaShowWorkspace(true);
+        $('#pedmaDefaultKraList, #pedmaCustomKraList').html('<p class="text-muted">Loading…</p>');
+        $('#default-kra-table-body').html('<tr><td colspan="' + window.pedmaEvalTableColspan + '" class="text-muted text-center">Loading…</td></tr>');
 
-        var isCustomPrevious = response.type === 'custom';
-        kraData = filterPreviousMonthKraWithScores(kraData, isCustomPrevious);
-        if (!kraData.length) {
-            alert('No scored KRAs found in the previous month. Please use Default or Custom KRA.');
-            $('#previous_kra_save_type').val('');
-            $("#defaultOption").prop('checked', true);
-            toggleKraWrapper();
-            updateKraTable(kraBasedOnDepartment, existingData);
-            return;
-        }
-
-        if (response.type === 'custom') {
-            $('#previous_kra_save_type').val('custom');
-            existingData.custom_kra = normalizePreviousMonthCustomTemplate(kraData);
-            existingData.isPreviousMonthTemplate = true;
-            // Keep custom checkboxes usable while showing previous structure as draft-like rows
-            existingData.isDraft = true;
-            updateKraTable(kraBasedOnDepartment, existingData);
-            showPreviousAsCustom();
-        } else {
-            $('#previous_kra_save_type').val('default');
-            existingData.default_kra = stripScoresAsTemplate(kraData);
-            existingData.isPreviousMonthTemplate = true;
-            updateKraTable(kraBasedOnDepartment, existingData);
-            showPreviousAsDefault();
-        }
-
-        editor.setData('');
-        $("#avg_score_display1").html('');
-        $('#avg_score1').val('');
-        $("#avg_score_display2").html('');
-        $('#avg_score2').val('');
-        $("#staffResponseArea").hide();
-        $("#staffResp").val('');
-        $(".nonEditButton").show();
-        $(".editButton").hide();
-        enableSubmitButton();
-    }
-
-    function showPreviousAsDefault() {
-        defaultKraWrapper.style.display = 'block';
-        customKraWrapper.style.display = 'none';
-        customKraSelectWrapper.style.display = 'none';
-        if (defaultKraSelectWrapper) {
-            defaultKraSelectWrapper.style.display = 'block';
-        }
-        custom_performance_score.style.display = 'none';
-        default_performance_score.style.display = 'block';
-        if (previousMonthHint) {
-            previousMonthHint.style.display = 'block';
-        }
-    }
-
-    function showPreviousAsCustom() {
-        customKraWrapper.style.display = 'block';
-        defaultKraWrapper.style.display = 'none';
-        if (defaultKraSelectWrapper) {
-            defaultKraSelectWrapper.style.display = 'none';
-        }
-        // Keep original Previous Month custom behavior: show filled table, hide select list
-        customKraSelectWrapper.style.display = 'none';
-        default_performance_score.style.display = 'none';
-        custom_performance_score.style.display = 'block';
-        if (previousMonthHint) {
-            previousMonthHint.style.display = 'block';
-        }
-    }
-
-    function loadPreviousMonthKraTemplate() {
+        var department = $('#departments').val();
         var staffid = $('#staffid').val();
         var month = $('#performance_month').val();
-        var department = $('#departments').val();
 
-        if (!hasValue(staffid) || !hasValue(month)) {
-            alert('Please select Employee and Month first.');
-            $("#defaultOption").prop('checked', true);
-            toggleKraWrapper();
-            return;
+        $.when(
+            $.ajax({
+                url: admin_url + 'staff/get_staff_json',
+                type: 'POST',
+                data: pedmaPostData({ staffid: staffid }),
+                dataType: 'json'
+            }),
+            $.ajax({
+                url: admin_url + 'staff/get_kra_based_on_department_json',
+                type: 'POST',
+                data: pedmaPostData({ department: department }),
+                dataType: 'json'
+            }),
+            $.ajax({
+                url: admin_url + 'staff/get_staff_performance_month_and_id',
+                type: 'POST',
+                data: pedmaPostData({ staffid: staffid, month: month }),
+                dataType: 'json'
+            })
+        ).done(function(staffRes, kraRes, perfRes) {
+            var staffPayload = staffRes[0];
+            var kraPayload = kraRes[0];
+            var perfPayload = perfRes[0];
+
+            if (staffPayload && staffPayload[0] && staffPayload[0][0]) {
+                $('#pedma-full-name').text(staffPayload[0][0].full_name || '');
+                $('#pedma-designation').text(staffPayload[0][0].job_name || '');
+            }
+            if (staffPayload && staffPayload[1]) {
+                $('#pedma-department-name').text(staffPayload[1].name || '');
+            }
+
+            pedmaDefaultKras = (kraPayload && kraPayload.default_kra) ? kraPayload.default_kra : [];
+            pedmaCustomKras = (kraPayload && kraPayload.custom_kra) ? kraPayload.custom_kra : [];
+            pedmaApplyPerformanceData(perfPayload || null);
+        }).fail(function() {
+            alert('Failed to load evaluation data. Please try again.');
+            pedmaShowWorkspace(false);
+        });
+    }
+
+    $(function() {
+        $('#departments').prop('required', true);
+        $('#staffid').prop('required', true);
+        $('#staffid').html('<option value=""></option>');
+        if ($('#staffid').hasClass('selectpicker')) {
+            $('#staffid').selectpicker('refresh');
         }
 
-        var prevMonth = getPreviousMonthValue(month);
-        $('.loader').removeClass('hidden');
-
-        var kraPromise = (window.lastKraBasedOnDepartment)
-            ? $.Deferred().resolve(window.lastKraBasedOnDepartment).promise()
-            : fetchKRABasedOnDepartment(department);
-
-        kraPromise.done(function(kraBasedOnDepartment) {
-            window.lastKraBasedOnDepartment = kraBasedOnDepartment;
+        $('#departments').on('change', function() {
+            pedmaShowWorkspace(false);
+            $('#staffid').selectpicker('val', '');
+            var department = $(this).val();
+            if (!hasValue(department)) {
+                $('#staffid').html('<option value=""></option>').selectpicker('refresh');
+                return;
+            }
             $.ajax({
-                url: "<?php echo base_url('admin/staff/get_previous_month_custom_kra_data'); ?>",
+                url: admin_url + 'staff/get_staff_department_json',
                 type: 'POST',
-                data: {
-                    staffid: staffid,
-                    date: prevMonth
-                },
+                data: pedmaPostData({ department: department }),
                 dataType: 'json',
                 success: function(response) {
-                    applyPreviousMonthTemplate(response, kraBasedOnDepartment);
-                },
-                error: function() {
-                    alert('Failed to load previous month KRA. Please try again.');
-                    $("#defaultOption").prop('checked', true);
-                    toggleKraWrapper();
-                },
-                complete: function() {
-                    $('.loader').addClass('hidden');
-                }
-            });
-        }).fail(function() {
-            $('.loader').addClass('hidden');
-            alert('Failed to load department KRA list.');
-            $("#defaultOption").prop('checked', true);
-            toggleKraWrapper();
-        });
-    }
-
-    // Function to toggle visibility based on the selected option
-    function toggleKraWrapper() {
-        if (previousMonthHint) {
-            previousMonthHint.style.display = 'none';
-        }
-
-        if (defaultOption.checked) {
-            $('#previous_kra_save_type').val('');
-            defaultKraWrapper.style.display = 'block';
-            customKraWrapper.style.display = 'none';
-            customKraSelectWrapper.style.display = 'none';
-            if (defaultKraSelectWrapper) {
-                defaultKraSelectWrapper.style.display = 'block';
-            }
-            custom_performance_score.style.display = 'none';
-            default_performance_score.style.display = 'block';
-
-            // Ensure Default list/table exists when switching back to Default
-            if (window.lastKraBasedOnDepartment && $('#defaultKraSelect .default-kra-check').length === 0) {
-                updateKraTable(window.lastKraBasedOnDepartment, {
-                    default_kra: [],
-                    custom_kra: [],
-                    isUpdate: false,
-                    isDraft: false
-                });
-            }
-        } else if (customOption.checked) {
-            $('#previous_kra_save_type').val('');
-            customKraWrapper.style.display = 'block';
-            defaultKraWrapper.style.display = 'none';
-            if (defaultKraSelectWrapper) {
-                defaultKraSelectWrapper.style.display = 'none';
-            }
-            customKraSelectWrapper.style.display = 'block';
-            default_performance_score.style.display = 'none';
-            custom_performance_score.style.display = 'block';
-        } else if (previousMonthOption && previousMonthOption.checked) {
-            var saveType = $('#previous_kra_save_type').val();
-            if (saveType === 'custom') {
-                showPreviousAsCustom();
-            } else if (saveType === 'default') {
-                showPreviousAsDefault();
-            } else if (previousMonthHint) {
-                previousMonthHint.style.display = 'block';
-            }
-        }
-    }
-
-    // Listen for changes on radio options — always allow switching
-    defaultOption.addEventListener('change', function() {
-        if (!defaultOption.checked) {
-            return;
-        }
-        toggleKraWrapper();
-        if (window.lastKraBasedOnDepartment) {
-            updateKraTable(window.lastKraBasedOnDepartment, {
-                default_kra: [],
-                custom_kra: [],
-                isUpdate: false,
-                isDraft: false
-            });
-        }
-    });
-    customOption.addEventListener('change', function() {
-        if (!customOption.checked) {
-            return;
-        }
-        toggleKraWrapper();
-        if (window.lastKraBasedOnDepartment) {
-            updateKraTable(window.lastKraBasedOnDepartment, {
-                default_kra: [],
-                custom_kra: [],
-                isUpdate: false,
-                isDraft: false
-            });
-        }
-    });
-    if (previousMonthOption) {
-        previousMonthOption.addEventListener('change', function() {
-            if (previousMonthOption.checked) {
-                toggleKraWrapper();
-                loadPreviousMonthKraTemplate();
-            }
-        });
-    }
-
-    // List checkbox unlocks that KRA (Default only)
-    $('body').on('change', '.default-kra-check', function() {
-        var allDefault = (window.lastKraBasedOnDepartment && window.lastKraBasedOnDepartment.default_kra) || [];
-        syncKraListLockIcon($(this));
-        var selected = getSelectedDefaultIndexes();
-        var total = checkDefaultMaxScoreSum(allDefault, selected);
-        if (total > 100) {
-            alert('The total max score must not exceed 100.');
-            $(this).prop('checked', false);
-            syncKraListLockIcon($(this));
-            selected = getSelectedDefaultIndexes();
-        }
-        buildDefaultTableFromSelection(allDefault, selected, window.lastDefaultScoreMap || {});
-    });
-
-    // Initial check to apply the right state on page load
-    toggleKraWrapper();
-
-    // Function to disable submit button
-    function disableSubmitButton() {
-        // document.getElementsByClassName('submitBtn').disabled = true;
-        $(".submitBtn").prop("disabled", true);
-        $(".comment").each(function() {
-            $(this).prop("disabled", true);
-        });
-        $(".hr-remarks").each(function() {
-            $(this).prop("disabled", true);
-        });
-        $(".rating1").each(function() {
-            $(this).prop("disabled", true);
-        });
-        $(".rating2").each(function() {
-            $(this).prop("disabled", true);
-        });
-
-        // $('#overall_feedback').prop("disabled", true);
-        // editor.enableReadOnlyMode('overall_feedback');
-        editor.setReadOnly(true);
-
-        $('.selectpicker').selectpicker('refresh');
-    }
-
-    // Function to enable submit button
-    function enableSubmitButton() {
-        // document.getElementsByClassName('submitBtn').disabled = false;
-        $(".submitBtn").prop("disabled", false);
-
-        $(".comment").each(function() {
-            $(this).prop("disabled", false);
-        });
-        $(".hr-remarks").each(function() {
-            $(this).prop("disabled", false);
-        });
-
-        $(".rating1").each(function() {
-            $(this).prop("disabled", false);
-        });
-
-        $(".rating2").each(function() {
-            $(this).prop("disabled", false);
-        });
-
-        // $('#overall_feedback').prop("disabled", false);
-        // editor.disableReadOnlyMode('overall_feedback');
-        editor.setReadOnly(false);
-
-        $('.selectpicker').selectpicker('refresh');
-    }
-
-    // Function to check if the selected month is within the allowed range
-    function checkMonthYear(selectedDate) {
-        // Get the selected month and year in 'YYYY-MM' format
-
-        const [selectedYear, selectedMonth] = selectedDate.split('-').map(Number);
-
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1; // Months are zero-based
-
-        // Calculate the allowed date range (two months ago)
-        const allowedYear = currentMonth <= 2 ? currentYear - 1 : currentYear;
-        const allowedMonth = ((currentMonth + 10) % 12) + 1;
-
-        // Compare selected date with allowed range
-        if (
-            selectedYear < allowedYear ||
-            (selectedYear === allowedYear && selectedMonth < allowedMonth) ||
-            (selectedYear === currentYear && selectedMonth > currentMonth)
-        ) {
-            disableSubmitButton();
-        } else {
-            enableSubmitButton();
-        }
-    }
-
-    $('body').on('change', '.rating1', function() {
-        recalculateDefaultScore();
-    });
-
-
-    $('body').on('change', '.rating2', function() {
-        // Loop through each select input
-        var sum = 0;
-        var count = 0;
-
-        $('.rating2').each(function() {
-            var value = parseFloat($(this).val()) || 0;
-            var maxScore = parseFloat($(this).attr('max')) || 0;
-
-            // Add to sum and count only if value is a valid number and not empty
-            if (!isNaN(value)) { 
-                sum += value;
-                count += maxScore;
-            }
-        });
-
-        if (count > 0) {
-            var average = sum / count;
-            var percentage = average * 100;
-            $('#avg_score_display2').html(percentage.toFixed(2) + "%");
-            $('#avg_score2').val(percentage.toFixed(2));
-
-        } else {
-            $('#avg_score_display2').html('No numbers selected.');
-            $('#avg_score2').val(null);
-        }
-    });
-
-    // AJAX functions with promises
-    function fetchKRABasedOnDepartment(department) {
-        return $.ajax({
-            url: "<?php echo base_url('admin/staff/get_kra_based_on_department_json'); ?>",
-            type: 'POST',
-            data: {
-                department
-            },
-            dataType: 'json'
-        });
-    }
-
-    // Set required prop for staffid
-    $("#departments").prop('required', true);
-    $("#staffid").prop('required', true);
-
-    // On change of departments dropdown
-    $('#departments').on('change', function() {
-        $('.loader').removeClass('hidden'); // Show loader
-
-        let department = $(this).val(); // Get selected department
-
-        // AJAX call to fetch staff based on department
-        $.ajax({
-            url: "<?php echo base_url('admin/staff/get_staff_department_json'); ?>",
-            type: 'POST',
-            data: {
-                department
-            },
-            dataType: 'json',
-            success: function(response) {
-                let staff = '<option value=""></option>'; // Default empty option
-                let list = Array.isArray(response) ? response : [];
-
-                // Populate staff dropdown
-                list.forEach(element => {
-                    staff += `<option value="${element.staffid}">${element.firstname} ${element.lastname} ${element.staff_identifi || ''}</option>`;
-                });
-
-                $('#staffid').html(staff); // Insert the staff options
-                $('#staffid').selectpicker('refresh'); // Refresh selectpicker UI
-            },
-            error: function() {
-                alert('Failed to fetch staff. Please try again.');
-            },
-            complete: function() {
-                $('.loader').addClass('hidden'); // Hide loader after request completes
-            }
-        });
-    });
-
-    // On change of staffid dropdown
-    $('#staffid').on('change', function() {
-        $('.loader').removeClass('hidden'); // Show loader
-        let department = $('#departments').val();
-        var staffid = $(this).val();
-        var month = $('#performance_month').val();
-
-        checkMonthYear(month); // Custom validation (assumed)
-
-
-        // Fetch staff details
-        $.ajax({
-            url: "<?php echo base_url('admin/staff/get_staff_json'); ?>",
-            type: 'POST',
-            data: {
-                staffid
-            },
-            dataType: 'json',
-            success: function(response) {
-                let name = response[0][0].full_name;
-                $('#full-name').empty().append(name);
-                $('#designation').empty().append(response[0][0].job_name);
-                $('#department-name').empty();
-                if (response[1]) {
-                    $('#department-name').append(response[1].name);
-                    // Prefer staff department for KRA loading when dropdown empty/mismatch
-                    if (response[1].departmentid) {
-                        department = response[1].departmentid;
-                        if (!$('#departments').val()) {
-                            $('#departments').selectpicker('val', String(department));
-                        }
-                    }
-                }
-
-                // Fetch performance data based on month and staffid
-                $.ajax({
-                    url: "<?php echo base_url('admin/staff/get_staff_performance_month_and_id'); ?>",
-                    type: 'POST',
-                    data: {
-                        staffid,
-                        month
-                    },
-                    dataType: 'json',
-                    success: function(perfResponse) {
-                        fetchKRABasedOnDepartment(department).done(function(kraResponse) {
-                            window.lastKraBasedOnDepartment = kraResponse;
-
-                            if (!perfResponse) {
-                                handleNoPerformanceData(kraResponse);
-                            } else {
-                                handlePerformanceData(perfResponse, kraResponse);
-                            }
-                            toggleKraWrapper();
-                        }).always(function() {
-                            $('.loader').addClass('hidden');
-                        });
-                    },
-                    error: function() {
-                        alert('Failed to fetch performance data. Please try again.');
-                        $('.loader').addClass('hidden');
-                    }
-                });
-            },
-            error: function() {
-                alert('Failed to fetch staff details. Please try again.');
-                $('.loader').addClass('hidden');
-            }
-        });
-
-    });
-
-    // On change of performance month dropdown
-    $('#performance_month').on('change', function() {
-        $('.loader').removeClass('hidden'); // Show loader
-        let department = $('#departments').val();
-        let staffid = $('#staffid').val();
-        let month = $(this).val();
-
-        checkMonthYear(month); // Custom validation (assumed)
-
-        // Fetch performance data based on month and staffid
-        $.ajax({
-            url: "<?php echo base_url('admin/staff/get_staff_performance_month_and_id'); ?>",
-            type: 'POST',
-            data: {
-                staffid,
-                month
-            },
-            dataType: 'json',
-            success: function(response) {
-                let kraBasedOnDepartment;
-
-                // Call the function with the desired department
-                fetchKRABasedOnDepartment(department).done(function(kraResponse) {
-                    kraBasedOnDepartment = kraResponse;
-                    window.lastKraBasedOnDepartment = kraResponse;
-
-                    // Check if there's no performance data
-                    if (!response) {
-                        handleNoPerformanceData(kraBasedOnDepartment);
-                    } else {
-                        handlePerformanceData(response, kraBasedOnDepartment);
-                    }
-                    toggleKraWrapper();
-
-                    // Clear editor and score displays
-
-                });
-            },
-            error: function() {
-                alert('Failed to fetch performance data. Please try again.');
-            },
-            complete: function() {
-                $('.loader').addClass('hidden'); // Hide loader after request completes
-            }
-        });
-    });
-
-    // Handle no performance data case
-    function handleNoPerformanceData(kraBasedOnDepartment) {
-        let existingData = {
-            'default_kra': '',
-            'custom_kra': [],
-            'isUpdate': false,
-            'isDraft': false
-        };
-
-        $("#defaultOption").prop('disabled', false).prop('checked', true);
-        $("#customOption").prop('disabled', false).prop('checked', false);
-        $("#previousMonthOption").prop('disabled', false).prop('checked', false);
-        $('#previous_kra_save_type').val('');
-        toggleKraWrapper();
-
-        $("#staffResponseArea").hide();
-        $("#staffResp").val('');
-        $(".nonEditButton").show();
-        $(".editButton").hide();
-
-        updateKraTable(kraBasedOnDepartment, existingData);
-
-        editor.setData(''); // Clear editor data
-        $("#avg_score_display1").html('');
-        $('#avg_score1').val('');
-        $("#avg_score_display2").html('');
-        $('#avg_score2').val('');
-        enableSubmitButton();
-    }
-
-
-    // Handle performance data case
-    function handlePerformanceData(response, kraBasedOnDepartment) {
-        let existingData = {};
-        $('#previous_kra_save_type').val('');
-        // Always allow switching between Default / Custom / Previous Month
-        $("#defaultOption").prop('disabled', false);
-        $("#customOption").prop('disabled', false);
-        $("#previousMonthOption").prop('disabled', false);
-
-        if (response.type === "default") {
-            $("#defaultOption").prop('checked', true);
-            $("#customOption").prop('checked', false);
-            $("#previousMonthOption").prop('checked', false);
-            toggleKraWrapper();
-
-            existingData['default_kra'] = JSON.parse(response.kra_data);
-            existingData['custom_kra'] = '';
-            
-            existingData['isUpdate'] = false;
-            existingData['isDraft'] = false;
-
-            var ascore = response.avg_score;
-            var fscore = response.fatal_error_score ? (response.fatal_error_score / 100) * ascore : 0;
-            var addscore = response.add_on_score ? (response.add_on_score / 100) * ascore : 0;
-            var nscore = (ascore - fscore + addscore).toFixed(2);
-
-            var fscoreDisplay = fscore ? ` - ${response.fatal_error_score}%<span class="fscore">(${fscore.toFixed(2)})</span>` : "";
-            var addscoreDisplay = addscore ? ` + ${response.add_on_score}%<span class="fscore">(${addscore.toFixed(2)})</span>` : "";
-
-            if(fscore || addscore){
-                $("#avg_score_display1").html(
-                    `${ascore}%${fscoreDisplay}${addscoreDisplay} = ${nscore}%`
-                );
-            }else{
-                $("#avg_score_display1").html(
-                    `${ascore}%`
-                );
-            }
-
-            $('#avg_score1').val(response.avg_score);
-        } else {
-            $("#defaultOption").prop('checked', false);
-            $("#customOption").prop('checked', true);
-            $("#previousMonthOption").prop('checked', false);
-            toggleKraWrapper();
-
-            existingData['default_kra'] = '';
-            existingData['custom_kra'] = JSON.parse(response.kra_data);
-            if (response.status != 0) {
-                existingData['isUpdate'] = true;
-            } else {
-                existingData['isUpdate'] = false;
-                if (response.status == 0) {
-                    existingData['isDraft'] = true;
-                } else {
-                    existingData['isDraft'] = false;
-                }
-            }
-
-            var ascore = response.avg_score;
-            var fscore = response.fatal_error_score ? (response.fatal_error_score / 100) * ascore : 0;
-            var addscore = response.add_on_score ? (response.add_on_score / 100) * ascore : 0;
-            var nscore = (ascore - fscore + addscore).toFixed(2);
-
-            var fscoreDisplay = fscore ? ` - ${response.fatal_error_score}%<span class="fscore">(${fscore.toFixed(2)})</span>` : "";
-            var addscoreDisplay = addscore ? ` + ${response.add_on_score}%<span class="fscore">(${addscore.toFixed(2)})</span>` : "";
-
-            if(fscore || addscore){
-                $("#avg_score_display2").html(
-                    `${ascore}%${fscoreDisplay}${addscoreDisplay} = ${nscore}%`
-                );
-            }else{
-                $("#avg_score_display2").html(
-                    `${ascore}%`
-                );
-            }
-
-            $('#avg_score2').val(response.avg_score);
-        }
-
-        if (hasValue(response.staff_comment)) {
-            $("#staffResponseArea").show();
-            $("#staffResp").val(response.staff_comment);
-        } else {
-            $("#staffResponseArea").hide();
-            $("#staffResp").val('');
-        }
-
-        if (response.status != 0) {
-            $(".nonEditButton").hide();
-            $(".editButton").show();
-        } else {
-            $(".nonEditButton").show();
-            $(".editButton").hide();
-        }
-
-        editor.setData(response.overall_feedback);
-
-        // Update KRA table with performance data
-        updateKraTable(kraBasedOnDepartment, existingData);
-    }
-
-    // Update KRA table function
-    // function updateKraTable(kraBasedOnDepartment, existingData) {
-    //     const default_tableBody = $('#default-kra-table-body');
-    //     default_tableBody.empty(); // Clear previous rows
-
-    //     let default_kra_data = Array.isArray(existingData.default_kra) && existingData.default_kra.length > 0
-    //         ? existingData.default_kra
-    //         : Array.isArray(kraBasedOnDepartment.default_kra) ? kraBasedOnDepartment.default_kra : [];
-
-    //     if (default_kra_data && default_kra_data.length > 0) {
-    //         // Add rows to default KRA table
-    //         default_kra_data.forEach((item, index) => {
-    //             let rowHTML = `
-    //                 <tr>
-    //                     <td>${index + 1}</td>
-    //                     <td class="performance-criteria">
-    //                         <b>${item.name}</b>
-    //                         <input type="hidden" name="kraData1[${index}][name]" value="${item.name}">
-    //                         <br>${item.description}
-    //                         <input type="hidden" name="kraData1[${index}][description]" value="${item.description}">
-    //                     </td>
-    //                     <td>${item.max_score}</td>
-    //                     <input type="hidden" name="kraData1[${index}][max_score]" value="${item.max_score}">
-    //                     <td><input type="number" class="form-control rating1" name="kraData1[${index}][get_score]" max="${item.max_score}" min="0" value="${item.get_score ? item.get_score : ''}"></td>
-    //                     <td><textarea class="form-control comment" name="kraData1[${index}][comment]" placeholder="Provide feedback here...">${item.comment ? item.comment : ''}</textarea></td>
-    //                 </tr>
-    //             `;
-    //             default_tableBody.append(rowHTML);
-    //         });
-    //     }
-
-    //     // For Custom KRA Table
-    //     const custom_tableBody = $('#custom-kra-table-body');
-    //     custom_tableBody.empty(); // Clear previous rows
-    //     $('#customKraSelect').selectpicker({
-    //         showTick: false 
-    //     });
-    //     $('#customKraSelect').html('').attr('multiple', 'multiple').selectpicker('refresh');
-
-    //     let custom_kra_data = Array.isArray(existingData.custom_kra) && existingData.custom_kra.length > 0
-    //         ? existingData.custom_kra
-    //         : Array.isArray(kraBasedOnDepartment.custom_kra) ? kraBasedOnDepartment.custom_kra : [];
-
-
-    //     if (existingData.isUpdate) {
-    //         editCustomKraTable(custom_kra_data);
-    //     }else{
-    //         let options = '<option value=""></option>';
-    //         let preSelectedOptions = [];
-    //         let preSelectedIds = [];
-
-    //         // Get pre-selected options
-    //         $.each(existingData.custom_kra, function (index, name) {
-    //             preSelectedOptions.push(name.name);
-    //         });
-
-    //         // Iterate through the custom_kra array to dynamically add options with default unchecked icon
-
-    //         $.each(kraBasedOnDepartment.custom_kra, function (index, option) {
-    //             let isSelected = preSelectedOptions.includes(option.name.toString()) ? 'selected' : '';
-    //             options += `<option data-icon="glyphicon-${isSelected?'ok':'unchecked'}" value="${option.id}" ${isSelected}>${option.name}</option>`;
-    //             if (isSelected) {
-    //                 preSelectedIds.push(option.id);
-    //             }
-    //         });
-
-    //         // Append and refresh selectpicker
-    //         $('#customKraSelect')
-    //             .empty()
-    //             .html(options)
-    //             .attr('multiple', true)
-    //             .selectpicker('refresh'); // Refresh the Bootstrap-select to apply changes
-
-    //         // Pre-select the values after refresh and trigger change event to update table
-    //         updateCustomKraTable(kraBasedOnDepartment.custom_kra, preSelectedIds);
-
-    //         $('#customKraSelect').on('changed.bs.select', function (e, clickedIndex, isSelected, previousValue) {
-    //             var selectedValues = $(this).val(); // Get all selected values
-
-    //             // Check if the new selection will exceed the max_score limit before updating the table
-    //             let score = checkMaxScoreSum(kraBasedOnDepartment.custom_kra,selectedValues);
-    //             console.log("Total Score:", score);
-
-    //             if (score <= 100) {
-    //                 updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues); // Update the table rows only if valid
-    //                 toggleIcons(clickedIndex, true);
-    //             } else {
-    //                 alert("The total max_score must not exceed 100.");
-    //                 // Revert the selectpicker change if it's invalid
-    //                 $(this).selectpicker('val', previousValue);
-    //                 toggleIcons(clickedIndex, false);
-    //             }
-    //         });
-    //     }
-
-    //     // Function to toggle icons based on selection
-    //     function toggleIcons(clickedIndex, isSelected) {
-    //         // Find the corresponding option in the selectpicker menu
-    //         let option = $('#customKraSelect option').eq(clickedIndex);
-
-    //         // Change icon based on whether the option was selected or deselected
-    //         if (isSelected) {
-    //             // Change to glyphicon-ok when selected
-    //             option.attr('data-icon', 'glyphicon-ok');
-    //         } else {
-    //             // Revert to glyphicon-unchecked when deselected
-    //             option.attr('data-icon', 'glyphicon-unchecked');
-    //         }
-
-    //         // Refresh the selectpicker to update the icons
-    //         $('#customKraSelect').selectpicker('refresh');
-    //     }
-    // }
-
-    function updateKraTable(kraBasedOnDepartment, existingData) {
-        window.lastKraBasedOnDepartment = kraBasedOnDepartment;
-        window.lastDefaultScoreMap = {};
-
-        let allDefault = Array.isArray(kraBasedOnDepartment.default_kra) ? kraBasedOnDepartment.default_kra : [];
-        let existingDefault = Array.isArray(existingData.default_kra) ? existingData.default_kra : [];
-        let selectedDefaultIndexes = [];
-
-        if (existingData.isPreviousMonthTemplate && existingDefault.length > 0) {
-            // Previous month default: show only last month's scored KRAs, all pre-selected
-            allDefault = existingDefault.slice();
-            selectedDefaultIndexes = allDefault.map(function(_, idx) {
-                return String(idx);
-            });
-        } else {
-            // Map existing scored default KRAs by name for restore
-            existingDefault.forEach(function(item) {
-                if (!item || !item.name) {
-                    return;
-                }
-                window.lastDefaultScoreMap[item.name] = item;
-                allDefault.forEach(function(opt, idx) {
-                    if (opt.name === item.name) {
-                        selectedDefaultIndexes.push(String(idx));
-                        window.lastDefaultScoreMap[idx] = item;
-                    }
-                });
-            });
-
-            // New evaluation: show all Default KRAs locked (none selected) unless editing existing
-            if (existingDefault.length === 0) {
-                selectedDefaultIndexes = [];
-            }
-        }
-
-        renderDefaultKraList(allDefault, selectedDefaultIndexes);
-        buildDefaultTableFromSelection(allDefault, selectedDefaultIndexes, window.lastDefaultScoreMap);
-
-        const custom_tableBody = $('#custom-kra-table-body');
-        custom_tableBody.empty(); // Clear previous rows
-
-        // Prepare container for dynamically added checkboxes
-        $('#customKraSelect').empty();
-
-        let custom_kra_data = Array.isArray(existingData.custom_kra) && existingData.custom_kra.length > 0 ?
-            existingData.custom_kra :
-            Array.isArray(kraBasedOnDepartment.custom_kra) ? kraBasedOnDepartment.custom_kra : [];
-
-        if (existingData.isUpdate) {
-            document.getElementById("customKraSelectWrapper").style.display = "none";
-            if (defaultKraSelectWrapper) {
-                defaultKraSelectWrapper.style.display = 'none';
-            }
-            editCustomKraTable(custom_kra_data);
-        } else {
-            let checkboxesHtml = '';
-            let preSelectedIds = [];
-
-            // Get pre-selected options
-            let preSelectedOptions = Array.isArray(existingData.custom_kra)
-                ? existingData.custom_kra.map(option => option.name)
-                : [];
-
-            // Original Custom KRA checkboxes (no lock UI)
-            $.each(kraBasedOnDepartment.custom_kra || [], function(index, option) {
-                let isSelected = preSelectedOptions.includes(option.name.toString());
-                let checkedAttr = isSelected ? 'checked' : '';
-
-                checkboxesHtml += `
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="kra_${option.id}" value="${option.id}" ${checkedAttr}>
-                    <label class="form-check-label" for="kra_${option.id}">${option.name} (Max Score:${option.max_score})</label>
-                </div>
-            `;
-                if (isSelected) {
-                    preSelectedIds.push(option.id);
-                }
-            });
-
-            // Append the dynamically generated checkboxes
-            $('#customKraSelect').html(checkboxesHtml);
-
-            // Pre-select values by updating the table
-            if(existingData.isDraft){
-                editCustomKraTable(custom_kra_data);
-            }else{
-                updateCustomKraTable(kraBasedOnDepartment.custom_kra, preSelectedIds);
-            }
-
-            // Handle checkbox change event to update table and validate total score
-            $('#customKraSelect input[type="checkbox"]').off('change.customKra').on('change.customKra', function() {
-                let selectedValues = $('#customKraSelect input[type="checkbox"]:checked')
-                    .map(function() {
-                        return $(this).val();
-                    }).get();
-
-                let score = checkMaxScoreSum(kraBasedOnDepartment.custom_kra, selectedValues);
-                if (score <= 100) {
-                    updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues);
-                } else {
-                    alert("The total max score must not exceed 100.");
-                    $(this).prop('checked', false);
-                }
-            });
-        }
-
-    }
-
-    // Function to check if the max_score sum will exceed 100
-    function checkMaxScoreSum(customKra, selectedValues) {
-        let totalScore = 0;
-
-        // Add the scores of the newly selected options from the dropdown
-        $.each(customKra, function(index, option) {
-            if (selectedValues.includes(option.id.toString())) {
-                let newMaxScore = parseInt(option.max_score); // Assuming max_score is a property in the option object
-                if (!isNaN(newMaxScore)) {
-                    totalScore += newMaxScore;
-                }
-            }
-        });
-
-        console.log("Selected values:", customKra);
-        // Return the total score
-        return totalScore;
-    }
-
-    function editCustomKraTable(customKraEditData) {
-        // $('#customKraSelect').style.display = "none";
-
-        const tableBody = $('#custom-kra-table-body');
-        tableBody.empty(); // Clear the table before adding new rows
-
-        // Loop through selected KRA IDs and find corresponding data
-        customKraEditData.forEach(function(selectedKRA, index) {
-
-            if (selectedKRA) {
-                // Create the row for the selected KRA
-                let rowHTML = `
-            <tr>
-                <td rowspan="${selectedKRA.kpiData ? selectedKRA.kpiData.length + 1 : 1}">${index + 1}</td>
-                <td class="performance-criteria" rowspan="${selectedKRA.kpiData ? selectedKRA.kpiData.length + 1 : 1}">
-                    <b>${selectedKRA.name}</b>
-                    <input type="hidden" name="kraData2[${index}][name]" value="${selectedKRA.name}">
-                    <br>
-                    ${selectedKRA.description ? selectedKRA.description : 'No description available'}
-                    <input type="hidden" name="kraData2[${index}][description]" value="${selectedKRA.description}">
-                    <br>
-                    <b>Max Score: ${selectedKRA.max_score}</b>
-                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${selectedKRA.max_score}">
-                </td>
-            `;
-
-                if (selectedKRA.kpiData && selectedKRA.kpiData.length > 0) {
-                    // Add rows for each KPI if available
-                    selectedKRA.kpiData.forEach((kpi, kpiIndex) => {
-                        rowHTML += `
-                    <tr>
-                        <td>${kpi.name}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][name]" value="${kpi.name}">
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][description]" value="${kpi.description}">
-                        <td>${kpi.max_score}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${kpi.max_score}">
-                        <td>
-                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
-                        </td>
-                        <td>
-                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
-                        </td>
-                        <td>
-                            <textarea class="form-control hr-remarks" name="kraData2[${index}][kpiData][${kpiIndex}][hr_remarks]" placeholder="HR remarks / notes...">${kpi.hr_remarks ? kpi.hr_remarks : ''}</textarea>
-                        </td>
-                    </tr>`;
+                    var staff = '<option value=""></option>';
+                    (Array.isArray(response) ? response : []).forEach(function(element) {
+                        staff += '<option value="' + element.staffid + '">' +
+                            element.firstname + ' ' + element.lastname + ' ' + (element.staff_identifi || '') +
+                            '</option>';
                     });
-                } else {
-                    // If no KPIs are available
-                    rowHTML += `
-                    <td>No KPIs</td>
-                    <input type="hidden" name="kraData2[${index}][kpiData]" value="">
-                    <td>${selectedKRA.max_score}</td>
-                    <td>
-                        <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
-                    </td>
-                    <td>
-                        <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
-                    </td>
-                    <td>
-                        <textarea class="form-control hr-remarks" name="kraData2[${index}][hr_remarks]" placeholder="HR remarks / notes...">${selectedKRA.hr_remarks ? selectedKRA.hr_remarks : ''}</textarea>
-                    </td>
-                </tr>`;
+                    $('#staffid').html(staff).selectpicker('refresh');
                 }
-
-                // Append the generated row HTML to the table body
-                tableBody.append(rowHTML);
-            }
+            });
         });
-    }
 
-
-    function updateCustomKraTable(allKRAData, selectedValues) {
-
-        const tableBody = $('#custom-kra-table-body');
-        tableBody.empty(); // Clear the table before adding new rows
-
-        // Loop through selected KRA IDs and find corresponding data
-        selectedValues.forEach(function(kraId, index) {
-            const selectedKRA = allKRAData.find(kra => kra.id === kraId);
-
-            if (selectedKRA) {
-                // Create the row for the selected KRA
-                let rowHTML = `
-            <tr>
-                <td rowspan="${selectedKRA.kpi_data ? selectedKRA.kpi_data.length + 1 : 1}">${index + 1}</td>
-                <td class="performance-criteria" rowspan="${selectedKRA.kpi_data ? selectedKRA.kpi_data.length + 1 : 1}">
-                    <b>${selectedKRA.name}</b>
-                    <input type="hidden" name="kraData2[${index}][name]" value="${selectedKRA.name}">
-                    <br>
-                    ${selectedKRA.description}
-                    <input type="hidden" name="kraData2[${index}][description]" value="${selectedKRA.description}">
-                    <br>
-                    <b>Max Score: ${selectedKRA.max_score}</b>
-                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${selectedKRA.max_score}">
-                </td>
-        `;
-
-                if (selectedKRA.kpi_data && selectedKRA.kpi_data.length > 0) {
-                    // Add rows for each KPI if available
-                    selectedKRA.kpi_data.forEach((kpi, kpiIndex) => {
-                        rowHTML += `
-                    <tr>
-                        <td>${kpi.name}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][name]" value="${kpi.name}">
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][description]" value="${kpi.description}">
-                        <td>${kpi.max_score}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${kpi.max_score}">
-                        <td>
-                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
-                        </td>
-                        <td>
-                            <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
-                        </td>
-                        <td>
-                            <textarea class="form-control hr-remarks" name="kraData2[${index}][kpiData][${kpiIndex}][hr_remarks]" placeholder="HR remarks / notes...">${kpi.hr_remarks ? kpi.hr_remarks : ''}</textarea>
-                        </td>
-                    </tr>
-                `;
-                    });
-                } else {
-                    // If no KPIs are available
-                    rowHTML += `
-                <td>No KPIs</td>
-                <input type="hidden" name="kraData2[${index}][kpiData]" value="">
-                <td>${selectedKRA.max_score}</td>
-                <td>
-                    <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
-                </td>
-                <td>
-                    <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
-                </td>
-                <td>
-                    <textarea class="form-control hr-remarks" name="kraData2[${index}][hr_remarks]" placeholder="HR remarks / notes...">${selectedKRA.hr_remarks ? selectedKRA.hr_remarks : ''}</textarea>
-                </td>
-            </tr>
-            `;
-                }
-
-                // Append the generated row HTML to the table body
-                tableBody.append(rowHTML);
+        $('#staffid, #performance_month').on('change', function() {
+            if (!hasValue($('#staffid').val())) {
+                pedmaShowWorkspace(false);
+                return;
             }
+            pedmaLoadEmployeeEvaluation();
         });
-    }
-</script>
-<script>
-    appValidateForm($('#pedma-form'), {
-        performance_month: 'required',
-        editor: 'required',
-        staffid: 'required'
-    });
 
-    $('.selectpicker').selectpicker({});
-</script>
-
-<script>
-    var editor;
-    CKEDITOR.replace('editor');
-
-
-    CKEDITOR.on('instanceReady', function(ev) {
-        editor = ev.editor;
-
-    });
-</script>
-
-<script>
-    let clickedButtonValue = null; // Initialize clickedButtonValue to avoid undefined issues
-
-    $(".submitBtn").on("click", function() {
-        clickedButtonValue = $(this).val();
-    });
-
-    $('#pedma-form').on('submit', function(e) {
-        let editor_val = editor.getData();
-        let avg_score1 = $("#avg_score1").val();
-        let avg_score2 = $("#avg_score2").val();
-        let defaultOption = $("#defaultOption");
-        let customOption = $("#customOption");
-        let sum = 0;
-        let count = 0;
-        let maxCount = false;
-
-        if (avg_score1 === '' && avg_score2 === '') {
-            Swal.fire({
-                icon: "error",
-                title: "Oops...",
-                text: "Overall Performance Score is required. Please fill at least one KRA detail.",
-            });
-            return false;
-        }
-
-        var usingDefaultTemplate = defaultOption.is(':checked') ||
-            ($('#previousMonthOption').is(':checked') && $('#previous_kra_save_type').val() === 'default');
-        if (usingDefaultTemplate && getSelectedDefaultIndexes().length === 0) {
-            Swal.fire({
-                icon: "warning",
-                title: "Default KRA is locked",
-                text: "Tick a Default KRA in the list to unlock it before saving.",
-            });
-            return false;
-        }
-
-        if (defaultOption.is(':checked') || ($('#previousMonthOption').is(':checked') && $('#previous_kra_save_type').val() === 'default')) {
-            $('#default-kra-table-body .rating1').each(function() {
-                let value = $(this).val();
-                let maxScore = $(this).attr('max');
-                if (value !== "") {
-                    sum += parseInt(value);
-                    count += parseInt(maxScore);
+        $(document).on('change', '.pedma-kra-pick', function() {
+            var scope = $(this).data('scope');
+            var idx = parseInt($(this).val(), 10);
+            var selected = scope === 'custom' ? pedmaSelectedCustom : pedmaSelectedDefault;
+            if ($(this).is(':checked')) {
+                if (selected.indexOf(idx) === -1) {
+                    selected.push(idx);
                 }
-            });
-
-            // Update the condition with correct logic
-            if (count > 100 || (clickedButtonValue !== '0' && count < 100)) {
-                maxCount = true;
-            }
-        } else if (customOption.is(':checked')) {
-            $('.rating2').each(function() {
-                let value = $(this).val();
-                let maxScore = $(this).attr('max');
-                if (value !== "") {
-                    sum += parseInt(value);
-                    count += parseInt(maxScore);
-                }
-            });
-
-            if (count > 100 || (clickedButtonValue !== '0' && count < 100)) {
-                maxCount = true;
-            }
-        }
-
-        if (maxCount) {
-            Swal.fire({
-                icon: "error",
-                title: "Oops...",
-                text: "The total max score must be exactly 100.",
-            });
-            return false;
-        }
-
-        if (!editor_val) {
-            Swal.fire({
-                icon: "error",
-                title: "Oops...",
-                text: "Overall Feedback is required.",
-            });
-            return false;
-        }
-    });
-
-
-    $("#fatalButton").click(function(e) {
-        e.preventDefault();
-        Swal.fire({
-            title: "Fatal Error!",
-            text: "A Fatal Error will negatively affect the score for selected months. You have two options: either reduce the score to 0% or apply a 50% reduction for the selected months. Please proceed carefully.",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonColor: "#3085d6",
-            cancelButtonColor: "#d33",
-            confirmButtonText: "Proceed"
-        }).then((result) => {
-            if (result.isConfirmed) {
-                lastSixMonths();
-
-                $("#fatalErrorModal").modal('show');
-            }
-        });
-    });
-    // Handle Percentage Box Selection for Fatal Error
-    document.querySelectorAll('.percentage-selection .percentage-box').forEach(box => {
-        box.addEventListener('click', function() {
-            document.querySelectorAll('.percentage-box').forEach(b => b.classList.remove('selected'));
-            this.classList.add('selected');
-
-            // Show or hide the custom input field
-            if (this.getAttribute('data-value') === 'custom') {
-                document.getElementById('customInputField').style.display = 'block';
-                $("#customInputField").prop("required",true);
             } else {
-                document.getElementById('customInputField').style.display = 'none';
-                $("#customInputField").prop("required",false);
+                if (scope === 'custom') {
+                    pedmaSelectedCustom = pedmaSelectedCustom.filter(function(i) { return i !== idx; });
+                } else {
+                    pedmaSelectedDefault = pedmaSelectedDefault.filter(function(i) { return i !== idx; });
+                }
             }
+            pedmaRenderKraSidebar();
+            pedmaBuildEvalTable();
+        });
+
+        $(document).on('change', '.pedma-kra-all', function() {
+            var scope = $(this).data('scope');
+            var list = scope === 'custom' ? pedmaCustomKras : pedmaDefaultKras;
+            var checked = $(this).is(':checked');
+            if (scope === 'custom') {
+                pedmaSelectedCustom = checked ? list.map(function(_, i) { return i; }) : [];
+            } else {
+                pedmaSelectedDefault = checked ? list.map(function(_, i) { return i; }) : [];
+            }
+            pedmaSetKraPanelOpen(scope, true);
+            pedmaRenderKraSidebar();
+            pedmaBuildEvalTable();
+        });
+
+        $(document).on('click', '.pedma-kra-panel-head', function() {
+            var scope = $(this).closest('.pedma-kra-panel').data('scope');
+            var $panel = scope === 'custom' ? $('#pedmaCustomKraPanel') : $('#pedmaDefaultKraPanel');
+            var open = !$panel.hasClass('is-open');
+            pedmaSetKraPanelOpen(scope, open);
+        });
+
+        $(document).on('change', '.pedma-rating-input', pedmaRecalcScore);
+
+        $('#pedmaPublishBtn').on('click', function() {
+            $('#pedma_submit_status').val('1');
+            $('#pedma-form').trigger('submit');
+        });
+        $('#pedmaDraftBtn').on('click', function() {
+            $('#pedma_submit_status').val('0');
+            $('#pedma-form').trigger('submit');
+        });
+        $('#pedmaUpdateBtn').on('click', function() {
+            $('#pedma_submit_status').val('2');
+            $('#pedma-form').trigger('submit');
+        });
+
+        $('#pedma-form').on('submit', function(e) {
+            if (!$('#default-kra-table-body tr[data-kra-key]').length) {
+                e.preventDefault();
+                alert('Select at least one KRA and enter a rating.');
+                return false;
+            }
+            if (!$('#avg_score1').val()) {
+                e.preventDefault();
+                alert('Please set a rating (1–5) for each selected KRA.');
+                return false;
+            }
+            pedmaSyncHiddenFilters();
+            var score = $('#avg_score1').val();
+            $('#avg_score2').val(score);
+            $('#pedma_kra_option').val(pedmaSelectedCustom.length > 0 ? 'custom' : 'default');
         });
     });
-
-    $("#fatalErrorForm").submit(function (e) { 
-        e.preventDefault();
-        const selectedBox = document.querySelector('.percentage-box.selected');
-        let scoreAdjustment = selectedBox ? selectedBox.getAttribute('data-value') : '0';
-
-        // If custom is selected, use the input value
-        if (scoreAdjustment === 'custom') {
-            scoreAdjustment = document.getElementById('customPercentage').value;
-        }
-
-        const selectedMonths = Array.from(document.querySelectorAll('#fatalErrorModal .month-checkboxes input:checked'))
-            .map(checkbox => checkbox.value);
-
-        const staffid =  $("#staffid").val();
-        const fatal_comment = $("#fatal_comment").val();
-
-        if(!empty(staffid)){
-            if(!empty(scoreAdjustment) && !empty(selectedMonths)){
-                $('#fatalErrorModal').modal('hide');
-                $('.loader').removeClass('hidden'); // Show loader
-
-                $.ajax({
-                    type: "post",
-                    url: "<?php echo base_url('admin/staff/update_score_by_fatal_error'); ?>",
-                    data: {
-                        staffid,
-                        scoreAdjustment,
-                        selectedMonths,
-                        fatal_comment
-                    },
-                    dataType: "json",
-                    success: function (response) {
-                        $('.loader').addClass('hidden'); // Hide loader after request completes
-
-                        if(response.status){
-                            Swal.fire({
-                                title: 'Changes Applied!',
-                                text: `Score reduced by ${scoreAdjustment}% for the following months: ${selectedMonths.join(', ')}`,
-                                icon: 'success'
-                            });
-                        }else{
-                            Swal.fire({
-                                title: 'Warning !!',
-                                text: `Something went wrong on updating Score.`,
-                                icon: 'warning'
-                            });
-                        }     
-                    }
-                });
-            }else{
-                $('#fatalErrorModal').modal('hide');
-
-                Swal.fire({
-                    title: 'Warning!!',
-                    text: `Please fill all details. It seems you missed something.`,
-                    icon: 'warning'
-                });
-            }
-        }else{
-            $('#fatalErrorModal').modal('hide');
-
-            Swal.fire({
-                title: 'Warning!!',
-                text: `Please select an employee`,
-                icon: 'warning'
-            });
-        }
-    });
-
-    $("#addOnButton").click(function(e) {
-        e.preventDefault();
-        Swal.fire({
-            title: "Add On!",
-            text: "This Add-on will lead to an increase in the score for the selected months. This adjustment reflects Extra ordinary performance. Proceed?",
-            icon: "success",
-            showCancelButton: true,
-            confirmButtonColor: "#3085d6",
-            cancelButtonColor: "#d33",
-            confirmButtonText: "Proceed"
-        }).then((result) => {
-            if (result.isConfirmed) {
-                lastSixMonths();
-
-                $("#addOnModal").modal('show');
-            }
-        });
-    });
-
-    $("#highAchievementForm").submit(function (e) { 
-        e.preventDefault();
-        const selectedMonths = Array.from(document.querySelectorAll('#addOnModal .month-checkboxes input:checked'))
-            .map(checkbox => checkbox.value);
-        let scoreAdjustment = document.getElementById('customPercentageIncrease').value;
-
-        const staffid =  $("#staffid").val();
-        const addOn_comment = $("#addOn_comment").val();
-
-        if(!empty(staffid)){
-            if(!empty(scoreAdjustment) && !empty(selectedMonths)){
-                $('#addOnModal').modal('hide');
-                $('.loader').removeClass('hidden'); // Show loader
-
-                $.ajax({
-                    type: "post",
-                    url: "<?php echo base_url('admin/staff/update_score_by_add_on'); ?>",
-                    data: {
-                        staffid,
-                        scoreAdjustment,
-                        selectedMonths,
-                        addOn_comment
-                    },
-                    dataType: "json",
-                    success: function (response) {
-                        $('.loader').addClass('hidden'); // Hide loader after request completes
-
-                        if(response.status){
-                            Swal.fire({
-                                title: 'Changes Applied!',
-                                text: `Score increased by ${scoreAdjustment}% for the following months: ${selectedMonths.join(', ')}`,
-                                icon: 'success'
-                            });
-                        }else{
-                            Swal.fire({
-                                title: 'Warning !!',
-                                text: `Something went wrong on updating Score.`,
-                                icon: 'warning'
-                            });
-                        }     
-                    }
-                });
-            }else{
-                $('#addOnModal').modal('hide');
-
-                Swal.fire({
-                    title: 'Warning!!',
-                    text: `Please fill all details. It seems you missed something.`,
-                    icon: 'warning'
-                });
-            }
-        }else{
-            $('#addOnModal').modal('hide');
-
-            Swal.fire({
-                title: 'Warning!!',
-                text: `Please select an employee`,
-                icon: 'warning'
-            });
-        }
-    });
-
-    document.getElementById('closeHighAchievementBtn').addEventListener('click', function(){
-        $('#addOnModal').modal('hide');
-    })
-    document.getElementById('closeFatalErrorBtn').addEventListener('click', function(){
-        $('#fatalErrorModal').modal('hide');
-    })
-    function lastSixMonths() {
-        let content = '';
-        let date = $("#performance_month").val();
-        let [year, month] = date.split("-");
-
-        // Month names for checkbox labels
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-        // Loop for the current month + the previous 5 months
-        for (let i = 0; i < 6; i++) {
-            // Convert the month to a number, decrement it
-            month = parseInt(month);
-
-            // Handle wrapping to previous year if the month is less than 1
-            if (month === 0) {
-                month = 12; // Set to December
-                year = year - 1; // Decrease the year by 1
-            }
-
-            // Format the date correctly as YYYY-MM and ensure the month is two digits
-            let formattedMonth = String(month).padStart(2, '0');
-            date = `${year}-${formattedMonth}`;
-
-            // Get the month name for the checkbox label
-            let monthName = monthNames[month - 1]; // Adjust the index for month array
-
-            // Append the checkbox content for each month
-            content += `
-                <label><input type="checkbox" value="${date}"> ${monthName}</label>
-            `;
-
-            // Decrement the month for the next iteration
-            month -= 1;
-        }
-
-        // Append or insert 'content' into the DOM where needed
-        $(".lastsixmonths").html(content);
-
-    }
+})(jQuery);
 </script>
-
-
-
-
-<!-- Bootstrap JS and custom JavaScript -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-</body>
-
-</html>
