@@ -54,12 +54,20 @@
                                         <td><?php echo $row['login_time'] !== '' ? html_escape($row['login_time']) : '—'; ?></td>
                                         <td>
                                             <?php if (!empty($row['screenshot_file_id'])) { ?>
-                                            <button type="button" class="btn btn-default btn-xs snapshot-view-screenshot"
+                                            <!-- <button type="button" class="btn btn-default btn-xs snapshot-view-screenshot"
                                                 data-file-id="<?php echo html_escape($row['screenshot_file_id']); ?>"
-                                                data-name="<?php echo html_escape($row['name']); ?>">View screenshot</button>
+                                                data-name="<?php echo html_escape($row['name']); ?>">View screenshot</button> -->
                                             <?php } ?>
                                             <?php if (!empty($staff_folder_map[$row['staffid']])) { ?>
-                                            <a class="btn btn-primary btn-xs" href="<?php echo html_escape(($monitoring_url ?? admin_url('Emt/monitoring')) . '?folder=' . urlencode($staff_folder_map[$row['staffid']])); ?>">Open gallery</a>
+                                            <?php
+                                            $galleryQuery = http_build_query([
+                                                'folder'   => $staff_folder_map[$row['staffid']],
+                                                'month'    => date('Y-m'),
+                                                'day'      => date('Y-m-d'),
+                                                'autoload' => '1',
+                                            ], '', '&', PHP_QUERY_RFC3986);
+                                            ?>
+                                            <a class="btn btn-primary btn-xs" href="<?php echo html_escape(($monitoring_url ?? admin_url('Emt/monitoring')) . '?' . $galleryQuery); ?>">Open gallery</a>
                                             <?php } elseif (empty($row['screenshot_file_id'])) { ?>
                                             —
                                             <?php } ?>

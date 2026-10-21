@@ -10,6 +10,7 @@ if (file_exists(APPPATH . 'config/app-config.php')) {
         exit;
     }
     include_once(APPPATH . 'config/app-config.php');
+    require_once APPPATH . 'config/app_email_policy.php';
 } else {
     $install_url = isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) == 'on' ? 'https' : 'http';
     $install_url .= '://' . $_SERVER['HTTP_HOST'];

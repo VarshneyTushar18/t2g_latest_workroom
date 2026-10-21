@@ -7,7 +7,7 @@ function app_init_admin_sidebar_menu_items()
     $CI = &get_instance();
 
     $CI->app_menu->add_sidebar_menu_item('dashboard', [
-        'name' => _l('als_dashboard'),
+        'name' => 'Dashboard',
         'href' => admin_url(),
         'position' => 1,
         'icon' => 'fa fa-home',
@@ -192,7 +192,7 @@ function app_init_admin_sidebar_menu_items()
       
     $CI->app_menu->add_sidebar_menu_item('support', [
         'collapse' => true,
-        'name' => 'Support',
+        'name' => 'support',
         'icon' => 'fa-regular fa-life-ring',
         'position' => 2,
         'badge' => [],

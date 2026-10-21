@@ -819,6 +819,8 @@ class Staff extends AdminController
         $data['staffs'] = [];
         $data['pedma_comment_sections'] = pedma_comment_sections();
         $data['pedma_can_overall_feedback'] = pedma_can_edit_overall_feedback();
+        $data['pedma_can_edit_all_eval'] = pedma_can_edit_all_pedma_eval();
+        $this->staff_model->ensure_pedma_overall_feedback_columns();
         $data['title'] = _l('timesheets');
 
         $this->load->view('admin/staff/pedma_admin', $data);
@@ -995,6 +997,7 @@ class Staff extends AdminController
         }
 
         $this->staff_model->ensure_pedma_feedback_ack_columns();
+        $this->staff_model->ensure_pedma_overall_feedback_columns();
 
         $id = get_staff_user_id(); 
         // $performance = $this->db->get_where('tblstaff_performance', ['staffid' => $id]);
@@ -1002,7 +1005,12 @@ class Staff extends AdminController
         $performance = $this->db->from('tblstaff_performance')->where('staffid', $id)->where('status !=',0)->order_by('date_created')->get();
 
         $data['staffid'] = $id;
-        $data['performance_values'] = $performance->result_array();
+        $performance_values = $performance->result_array();
+        foreach ($performance_values as &$perfRow) {
+            $perfRow['overall_feedback'] = pedma_format_overall_feedback_display($perfRow);
+        }
+        unset($perfRow);
+        $data['performance_values'] = $performance_values;
         
         $this->load->view('admin/staff/pedma', $data);
     }
@@ -1016,6 +1024,8 @@ class Staff extends AdminController
 		$staff_id = $this->staff_model->get_kra_based_on_department();
 
         $data['result'] = $this->departments_model->get_staff_departments();
+        $data['pedma_comment_sections'] = pedma_comment_sections();
+        $data['pedma_can_edit_all_eval'] = pedma_can_edit_all_pedma_eval();
         $this->load->view('admin/staff/manage_pedma', $data);
     }
 
@@ -1430,6 +1440,8 @@ class Staff extends AdminController
             access_denied('pedma');
         }
 
+        $this->staff_model->ensure_pedma_overall_feedback_columns();
+
         $staffid =  $this->input->post('staffid');
         $date_created =  $this->input->post('performance_month');
         $type =  $this->input->post('kraOption');
@@ -1437,7 +1449,17 @@ class Staff extends AdminController
         $kraData2 =  $this->input->post('kraData2');
         $average1 = $this->input->post('avg_score1');
         $average2 = $this->input->post('avg_score2');
-        $overall_feedback =  $this->input->post('overall_feedback');
+        $overall_manager_feedback = $this->input->post('overall_manager_feedback');
+        $overall_hod_feedback = $this->input->post('overall_hod_feedback');
+        $overall_hr_feedback = $this->input->post('overall_hr_feedback');
+        $overall_feedback = pedma_build_combined_overall_feedback(
+            $overall_manager_feedback,
+            $overall_hod_feedback,
+            $overall_hr_feedback
+        );
+        if ($overall_feedback === '') {
+            $overall_feedback = (string) $this->input->post('overall_feedback');
+        }
         $status =  $this->input->post('status');
 
         $staff_name = get_staff_full_name($staffid);
@@ -1464,6 +1486,9 @@ class Staff extends AdminController
             'kra_data' => $kraData,
             'avg_score' => $average,
             'overall_feedback' => $overall_feedback,
+            'overall_manager_feedback' => $overall_manager_feedback,
+            'overall_hod_feedback' => $overall_hod_feedback,
+            'overall_hr_feedback' => $overall_hr_feedback,
             'status' => $status,
             'date_created' => $date_created . '-01',
             // Manager changed the report — employee must re-acknowledge

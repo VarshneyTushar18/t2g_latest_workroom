@@ -363,6 +363,7 @@
 
     .pedma-kra-layout {
         display: flex;
+        flex-wrap: nowrap;
         align-items: flex-start;
         gap: 16px;
         margin-top: 12px;
@@ -633,6 +634,7 @@
                 <?php $this->load->view('admin/staff/pedma_admin_evaluation_workspace', [
                     'pedma_comment_sections' => isset($pedma_comment_sections) ? $pedma_comment_sections : pedma_comment_sections(),
                     'pedma_can_overall_feedback' => isset($pedma_can_overall_feedback) ? $pedma_can_overall_feedback : pedma_can_edit_overall_feedback(),
+                    'pedma_can_edit_all_eval' => isset($pedma_can_edit_all_eval) ? $pedma_can_edit_all_eval : pedma_can_edit_all_pedma_eval(),
                 ]); ?>
 
             </div>
@@ -741,14 +743,63 @@
         return kind + ':' + index;
     }
 
-    function pedmaSetOverallFeedback(value) {
+    function pedmaSetOverallField(section, value) {
         value = value || '';
-        if (window.pedmaCanOverallFeedback) {
-            $('#pedma_overall_feedback').val(value);
-        } else {
-            $('#pedma_overall_feedback_hidden').val(value);
-            $('#pedma_overall_feedback_readonly').text(value || '—');
+        var canEdit = false;
+        if (section === 'manager') {
+            canEdit = !!window.pedmaCanEditOverallManager;
+        } else if (section === 'hod') {
+            canEdit = !!window.pedmaCanEditOverallHod;
+        } else if (section === 'hr') {
+            canEdit = !!window.pedmaCanEditOverallHr;
         }
+        var $ta = $('#pedma_overall_' + section + '_feedback');
+        var $hidden = $('#pedma_overall_' + section + '_feedback_hidden');
+        var $ro = $('#pedma_overall_' + section + '_feedback_readonly');
+        if (canEdit && $ta.length) {
+            $ta.val(value);
+        } else if ($hidden.length) {
+            $hidden.val(value);
+            $ro.text(value || '—');
+        }
+    }
+
+    function pedmaSetOverallFeedbackFromPerf(perf) {
+        perf = perf || {};
+        var legacy = (perf.overall_feedback || '').trim();
+        var manager = (perf.overall_manager_feedback || '').trim();
+        var hod = (perf.overall_hod_feedback || '').trim();
+        var hr = (perf.overall_hr_feedback || '').trim();
+        if (manager === '' && hod === '' && hr === '' && legacy !== '') {
+            manager = legacy;
+        }
+        pedmaSetOverallField('manager', manager);
+        pedmaSetOverallField('hod', hod);
+        pedmaSetOverallField('hr', hr);
+    }
+
+    function pedmaCaptureTableStateToScoreMap() {
+        $('#default-kra-table-body tr[data-kra-key]').each(function() {
+            var $row = $(this);
+            var key = $row.attr('data-kra-key');
+            if (!key) {
+                return;
+            }
+            var name = $row.find('[name$="[name]"]').val();
+            var scored = {
+                name: name,
+                description: $row.find('[name$="[description]"]').val() || '',
+                max_score: $row.find('[name$="[max_score]"]').val() || '',
+                get_score: pedmaRowRatingValue($row),
+                comment: $row.find('[name$="[comment]"]').val() || '',
+                hr_remarks: $row.find('[name$="[hr_remarks]"]').val() || '',
+                hod_remarks: $row.find('[name$="[hod_remarks]"]').val() || ''
+            };
+            pedmaScoreMap[key] = scored;
+            if (name) {
+                pedmaScoreMap[name] = scored;
+            }
+        });
     }
 
     function hasValue(v) {
@@ -784,11 +835,13 @@
     }
 
     function pedmaRowRatingValue($row) {
-        var checked = $row.find('.pedma-rating-input:checked').val();
-        if (checked !== undefined) {
-            return checked;
+        var $checked = $row.find('.pedma-rating-input:checked');
+        if ($checked.length) {
+            return $checked.val();
         }
-        return $row.find('.pedma-rating-input').val();
+
+        // jQuery .val() on an unchecked radio group returns the first option (1) — not a user choice.
+        return '';
     }
 
     function pedmaRatingInputHtml(fieldPrefix, displayIndex, scoreVal) {
@@ -862,6 +915,7 @@
     }
 
     function pedmaBuildEvalTable() {
+        pedmaCaptureTableStateToScoreMap();
         var $body = $('#default-kra-table-body');
         $body.empty();
         var hasAny = pedmaSelectedDefault.length || pedmaSelectedCustom.length;
@@ -978,7 +1032,7 @@
         $('#pedmaPublishBtn, #pedmaDraftBtn').show();
         $('#pedmaUpdateBtn').hide();
         $('#pedmaStaffResponseArea').hide();
-        pedmaSetOverallFeedback('');
+        pedmaSetOverallFeedbackFromPerf(null);
         $('#pedmaStaffResp').val('');
 
         if (!perf) {
@@ -1023,13 +1077,33 @@
         pedmaSelectedDefault = pedmaSelectedDefault.filter(function(v, i, a) { return a.indexOf(v) === i; });
         pedmaSelectedCustom = pedmaSelectedCustom.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
+        if (kraRows.length && !pedmaSelectedDefault.length && !pedmaSelectedCustom.length) {
+            kraRows.forEach(function(row) {
+                if (!row || !row.name) {
+                    return;
+                }
+                pedmaDefaultKras.forEach(function(def, idx) {
+                    if (def.name === row.name && pedmaSelectedDefault.indexOf(idx) === -1) {
+                        pedmaSelectedDefault.push(idx);
+                        pedmaScoreMap[pedmaScoreKey('default', idx)] = row;
+                    }
+                });
+                pedmaCustomKras.forEach(function(def, idx) {
+                    if (def.name === row.name && pedmaSelectedCustom.indexOf(idx) === -1) {
+                        pedmaSelectedCustom.push(idx);
+                        pedmaScoreMap[pedmaScoreKey('custom', idx)] = row;
+                    }
+                });
+            });
+        }
+
         if (perf.status && String(perf.status) !== '0') {
             pedmaIsUpdate = true;
             $('#pedmaPublishBtn, #pedmaDraftBtn').hide();
             $('#pedmaUpdateBtn').show();
         }
 
-        pedmaSetOverallFeedback(perf.overall_feedback || '');
+        pedmaSetOverallFeedbackFromPerf(perf);
         if (perf.staff_comment) {
             $('#pedmaStaffResponseArea').show();
             $('#pedmaStaffResp').val(perf.staff_comment);
@@ -1182,7 +1256,14 @@
             pedmaSetKraPanelOpen(scope, open);
         });
 
-        $(document).on('change', '.pedma-rating-input', pedmaRecalcScore);
+        $(document).on('change', '.pedma-rating-input', function() {
+            pedmaCaptureTableStateToScoreMap();
+            pedmaRecalcScore();
+        });
+
+        $(document).on('change input', '#default-kra-table-body textarea', function() {
+            pedmaCaptureTableStateToScoreMap();
+        });
 
         $('#pedmaPublishBtn').on('click', function() {
             $('#pedma_submit_status').val('1');
@@ -1208,6 +1289,7 @@
                 alert('Please set a rating (1–5) for each selected KRA.');
                 return false;
             }
+            pedmaCaptureTableStateToScoreMap();
             pedmaSyncHiddenFilters();
             var score = $('#avg_score1').val();
             $('#avg_score2').val(score);

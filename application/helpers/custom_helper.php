@@ -942,7 +942,106 @@ function can_open_pedma_evaluation($staff_id = '')
  */
 function pedma_can_edit_overall_feedback($staff_id = '')
 {
+    if (pedma_can_edit_all_pedma_eval($staff_id)) {
+        return true;
+    }
+
     return pedma_role_is_manager_family(get_staff_role_slug($staff_id));
+}
+
+/**
+ * Admin / Super Admin may edit any KRA rating or comment column.
+ */
+function pedma_can_edit_all_pedma_eval($staff_id = '')
+{
+    if ($staff_id === '' || $staff_id === null) {
+        $staff_id = get_staff_user_id();
+    }
+
+    return is_admin($staff_id) || is_super_admin() || is_admin2();
+}
+
+/**
+ * @param string $section manager|hod|hr
+ */
+function pedma_can_edit_overall_section($section, $staff_id = '')
+{
+    if (pedma_can_edit_all_pedma_eval($staff_id)) {
+        return true;
+    }
+
+    $section = strtolower(trim((string) $section));
+    if ($section === 'manager') {
+        return pedma_role_is_manager_family(get_staff_role_slug($staff_id));
+    }
+    if ($section === 'hod') {
+        return pedma_is_hod_role($staff_id);
+    }
+    if ($section === 'hr') {
+        return is_HR($staff_id);
+    }
+
+    return false;
+}
+
+/**
+ * Legacy overall_feedback plus split columns for employee display / emails.
+ *
+ * @param array<string, mixed>|object $row
+ */
+function pedma_format_overall_feedback_display($row)
+{
+    if (is_object($row)) {
+        $row = (array) $row;
+    }
+
+    $manager = trim((string) ($row['overall_manager_feedback'] ?? ''));
+    $hod = trim((string) ($row['overall_hod_feedback'] ?? ''));
+    $hr = trim((string) ($row['overall_hr_feedback'] ?? ''));
+    $legacy = trim(strip_tags((string) ($row['overall_feedback'] ?? '')));
+
+    if ($manager === '' && $hod === '' && $hr === '' && $legacy !== '') {
+        $manager = $legacy;
+    }
+
+    $parts = [];
+    if ($manager !== '') {
+        $parts[] = '<p><strong>Manager feedback</strong><br>' . nl2br(htmlspecialchars($manager, ENT_QUOTES, 'UTF-8')) . '</p>';
+    }
+    if ($hod !== '') {
+        $parts[] = '<p><strong>HOD feedback</strong><br>' . nl2br(htmlspecialchars($hod, ENT_QUOTES, 'UTF-8')) . '</p>';
+    }
+    if ($hr !== '') {
+        $parts[] = '<p><strong>HR feedback</strong><br>' . nl2br(htmlspecialchars($hr, ENT_QUOTES, 'UTF-8')) . '</p>';
+    }
+
+    if ($parts === []) {
+        return $legacy !== '' ? $legacy : '—';
+    }
+
+    return implode('', $parts);
+}
+
+/**
+ * @return string Combined plain text stored in overall_feedback for backward compatibility.
+ */
+function pedma_build_combined_overall_feedback($manager, $hod, $hr)
+{
+    $parts = [];
+    $manager = trim((string) $manager);
+    $hod = trim((string) $hod);
+    $hr = trim((string) $hr);
+    if ($manager !== '') {
+        $parts[] = "Manager feedback:\n" . $manager;
+    }
+    if ($hod !== '') {
+        $parts[] = "HOD feedback:\n" . $hod;
+    }
+    if ($hr !== '') {
+        $parts[] = "HR feedback:\n" . $hr;
+    }
+
+    return implode("\n\n", $parts);
 }
 
 function can_manage_pedma_kra($staff_id = '')

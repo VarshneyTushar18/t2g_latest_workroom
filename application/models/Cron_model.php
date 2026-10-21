@@ -178,6 +178,8 @@ class Cron_model extends App_Model
 
             $this->maybe_send_daily_team_break_timing_emails();
 
+            $this->maybe_send_daily_snapshot_not_logged_in_report();
+
             // PEDMA evaluation reminder emails to managers (1st / 5th / 10th only; popup handles after 10th)
             $this->send_pedma_evaluation_reminders();
 
@@ -9542,6 +9544,157 @@ public function send_break_report_to_staff()
             'day'     => $day,
             'managers'=> count($managers),
             'sent'    => $sent,
+        ];
+    }
+
+    /**
+     * Daily 13:00 (app timezone): email employees who did not log in to Snapshot for the previous day.
+     */
+    public function maybe_send_daily_snapshot_not_logged_in_report()
+    {
+        $run_hour = (int) hooks()->apply_filters('snapshot_not_logged_in_report_hour', 13);
+        $tz       = function_exists('get_option') ? trim((string) get_option('default_timezone')) : '';
+        $previous = date_default_timezone_get();
+        if ($tz !== '') {
+            @date_default_timezone_set($tz);
+        }
+
+        $current_hour = (int) date('G');
+        $today_ymd    = date('Y-m-d');
+
+        if ($tz !== '') {
+            @date_default_timezone_set($previous);
+        }
+
+        if ($current_hour !== $run_hour) {
+            return ['skipped' => true, 'reason' => 'outside_send_hour', 'hour' => $current_hour];
+        }
+
+        if (get_option('snapshot_not_logged_in_report_last_run_date') === $today_ymd) {
+            return ['skipped' => true, 'reason' => 'already_sent_today'];
+        }
+
+        $result = $this->send_daily_snapshot_not_logged_in_report(null, ['force' => false]);
+        if (!empty($result['sent'])) {
+            update_option('snapshot_not_logged_in_report_last_run_date', $today_ymd);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param string|null $reportDateYmd Y-m-d (default: previous calendar day in app timezone)
+     * @param array{force?:bool,recipient?:string} $options
+     * @return array<string, mixed>
+     */
+    public function send_daily_snapshot_not_logged_in_report($reportDateYmd = null, array $options = [])
+    {
+        $this->load->library('email');
+        $this->load->model('emt_model');
+
+        if (!$reportDateYmd) {
+            $reportDateYmd = $this->emt_model->snapshotDefaultReportDateYmd();
+        }
+        $reportDateYmd = trim((string) $reportDateYmd);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reportDateYmd)) {
+            return ['sent' => false, 'error' => 'invalid_date'];
+        }
+
+        $rows = $this->emt_model->getSnapshotDailyReportRows($reportDateYmd, null, [], null);
+        $totalActive = count($rows);
+        $loggedInRows = $this->emt_model->filterSnapshotDailyReportRows($rows, 'logged_in');
+        $notLoggedInRows = $this->emt_model->filterSnapshotDailyReportRows($rows, 'not_logged_in');
+        $loggedInCount = count($loggedInRows);
+        $notLoggedInCount = count($notLoggedInRows);
+
+        usort($notLoggedInRows, function ($a, $b) {
+            return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+        });
+
+        $dateLabel = date('l, F j, Y', strtotime($reportDateYmd . ' 12:00:00'));
+        $toEmail   = !empty($options['recipient']) && filter_var($options['recipient'], FILTER_VALIDATE_EMAIL)
+            ? trim((string) $options['recipient'])
+            : hooks()->apply_filters(
+                'snapshot_not_logged_in_report_recipient',
+                'sarabjeet@tech2globe.com'
+            );
+        $isSample  = !empty($options['recipient']);
+
+        if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+            return ['sent' => false, 'error' => 'invalid_recipient'];
+        }
+
+        $html = '<div style="background:#fff;color:#222;font-family:Arial,sans-serif;font-size:14px;padding:16px;">'
+            . '<p>Snapshot <strong>not logged-in</strong> report for <strong>'
+            . htmlspecialchars($dateLabel, ENT_QUOTES, 'UTF-8')
+            . '</strong> (previous workday).</p>'
+            . '<table border="0" cellpadding="8" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;background:#f8fafc;">'
+            . '<tr><td style="padding:8px 16px;"><strong>Total active employees</strong></td><td style="padding:8px 16px;text-align:center;">'
+            . (int) $totalActive . '</td></tr>'
+            . '<tr><td style="padding:8px 16px;"><strong>Snapshot logged-in</strong></td><td style="padding:8px 16px;text-align:center;">'
+            . (int) $loggedInCount . '</td></tr>'
+            . '<tr><td style="padding:8px 16px;"><strong>Not logged-in</strong></td><td style="padding:8px 16px;text-align:center;">'
+            . (int) $notLoggedInCount . '</td></tr>'
+            . '</table>'
+            . '<h3 style="margin:0 0 10px;font-size:16px;">Employees not logged-in to Snapshot</h3>'
+            . '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;">'
+            . '<thead style="background:#141e46;color:#fff;"><tr>'
+            . '<th>S.No.</th><th>Name</th><th>Department</th><th>First check-in</th>'
+            . '</tr></thead><tbody>';
+
+        if ($notLoggedInCount === 0) {
+            $html .= '<tr><td colspan="4" style="text-align:center;padding:12px;">Everyone logged in to Snapshot for this date.</td></tr>';
+        } else {
+            $sno = 1;
+            foreach ($notLoggedInRows as $row) {
+                $html .= '<tr>'
+                    . '<td style="text-align:center;">' . $sno++ . '</td>'
+                    . '<td>' . htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars((string) ($row['department_name'] ?? '—'), ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td>' . htmlspecialchars(
+                        ($row['first_checkin'] ?? '') !== '' ? (string) $row['first_checkin'] : '—',
+                        ENT_QUOTES,
+                        'UTF-8'
+                    ) . '</td>'
+                    . '</tr>';
+            }
+        }
+
+        $html .= '</tbody></table>'
+            . '<p style="color:#555;font-size:12px;margin-top:16px;">Automated from Workroom Snapshot daily report data.</p>'
+            . '</div>';
+
+        $this->load->config('email');
+        $this->email->clear(true);
+        $this->email->set_newline(config_item('newline'));
+        $this->email->set_mailtype('html');
+        $smtp_from = get_option('smtp_email');
+        $this->email->from($smtp_from !== '' ? $smtp_from : 'noreply@t2gworkroom.com', get_option('companyname') ?: 'Tech2globe');
+        $this->email->to($toEmail);
+        $subjectPrefix = $isSample ? '[Sample] ' : '';
+        $this->email->subject($subjectPrefix . 'Snapshot not logged-in report — ' . $dateLabel);
+        $this->email->message($html);
+        $this->email->set_alt_message(
+            'Snapshot not logged-in for ' . $dateLabel
+            . '. Active: ' . $totalActive
+            . ', Logged-in: ' . $loggedInCount
+            . ', Not logged-in: ' . $notLoggedInCount
+        );
+
+        $sent = (bool) $this->email->send();
+        if ($sent) {
+            log_activity('Snapshot not logged-in daily report emailed to ' . $toEmail . ' for ' . $reportDateYmd);
+        } else {
+            log_message('error', 'Snapshot not logged-in report email failed: ' . $this->email->print_debugger(['headers']));
+        }
+
+        return [
+            'sent'              => $sent,
+            'report_date'       => $reportDateYmd,
+            'total_active'      => $totalActive,
+            'logged_in'         => $loggedInCount,
+            'not_logged_in'     => $notLoggedInCount,
+            'recipient'         => $toEmail,
         ];
     }
 

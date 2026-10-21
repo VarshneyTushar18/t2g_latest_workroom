@@ -6,9 +6,10 @@ $pedmaCommentSections = isset($pedma_comment_sections) && is_array($pedma_commen
 $pedmaCanManagerComment = in_array('manager', $pedmaCommentSections, true);
 $pedmaCanHrComment = in_array('hr', $pedmaCommentSections, true);
 $pedmaCanHodComment = in_array('hod', $pedmaCommentSections, true);
-$pedmaCanOverallFeedback = isset($pedma_can_overall_feedback)
-    ? (bool) $pedma_can_overall_feedback
-    : pedma_can_edit_overall_feedback();
+$pedmaCanEditAllEval = !empty($pedma_can_edit_all_eval);
+$pedmaCanEditOverallManager = pedma_can_edit_overall_section('manager');
+$pedmaCanEditOverallHod = pedma_can_edit_overall_section('hod');
+$pedmaCanEditOverallHr = pedma_can_edit_overall_section('hr');
 ?>
 <div id="pedmaEvalPlaceholder" class="pedma-filters-hint">
     Select month, department, and employee to load KRAs and the evaluation table.
@@ -98,20 +99,20 @@ $pedmaCanOverallFeedback = isset($pedma_can_overall_feedback)
                     <tr>
                         <th style="width:28%;">KRA name</th>
                         <th style="width:14%;">Rating (1–5)</th>
-                        <?php if ($pedmaCanManagerComment) { ?>
+                        <?php if ($pedmaCanManagerComment || $pedmaCanEditAllEval) { ?>
                         <th style="width:22%;">Manager comment</th>
                         <?php } ?>
-                        <?php if ($pedmaCanHodComment) { ?>
+                        <?php if ($pedmaCanHodComment || $pedmaCanEditAllEval) { ?>
                         <th style="width:22%;">HOD comment</th>
                         <?php } ?>
-                        <?php if ($pedmaCanHrComment) { ?>
+                        <?php if ($pedmaCanHrComment || $pedmaCanEditAllEval) { ?>
                         <th style="width:22%;">HR comment</th>
                         <?php } ?>
                     </tr>
                 </thead>
                 <tbody id="default-kra-table-body">
                     <tr class="pedma-kra-empty-row">
-                        <td colspan="<?php echo 2 + ($pedmaCanManagerComment ? 1 : 0) + ($pedmaCanHodComment ? 1 : 0) + ($pedmaCanHrComment ? 1 : 0); ?>" class="text-muted text-center" style="padding:18px;">
+                        <td colspan="<?php echo (int) (2 + ($pedmaCanManagerComment || $pedmaCanEditAllEval ? 1 : 0) + ($pedmaCanHodComment || $pedmaCanEditAllEval ? 1 : 0) + ($pedmaCanHrComment || $pedmaCanEditAllEval ? 1 : 0)); ?>" class="text-muted text-center" style="padding:18px;">
                             Select one or more KRAs on the left.
                         </td>
                     </tr>
@@ -119,14 +120,34 @@ $pedmaCanOverallFeedback = isset($pedma_can_overall_feedback)
             </table>
 
             <div class="form-group mtop15" id="pedmaOverallFeedbackGroup">
-                <label for="pedma_overall_feedback" class="control-label">Overall feedback</label>
-                <?php if ($pedmaCanOverallFeedback) { ?>
-                <textarea name="overall_feedback" id="pedma_overall_feedback" class="form-control" rows="4" placeholder="Manager overall feedback…"></textarea>
-                <?php } else { ?>
-                <input type="hidden" name="overall_feedback" id="pedma_overall_feedback_hidden" value="">
-                <div id="pedma_overall_feedback_readonly" class="form-control pedma-readonly-feedback" style="min-height:88px;background:#f8fafc;white-space:pre-wrap;"></div>
-                <p class="text-muted" style="font-size:12px;margin-top:6px;">Only managers can edit overall feedback.</p>
-                <?php } ?>
+                <label class="control-label">Overall feedback</label>
+                <div class="form-group">
+                    <label for="pedma_overall_manager_feedback" class="control-label">Overall manager feedback</label>
+                    <?php if ($pedmaCanEditOverallManager) { ?>
+                    <textarea name="overall_manager_feedback" id="pedma_overall_manager_feedback" class="form-control" rows="3" placeholder="Manager overall feedback…"></textarea>
+                    <?php } else { ?>
+                    <input type="hidden" name="overall_manager_feedback" id="pedma_overall_manager_feedback_hidden" value="">
+                    <div id="pedma_overall_manager_feedback_readonly" class="form-control pedma-readonly-feedback" style="min-height:72px;background:#f8fafc;white-space:pre-wrap;"></div>
+                    <?php } ?>
+                </div>
+                <div class="form-group">
+                    <label for="pedma_overall_hod_feedback" class="control-label">Overall HOD feedback</label>
+                    <?php if ($pedmaCanEditOverallHod) { ?>
+                    <textarea name="overall_hod_feedback" id="pedma_overall_hod_feedback" class="form-control" rows="3" placeholder="HOD overall feedback…"></textarea>
+                    <?php } else { ?>
+                    <input type="hidden" name="overall_hod_feedback" id="pedma_overall_hod_feedback_hidden" value="">
+                    <div id="pedma_overall_hod_feedback_readonly" class="form-control pedma-readonly-feedback" style="min-height:72px;background:#f8fafc;white-space:pre-wrap;"></div>
+                    <?php } ?>
+                </div>
+                <div class="form-group">
+                    <label for="pedma_overall_hr_feedback" class="control-label">Overall HR feedback</label>
+                    <?php if ($pedmaCanEditOverallHr) { ?>
+                    <textarea name="overall_hr_feedback" id="pedma_overall_hr_feedback" class="form-control" rows="3" placeholder="HR overall feedback…"></textarea>
+                    <?php } else { ?>
+                    <input type="hidden" name="overall_hr_feedback" id="pedma_overall_hr_feedback_hidden" value="">
+                    <div id="pedma_overall_hr_feedback_readonly" class="form-control pedma-readonly-feedback" style="min-height:72px;background:#f8fafc;white-space:pre-wrap;"></div>
+                    <?php } ?>
+                </div>
             </div>
 
             <div class="form-group" id="pedmaStaffResponseArea" style="display:none;">
@@ -144,9 +165,12 @@ $pedmaCanOverallFeedback = isset($pedma_can_overall_feedback)
 
 <script>
 window.pedmaCommentSections = <?php echo json_encode(array_values($pedmaCommentSections)); ?>;
-window.pedmaCanManagerComment = <?php echo $pedmaCanManagerComment ? 'true' : 'false'; ?>;
-window.pedmaCanHrComment = <?php echo $pedmaCanHrComment ? 'true' : 'false'; ?>;
-window.pedmaCanHodComment = <?php echo $pedmaCanHodComment ? 'true' : 'false'; ?>;
-window.pedmaEvalTableColspan = <?php echo (int) (2 + ($pedmaCanManagerComment ? 1 : 0) + ($pedmaCanHodComment ? 1 : 0) + ($pedmaCanHrComment ? 1 : 0)); ?>;
-window.pedmaCanOverallFeedback = <?php echo $pedmaCanOverallFeedback ? 'true' : 'false'; ?>;
+window.pedmaCanManagerComment = <?php echo ($pedmaCanManagerComment || $pedmaCanEditAllEval) ? 'true' : 'false'; ?>;
+window.pedmaCanHrComment = <?php echo ($pedmaCanHrComment || $pedmaCanEditAllEval) ? 'true' : 'false'; ?>;
+window.pedmaCanHodComment = <?php echo ($pedmaCanHodComment || $pedmaCanEditAllEval) ? 'true' : 'false'; ?>;
+window.pedmaEvalTableColspan = <?php echo (int) (2 + ($pedmaCanManagerComment || $pedmaCanEditAllEval ? 1 : 0) + ($pedmaCanHodComment || $pedmaCanEditAllEval ? 1 : 0) + ($pedmaCanHrComment || $pedmaCanEditAllEval ? 1 : 0)); ?>;
+window.pedmaCanEditAllFields = <?php echo $pedmaCanEditAllEval ? 'true' : 'false'; ?>;
+window.pedmaCanEditOverallManager = <?php echo $pedmaCanEditOverallManager ? 'true' : 'false'; ?>;
+window.pedmaCanEditOverallHod = <?php echo $pedmaCanEditOverallHod ? 'true' : 'false'; ?>;
+window.pedmaCanEditOverallHr = <?php echo $pedmaCanEditOverallHr ? 'true' : 'false'; ?>;
 </script>

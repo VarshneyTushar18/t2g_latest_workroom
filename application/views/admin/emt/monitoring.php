@@ -119,11 +119,16 @@
                                     <?php } ?>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-3" id="snapshot_day_filter_col" style="display:none;">
                                 <label for="select_file_child">Snapshot day</label>
-                                <select class="selectpicker" data-live-search="true" data-width="100%" id="select_file_child" aria-label="Snapshot day">
-                                    <option value="">Select day</option>
-                                </select>
+                                <div id="snapshot_day_loading" class="text-muted" style="display:none;padding:8px 0 0;font-size:13px;">
+                                    <i class="fa fa-spinner fa-spin"></i> Loading days…
+                                </div>
+                                <div id="snapshot_day_select_wrap" style="display:none;">
+                                    <select class="selectpicker" data-live-search="true" data-width="100%" id="select_file_child" aria-label="Snapshot day">
+                                        <option value="">Select day</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -214,6 +219,7 @@ function parseSnapshotJson(res) {
 
 var snapshotDaysCache = [];
 var snapshotEmployees = [];
+var snapshotDaysRequestId = 0;
 
 function refreshSelectpicker($el) {
     if ($el.data('selectpicker')) {
@@ -226,7 +232,35 @@ function refreshSelectpicker($el) {
 function refreshSnapshotDaySelect(html) {
     var $el = $('#select_file_child');
     $el.html(html);
-    refreshSelectpicker($el);
+    if ($('#snapshot_day_select_wrap').is(':visible')) {
+        refreshSelectpicker($el);
+    }
+}
+
+function setSnapshotDayFilterState(state) {
+    var $col = $('#snapshot_day_filter_col');
+    var $loading = $('#snapshot_day_loading');
+    var $selectWrap = $('#snapshot_day_select_wrap');
+
+    if (state === 'hidden') {
+        $col.hide();
+        $loading.hide();
+        $selectWrap.hide();
+        return;
+    }
+
+    $col.show();
+    if (state === 'loading') {
+        $loading.show();
+        $selectWrap.hide();
+        return;
+    }
+
+    if (state === 'ready') {
+        $loading.hide();
+        $selectWrap.show();
+        refreshSelectpicker($('#select_file_child'));
+    }
 }
 
 function snapshotDayInMonth(day, month) {
@@ -237,6 +271,55 @@ function snapshotDayInMonth(day, month) {
     var key = (day.date_key || '').toString();
     var compact = month.replace('-', '');
     return name.indexOf(month) === 0 || (compact !== '' && key.indexOf(compact) === 0);
+}
+
+function ensureSnapshotMonthForDay(ymd) {
+    ymd = (ymd || '').toString();
+    if (ymd.length < 7) {
+        return;
+    }
+    var month = ymd.substring(0, 7);
+    if (($('#select_month').val() || '').toString() === month) {
+        return;
+    }
+    $('#select_month').val(month);
+    refreshSelectpicker($('#select_month'));
+    renderSnapshotDays();
+}
+
+function selectSnapshotDayByYmd(ymd) {
+    ymd = (ymd || '').toString();
+    if (!ymd) {
+        return false;
+    }
+    var compact = ymd.replace(/[^0-9]/g, '');
+    var $sel = $('#select_file_child');
+    var matchedVal = '';
+
+    $sel.find('option').each(function () {
+        var val = ($(this).val() || '').toString();
+        if (!val) {
+            return;
+        }
+        var name = ($(this).text() || '').trim();
+        var key = ($(this).attr('data-date-key') || $(this).data('date-key') || '').toString();
+        if (name === ymd || name.indexOf(ymd) === 0) {
+            matchedVal = val;
+            return false;
+        }
+        if (compact !== '' && key.indexOf(compact) !== -1) {
+            matchedVal = val;
+            return false;
+        }
+    });
+
+    if (!matchedVal) {
+        return false;
+    }
+
+    $sel.val(matchedVal);
+    refreshSelectpicker($sel);
+    return true;
 }
 
 function renderSnapshotDays() {
@@ -289,7 +372,8 @@ function applyDepartmentFilter() {
         $sel.val(current);
     } else if (current) {
         snapshotDaysCache = [];
-        renderSnapshotDays();
+        setSnapshotDayFilterState('hidden');
+        refreshSnapshotDaySelect('<option value="">Select day</option>');
         resetSnapshotGallery();
     }
     refreshSelectpicker($sel);
@@ -307,27 +391,58 @@ $("#select_month").on('change', function () {
     }
 });
 
-$("#select_file").on('change', function (event) {
-    event.preventDefault();
-    var folderId = ($(this).val() || '').toString();
+function loadEmployeeSnapshotDays(folderId, onReady) {
+    folderId = (folderId || '').toString();
+    var reqId = ++snapshotDaysRequestId;
     snapshotDaysCache = [];
     resetSnapshotGallery();
-    renderSnapshotDays();
 
     if (!folderId) {
+        setSnapshotDayFilterState('hidden');
+        refreshSnapshotDaySelect('<option value="">Select day</option>');
+        if (typeof onReady === 'function') {
+            onReady(false);
+        }
         return;
     }
 
+    setSnapshotDayFilterState('loading');
+
     $.ajax({
-        url: '<?php echo base_url('admin/Emt/getEmployeeDate'); ?>',
+        url: '<?php echo admin_url('Emt/getEmployeeDate'); ?>',
         type: 'GET',
         data: { date: folderId },
         cache: false,
+        timeout: 90000,
         success: function (res) {
+            if (reqId !== snapshotDaysRequestId) {
+                return;
+            }
             snapshotDaysCache = parseSnapshotJson(res);
             renderSnapshotDays();
+            setSnapshotDayFilterState('ready');
+            if (typeof onReady === 'function') {
+                onReady(true);
+            }
+        },
+        error: function (xhr, status) {
+            if (reqId !== snapshotDaysRequestId) {
+                return;
+            }
+            snapshotDaysCache = [];
+            var msg = status === 'timeout' ? 'Timed out loading days from Drive.' : 'Failed to load days.';
+            refreshSnapshotDaySelect('<option value="">Select day</option><option disabled>' + msg + '</option>');
+            setSnapshotDayFilterState('ready');
+            if (typeof onReady === 'function') {
+                onReady(false);
+            }
         }
     });
+}
+
+$("#select_file").on('change', function (event) {
+    event.preventDefault();
+    loadEmployeeSnapshotDays(($(this).val() || '').toString(), null);
 });
 
 $("#select_file_child").on('change', function (event) {
@@ -347,7 +462,7 @@ $("#select_file_child").on('change', function (event) {
     }
 
     $.ajax({
-        url: '<?php echo base_url('admin/Emt/getImg'); ?>',
+        url: '<?php echo admin_url('Emt/getImg'); ?>',
         type: 'GET',
         data: { date: dayFolderId, day_filter: dayFilter },
         cache: false,
@@ -420,7 +535,7 @@ $(function () {
             })
         });
     });
-    ['#select_department', '#select_month', '#select_file', '#select_file_child'].forEach(function (selector) {
+    ['#select_department', '#select_month', '#select_file'].forEach(function (selector) {
         var $el = $(selector);
         if (!$el.length) {
             return;
@@ -430,17 +545,39 @@ $(function () {
         }
         $el.selectpicker({ liveSearch: true, width: '100%' });
     });
+    setSnapshotDayFilterState('hidden');
     $('#myModal').on('shown.bs.modal', function () {
         $(this).removeAttr('aria-hidden');
     }).on('hidden.bs.modal', function () {
         $(this).attr('aria-hidden', 'true');
     });
+    var snapshotDefaultDayYmd = <?php echo json_encode(date('Y-m-d')); ?>;
     var urlParams = new URLSearchParams(window.location.search);
     var folderPrefill = (urlParams.get('folder') || '').toString();
-    if (folderPrefill && $('#select_file option[value="' + folderPrefill.replace(/"/g, '') + '"]').length) {
+    var monthPrefill = (urlParams.get('month') || '').toString();
+    var dayPrefill = (urlParams.get('day') || '').toString();
+    var autoloadGallery = urlParams.get('autoload') === '1';
+
+    if (monthPrefill) {
+        $('#select_month').val(monthPrefill);
+        refreshSelectpicker($('#select_month'));
+    }
+
+    if (folderPrefill && $('#select_file option[value="' + folderPrefill.replace(/"/g, '\\"') + '"]').length) {
         $('#select_file').val(folderPrefill);
         refreshSelectpicker($('#select_file'));
-        $('#select_file').trigger('change');
+        loadEmployeeSnapshotDays(folderPrefill, function (ok) {
+            if (!ok || !autoloadGallery) {
+                return;
+            }
+            var targetDay = dayPrefill || snapshotDefaultDayYmd;
+            ensureSnapshotMonthForDay(targetDay);
+            if (selectSnapshotDayByYmd(targetDay)) {
+                $('#select_file_child').trigger('change');
+            } else {
+                $('#display_img').html('<li class="text-muted">No snapshots for ' + $('<div>').text(targetDay).html() + '.</li>');
+            }
+        });
     }
 });
 </script>

@@ -414,7 +414,7 @@ class Emt extends AdminController
 		}
 
 		$this->load->helper('custom');
-		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($parentFolderId)) {
+		if (!$this->snapshotDriveResourceAccessible($parentFolderId)) {
 			echo json_encode([]);
 
 			return;
@@ -446,7 +446,7 @@ class Emt extends AdminController
 		}
 
 		$this->load->helper('custom');
-		if (!snapshot_can_view_all_departments() && !$this->snapshotDriveResourceAccessible($childFolderId)) {
+		if (!$this->snapshotDriveResourceAccessible($childFolderId)) {
 			echo json_encode([]);
 
 			return;
@@ -1192,7 +1192,7 @@ class Emt extends AdminController
 
 	private function collectSnapshotDays($employeeFolderId)
 	{
-		$employeeFolderId = $this->resolveCanonicalEmployeeFolderId($employeeFolderId);
+		$employeeFolderId = trim((string) $employeeFolderId);
 		$days = [];
 		$seen = [];
 
@@ -1333,7 +1333,7 @@ class Emt extends AdminController
 	private function resolveCanonicalEmployeeFolderId($folderId)
 	{
 		$name = $this->getDriveFileName($folderId);
-		if ($name === '') {
+		if ($name === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $name)) {
 			return $folderId;
 		}
 		$found = $this->findEmployeeFolderByName($name);
@@ -1507,6 +1507,21 @@ class Emt extends AdminController
 		return $set;
 	}
 
+	private function snapshotStaffIdForEmployeeFolderId($folderId)
+	{
+		$folderId = trim((string) $folderId);
+		if ($folderId === '' || !$this->driveReady) {
+			return 0;
+		}
+
+		$name = $this->getDriveFileName($folderId);
+		if ($name === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $name)) {
+			return 0;
+		}
+
+		return $this->Emt_model->findStaffIdByEmailPrefix($name);
+	}
+
 	private function snapshotDriveResourceAccessible($resourceId)
 	{
 		$this->load->helper('custom');
@@ -1515,8 +1530,12 @@ class Emt extends AdminController
 			return false;
 		}
 
-		$allowedFolders = $this->snapshotAllowedEmployeeFolderIdSet();
-		if (isset($allowedFolders[$resourceId])) {
+		if (snapshot_can_view_all_departments()) {
+			return true;
+		}
+
+		$staffId = $this->snapshotStaffIdForEmployeeFolderId($resourceId);
+		if ($staffId > 0 && snapshot_staff_id_in_viewer_scope($staffId)) {
 			return true;
 		}
 
@@ -1532,10 +1551,11 @@ class Emt extends AdminController
 		try {
 			$meta = $this->service->files->get($resourceId, [
 				'supportsAllDrives' => true,
-				'fields'            => 'parents,mimeType',
+				'fields'            => 'parents,name',
 			]);
 			foreach ((array) $meta->getParents() as $parentId) {
-				if (isset($allowedFolders[$parentId])) {
+				$parentStaffId = $this->snapshotStaffIdForEmployeeFolderId($parentId);
+				if ($parentStaffId > 0 && snapshot_staff_id_in_viewer_scope($parentStaffId)) {
 					return true;
 				}
 			}

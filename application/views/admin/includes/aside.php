@@ -498,6 +498,10 @@
         padding: 7px 10px !important;
         display: flex !important;
     }
+
+    .sidebar.sidebar--saas #side-menu > li > a{
+        text-transform: capitalize!important;
+    }
 </style>
 <aside id="menu" class="sidebar sidebar--saas">
 

@@ -93,6 +93,12 @@ class App_mail_template
             return true;
         }
 
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_activity('Email template blocked (local/disabled): ' . get_class($this));
+
+            return true;
+        }
+
         if (!method_exists($this, 'build')) {
             show_error('Mail class "' . get_class($this) . '" must contain "build" method.');
         }

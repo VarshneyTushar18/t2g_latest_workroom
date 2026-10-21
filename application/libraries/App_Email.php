@@ -150,6 +150,12 @@ class App_Email extends App_mailer
      */
     public function send_queue()
     {
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_message('info', 'Email queue skipped because outbound email is disabled on this server.');
+
+            return;
+        }
+
         $this->CI->load->config('email');
 
         $this->clean_up_old_queue();

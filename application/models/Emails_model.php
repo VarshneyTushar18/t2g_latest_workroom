@@ -174,6 +174,12 @@ class Emails_model extends App_Model
             return true;
         }
 
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_activity('Simple email blocked (local/disabled): ' . $subject . ' → ' . $email);
+
+            return true;
+        }
+
         $cnf = [
             'from_email' => get_option('smtp_email'),
             'from_name'  => get_option('companyname'),

@@ -847,7 +847,7 @@ class timesheets_model extends app_model
 			'created_at' => date('Y-m-d H:i:s'),
 			'updated_at' => date('Y-m-d H:i:s'),
 		];
-		$this->db->insert(db_prefix() . 'leave_comment', $datas);
+			$this->db->insert(db_prefix() . 'leave_comment', $datas);
 
 		return $this->db->insert_id();
 	}
@@ -13333,8 +13333,8 @@ public function add_requisition_ajax($data)
 			'type' => $ts_type,
 		];
 
-		if ($data_ts) {
-			$this->db->where('id', $data_ts->id);
+			if ($data_ts) {
+				$this->db->where('id', $data_ts->id);
 			$this->db->update(db_prefix() . 'timesheets_timesheet', $payload);
 
 			return $this->db->affected_rows() > 0;
@@ -13351,7 +13351,7 @@ public function add_requisition_ajax($data)
 			'add_from' => ((get_staff_user_id() && get_staff_user_id() != 0 && get_staff_user_id() != '') ? get_staff_user_id() : $staff_id),
 			'value' => $total_work_hours,
 		];
-		$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
+				$this->db->insert(db_prefix() . 'timesheets_timesheet', $data_insert);
 
 		return (int) $this->db->insert_id() > 0;
 	}
@@ -17176,9 +17176,9 @@ public function add_requisition_ajax($data)
 					$balance = $this->floor_leave_balance_for_display($seeded['balance']);
 				} else {
 					// Had (carry + this month earn) − taken = remain. Next month = remain + that month's earn.
-					$monthly_earn = round((float) $earned_rate, 2);
-					$consumed = $month_el_consumed;
-					$granted = round((float) $earned_carry + $monthly_earn, 2); // "had" this month
+				$monthly_earn = round((float) $earned_rate, 2);
+				$consumed = $month_el_consumed;
+				$granted = round((float) $earned_carry + $monthly_earn, 2); // "had" this month
 					$balance = $this->floor_leave_balance_for_display(
 						$this->staff_model->compute_monthly_leave_balance($earned_carry, $earned_rate, $month_el_consumed)
 					);
@@ -17444,24 +17444,24 @@ public function add_requisition_ajax($data)
 				$available = round((float) $seeded['balance'], 2);
 			} else {
 				// Month-scoped summary: opening (had from prior close) + this month earn − taken = remain.
-				$opening_balance = $through_month > 0
-					? (float) $this->staff_model->carryForward($staff_id, $doj, $through_month, $year)
-					: 0;
-				$month_rate = 0.0;
-				if ($through_month > 0 && $this->staff_employed_in_month($doj, $through_month, $year)) {
-					$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $through_month, $year);
-					$month_rate = isset($overrides[$staff_id])
-						? (float) $overrides[$staff_id]
-						: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $through_month, $year);
-				}
-				$granted = round($month_rate, 2);
-				$monthly_earn_rate = $granted;
-				$availed = round((float) ($consumed_by_month[$through_month] ?? 0), 2);
-				$available = $through_month > 0
-					? (float) $this->staff_model->monthlyLeaveBalance($staff_id, $doj, $through_month, $year)
-					: 0;
+			$opening_balance = $through_month > 0
+				? (float) $this->staff_model->carryForward($staff_id, $doj, $through_month, $year)
+				: 0;
+			$month_rate = 0.0;
+			if ($through_month > 0 && $this->staff_employed_in_month($doj, $through_month, $year)) {
+				$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $through_month, $year);
+				$month_rate = isset($overrides[$staff_id])
+					? (float) $overrides[$staff_id]
+					: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $through_month, $year);
+			}
+			$granted = round($month_rate, 2);
+			$monthly_earn_rate = $granted;
+			$availed = round((float) ($consumed_by_month[$through_month] ?? 0), 2);
+			$available = $through_month > 0
+				? (float) $this->staff_model->monthlyLeaveBalance($staff_id, $doj, $through_month, $year)
+				: 0;
 				// Force proper maths: remain = opening + granted − taken (same as card "had − taken").
-				$available = round($opening_balance + $granted - $availed, 2);
+			$available = round($opening_balance + $granted - $availed, 2);
 			}
 		} else {
 			foreach ($consumed_by_month as $m => $val) {
@@ -17507,14 +17507,14 @@ public function add_requisition_ajax($data)
 						$running_balance = (float) $seeded_m['balance'];
 						$balance_end = $running_balance;
 					} else {
-						$opening_m = $running_balance;
-						$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $m, $year);
-						$month_granted = isset($overrides[$staff_id])
-							? (float) $overrides[$staff_id]
-							: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $m, $year);
+					$opening_m = $running_balance;
+					$overrides = $this->staff_model->get_earned_leave_overrides_batch([$staff_id], $m, $year);
+					$month_granted = isset($overrides[$staff_id])
+						? (float) $overrides[$staff_id]
+						: (float) $this->staff_model->calculateEarnedLeaves($doj, $staff_id, $m, $year);
 						// closing = opening + granted − consumed
-						$running_balance = round($opening_m + $month_granted - $consumed, 2);
-						$balance_end = $running_balance;
+					$running_balance = round($opening_m + $month_granted - $consumed, 2);
+					$balance_end = $running_balance;
 					}
 				} elseif ($slug === 'earned-leave') {
 					$opening_m = $running_balance;
@@ -18196,7 +18196,7 @@ public function add_requisition_ajax($data)
 			if ((int) ($datas['status'] ?? -1) === 3) {
 				continue;
 			}
-
+		
 			$status = $datas['status'];
 			if ($status == 0) {
 				$status =  'Pending';
@@ -20198,16 +20198,16 @@ public function add_requisition_ajax($data)
 								$issues = ['Regularization pending — ' . $classified['issue']];
 							}
 						} else {
-							$status = $classified['status'];
-							if (!empty($classified['issue'])) {
-								$issues = [$classified['issue']];
-							}
-							if (isset($classified['can_regularise'])) {
-								$can_regularise = $classified['can_regularise'] && !$weekend_blocks_reg;
-							}
+						$status = $classified['status'];
+						if (!empty($classified['issue'])) {
+							$issues = [$classified['issue']];
+						}
+						if (isset($classified['can_regularise'])) {
+							$can_regularise = $classified['can_regularise'] && !$weekend_blocks_reg;
 						}
 					}
 				}
+			}
 			}
 			// WFH / Workroom check-in-out: first IN → last OUT >= 8h55m → Present on calendar.
 			if (
@@ -20634,8 +20634,8 @@ public function add_requisition_ajax($data)
 							continue;
 						}
 						$d = $att_dt->format('Y-m-d');
-						if ($d >= $from && $d <= $to && empty($wfh_dates[$d])) {
-							$dates[$d] = true;
+							if ($d >= $from && $d <= $to && empty($wfh_dates[$d])) {
+								$dates[$d] = true;
 						}
 					}
 				}
@@ -20662,10 +20662,10 @@ public function add_requisition_ajax($data)
 			$swipes = is_array($preloaded_swipes)
 				? $preloaded_swipes
 				: $this->biometric_model->get_swipes([
-					'from' => $range_from,
-					'to' => $range_to,
-					'staff' => $staff_id,
-				]);
+				'from' => $range_from,
+				'to' => $range_to,
+				'staff' => $staff_id,
+			]);
 			foreach ($swipes as $sw) {
 				if (empty($sw['swipe_sort'])) {
 					continue;
@@ -20811,7 +20811,7 @@ public function add_requisition_ajax($data)
 			if (!empty($deduped)) {
 				$prev = $deduped[count($deduped) - 1];
 				if (($prev['type'] ?? '') === $type && abs(($ev['at'] ?? 0) - ($prev['at'] ?? 0)) <= 120) {
-					$keep = false;
+						$keep = false;
 				}
 			}
 			if ($keep) {
@@ -20850,8 +20850,8 @@ public function add_requisition_ajax($data)
 				$i++;
 			}
 			if ($i >= $n) {
-				break;
-			}
+					break;
+				}
 
 			$start_at = (int) $events[$i]['at'];
 			$end_at = $start_at + (int) $window_sec;
@@ -20863,8 +20863,8 @@ public function add_requisition_ajax($data)
 			}
 
 			if (!empty($session_events)) {
-				$sessions[] = [
-					'start_at' => $start_at,
+			$sessions[] = [
+				'start_at' => $start_at,
 					'start_date' => date('Y-m-d', $start_at),
 					'end_at' => $end_at,
 					'events' => $session_events,
@@ -21407,7 +21407,7 @@ public function add_requisition_ajax($data)
 						$prev_ts = strtotime('1970-01-01 ' . substr($prev['time'], 0, 8));
 					}
 					if ($ts !== false && $prev_ts !== false && abs($ts - $prev_ts) <= 120) {
-						$keep = false;
+					$keep = false;
 					}
 				}
 			}
@@ -21483,15 +21483,15 @@ public function add_requisition_ajax($data)
 				$first_in_ts = strtotime('1970-01-01 ' . substr($ins[0], 0, 8));
 				if ($first_in_ts !== false) {
 					$events = array_values(array_filter($events, function ($ev) use ($first_in_ts) {
-						if (($ev['type'] ?? '') !== 'OUT') {
-							return true;
-						}
+				if (($ev['type'] ?? '') !== 'OUT') {
+					return true;
+				}
 						$ts = strtotime('1970-01-01 ' . substr($ev['time'], 0, 8));
 						return $ts === false || $ts > $first_in_ts;
-					}));
+			}));
 					$outs = [];
-					foreach ($events as $ev) {
-						if (($ev['type'] ?? '') === 'OUT') {
+			foreach ($events as $ev) {
+				if (($ev['type'] ?? '') === 'OUT') {
 							$outs[] = $ev['time'];
 						}
 					}
@@ -21499,7 +21499,7 @@ public function add_requisition_ajax($data)
 				}
 			}
 			if (!$check_out && count($events) > 1) {
-				$check_out = $outs ? $outs[count($outs) - 1] : '';
+		$check_out = $outs ? $outs[count($outs) - 1] : '';
 				if ($check_out === '' && $events[count($events) - 1]['type'] === 'OUT') {
 					$check_out = $events[count($events) - 1]['time'];
 				}
@@ -21525,7 +21525,7 @@ public function add_requisition_ajax($data)
 				$span_hrs = ($out_ts - $in_ts) / 3600;
 			}
 		}
-		for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
+			for ($j = 0, $c = count($events); $j < $c - 1; $j++) {
 			$cur = $events[$j]['type'] ?? '';
 			$nxt = $events[$j + 1]['type'] ?? '';
 			$ts1 = (int) ($events[$j]['at'] ?? 0);
@@ -21537,8 +21537,8 @@ public function add_requisition_ajax($data)
 				$ts2 = strtotime('1970-01-01 ' . substr($events[$j + 1]['time'], 0, 8));
 			}
 			if ($ts1 === false || $ts2 === false) {
-				continue;
-			}
+					continue;
+				}
 			if ($cur === 'OUT' && $nxt === 'IN') {
 				$break_hrs += max(0, ($ts2 - $ts1) / 3600);
 			}
@@ -21562,7 +21562,7 @@ public function add_requisition_ajax($data)
 
 		$punch_missing = $this->biometric_punch_sequence_incomplete($events, count($ins), count($outs));
 		if ($workroom_source === 'WFH' && empty($events)) {
-			$punch_missing = true;
+				$punch_missing = true;
 		}
 
 		$swipes = [];
@@ -22094,8 +22094,8 @@ public function add_requisition_ajax($data)
 			if ($late_mins <= $in_grace_mins) {
 				$late_in = 'On time (' . $in_grace_mins . ' min grace)';
 			} else {
-				$late_in = $late_mins . ' min';
-			}
+			$late_in = $late_mins . ' min';
+		}
 		}
 		if ($punch['check_out'] && strtotime($punch['check_out']) < strtotime($shift_end)) {
 			$early_mins = round((strtotime($shift_end) - strtotime($punch['check_out'])) / 60);
@@ -22117,7 +22117,7 @@ public function add_requisition_ajax($data)
 		if (!empty($punch['break_from_punches'])) {
 			$actual = max(0, (float) ($punch['hours'] ?? ($span - $break_hrs)));
 		} else {
-			$actual = max(0, $span - $break_hrs);
+		$actual = max(0, $span - $break_hrs);
 		}
 
 		$sessions = [

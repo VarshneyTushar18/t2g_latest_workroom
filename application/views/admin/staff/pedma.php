@@ -242,7 +242,12 @@ $staffData = json_encode($performance_values);
                             </div>
                         </div>
                     </div>
-                    <div class="row" id="twoChart">
+                    <div class="row" id="pedmaMonthEmptyHint" style="display:none; margin-bottom:16px;">
+                        <div class="col-md-12 p-0">
+                            <div class="alert alert-info tw-mb-0" id="pedmaMonthEmptyHintText"></div>
+                        </div>
+                    </div>
+                    <div class="row" id="twoChart" style="display:none;">
                         <!-- KRA Performance Chart Card -->
                         <div class="col-md-8 mb-4 p-i-4">
                             <div class="card">
@@ -408,6 +413,26 @@ $staffData = json_encode($performance_values);
             } catch (e) {
                 return [];
             }
+        }
+
+        function pedmaMonthKeyFromRecord(dateStr) {
+            if (!dateStr) {
+                return '';
+            }
+            var s = String(dateStr).trim();
+            var m = s.match(/^(\d{4})-(\d{2})/);
+            if (m) {
+                return m[1] + '-' + m[2];
+            }
+            var d = new Date(s);
+            if (isNaN(d.getTime())) {
+                return '';
+            }
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }
+
+        function pedmaEnsureKpiList(item) {
+            return item && item.kpiData && item.kpiData.length ? item.kpiData : [];
         }
 
         $(document).ready(function() {
@@ -725,6 +750,33 @@ $staffData = json_encode($performance_values);
                 return html;
             }
 
+            function pedmaEvaluationRatingForItem(kraItem) {
+                var rating = kraItem.get_score;
+                if (kraItem.kpiData && kraItem.kpiData.length) {
+                    var total = 0;
+                    kraItem.kpiData.forEach(function (kpi) {
+                        total += parseFloat(kpi.get_score || 0);
+                    });
+                    if (rating === undefined || rating === null || rating === '') {
+                        rating = total;
+                    }
+                }
+                return rating;
+            }
+
+            function pedmaEvaluationTableRowHtml(kraItem) {
+                var ratingShown = pedmaEvaluationRatingForItem(kraItem);
+                return '<tr>' +
+                    '<td><b>' + pedmaEscapeText(kraItem.name) + '</b>' +
+                    (kraItem.description ? '<br><span class="text-muted">' + pedmaEscapeText(kraItem.description) + '</span>' : '') +
+                    '</td>' +
+                    '<td>' + pedmaReadonlyRating(ratingShown) + '</td>' +
+                    '<td>' + pedmaEscapeText(kraItem.comment || '-') + '</td>' +
+                    '<td>' + pedmaEscapeText(kraItem.hr_remarks || '-') + '</td>' +
+                    '<td>' + pedmaEscapeText(kraItem.hod_remarks || '-') + '</td>' +
+                    '</tr>';
+            }
+
             if (filteredData.length === 0) { // Check if there are any entries for the selected month
                 kraCardData.html("No Data available for this month");
                 $('#pedmaEmployeeKraTableWrap').hide();
@@ -796,17 +848,9 @@ $staffData = json_encode($performance_values);
                                     <span style="font-weight: bold;">HOD Remarks : </span>${item.hod_remarks || '-'}
                                 </div>
                             `;
-                            var ratingShown = (item.get_score !== undefined && item.get_score !== null && item.get_score !== '') ? item.get_score : '';
-                            kraTableRows += '<tr>' +
-                                '<td><b>' + pedmaEscapeText(item.name) + '</b>' +
-                                    (item.description ? '<br><span class="text-muted">' + pedmaEscapeText(item.description) + '</span>' : '') +
-                                '</td>' +
-                                '<td>' + pedmaReadonlyRating(ratingShown) + '</td>' +
-                                '<td>' + pedmaEscapeText(item.comment || '-') + '</td>' +
-                                '<td>' + pedmaEscapeText(item.hr_remarks || '-') + '</td>' +
-                                '<td>' + pedmaEscapeText(item.hod_remarks || '-') + '</td>' +
-                                '</tr>';
                         }
+
+                        kraTableRows += pedmaEvaluationTableRowHtml(item);
 
                         cardHTML += `
                                             </div>

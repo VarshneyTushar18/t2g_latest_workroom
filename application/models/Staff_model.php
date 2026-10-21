@@ -2968,6 +2968,12 @@ class Staff_model extends App_Model
             return false;
         }
 
+        if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
+            log_activity('PEDMA email blocked (local/disabled): ' . $subject . ' → ' . implode(', ', $to));
+
+            return true;
+        }
+
         $from_email = get_option('smtp_email');
         if (empty($from_email) || !filter_var($from_email, FILTER_VALIDATE_EMAIL)) {
             $from_email = 'noreply@t2gworkroom.com';
@@ -3303,6 +3309,24 @@ class Staff_model extends App_Model
             $this->db->query('ALTER TABLE `tblstaff_performance`
                 ADD `feedback_accepted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `staff_comment`,
                 ADD `feedback_accepted_at` DATETIME NULL DEFAULT NULL AFTER `feedback_accepted`');
+        }
+    }
+
+    public function ensure_pedma_overall_feedback_columns()
+    {
+        if (!$this->db->table_exists('tblstaff_performance')) {
+            return;
+        }
+
+        $table = 'tblstaff_performance';
+        if (!$this->db->field_exists('overall_manager_feedback', $table)) {
+            $this->db->query('ALTER TABLE `' . $table . '` ADD `overall_manager_feedback` TEXT NULL AFTER `overall_feedback`');
+        }
+        if (!$this->db->field_exists('overall_hod_feedback', $table)) {
+            $this->db->query('ALTER TABLE `' . $table . '` ADD `overall_hod_feedback` TEXT NULL AFTER `overall_manager_feedback`');
+        }
+        if (!$this->db->field_exists('overall_hr_feedback', $table)) {
+            $this->db->query('ALTER TABLE `' . $table . '` ADD `overall_hr_feedback` TEXT NULL AFTER `overall_hod_feedback`');
         }
     }
 

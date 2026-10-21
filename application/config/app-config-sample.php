@@ -86,3 +86,10 @@ define('APP_SESSION_COOKIE_SAME_SITE', 'Lax');
  * Enables CSRF Protection
  */
 define('APP_CSRF_PROTECTION', true);
+
+/**
+ * Email on local/staging: blocked automatically via application/config/app_email_policy.php
+ * when config.php loads. To force off/on, add to app-config-local.php:
+ *   define('APP_FORCE_DISABLE_EMAIL', true);
+ *   define('APP_FORCE_ENABLE_EMAIL', true);
+ */

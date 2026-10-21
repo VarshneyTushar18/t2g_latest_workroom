@@ -187,6 +187,29 @@ class Cron extends App_Controller
 		$this->load->model('cron_model');
 		$this->cron_model->send_daily_late_arrival_report();
 	}
+
+	/**
+	 * Daily Snapshot not logged-in report (default: yesterday). Manual/scheduled run any time.
+	 * Example: /cron/send_daily_snapshot_not_logged_in_report/YOUR_CRON_KEY
+	 * Optional date segment: .../2026-10-20
+	 */
+	public function send_daily_snapshot_not_logged_in_report($key = '', $reportDate = '', $recipient = '')
+	{
+		if (defined('APP_CRON_KEY') && APP_CRON_KEY != '' && APP_CRON_KEY != $key) {
+			header('HTTP/1.0 401 Unauthorized');
+			die('Passed cron job key is not correct.');
+		}
+
+		$this->load->model('cron_model');
+		$date = ($reportDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $reportDate)) ? $reportDate : null;
+		$opts = ['force' => true];
+		if ($recipient !== '' && filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+			$opts['recipient'] = $recipient;
+		}
+		$result = $this->cron_model->send_daily_snapshot_not_logged_in_report($date, $opts);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
 	public function send_monthly_late_arrival_summary($year = null, $month = null){
 		$this->load->model('cron_model');
 		$this->cron_model->send_monthly_late_arrival_summary(

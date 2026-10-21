@@ -76,12 +76,16 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 $active_group = 'default';
 $query_builder = TRUE;
 
+$api_is_local = isset($_SERVER['HTTP_HOST'])
+	&& (stripos($_SERVER['HTTP_HOST'], 'localhost') !== false || stripos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false);
+
 $db['default'] = array(
 	'dsn'	=> '',
-	'hostname' => 'localhost',
+	'hostname' => $api_is_local ? '127.0.0.1' : 'localhost',
+	'port'     => $api_is_local ? 3300 : 3306,
 	'username' => 'root',
-	'password' => 'Testpassword@123',
-	'database' => 'production_crm',
+	'password' => $api_is_local ? '' : 'Testpassword@123',
+	'database' => $api_is_local ? 'new_workroom' : 'production_crm',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,

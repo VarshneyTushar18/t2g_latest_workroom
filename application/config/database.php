@@ -176,6 +176,8 @@ $db['default'] = array_merge([
 
     'hostname'     => APP_DB_HOSTNAME,
 
+    'port'         => defined('APP_DB_PORT') ? APP_DB_PORT : 3306,
+
     'username'     => APP_DB_USERNAME,
 
     'password'     => APP_DB_PASSWORD,
