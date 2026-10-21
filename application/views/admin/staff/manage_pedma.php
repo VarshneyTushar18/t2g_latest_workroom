@@ -288,6 +288,223 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
         vertical-align: middle;
     }
 
+    .pedma-top-performers-card .card-body {
+        padding: 0;
+        background: #f8fafc;
+    }
+
+    .pedma-top-performers-table {
+        width: 100%;
+        margin: 0;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+        background: transparent;
+    }
+
+    .pedma-top-performers-table thead tr {
+        background: #141e46;
+        color: #fff;
+    }
+
+    .pedma-top-performers-table thead th {
+        border: none !important;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 12px 14px;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .pedma-top-performers-table thead th:first-child {
+        border-top-left-radius: 8px;
+        border-bottom-left-radius: 8px;
+    }
+
+    .pedma-top-performers-table thead th:last-child {
+        border-top-right-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
+
+    .pedma-top-performers-table thead th i {
+        margin-right: 6px;
+        opacity: 0.95;
+    }
+
+    .pedma-top-performers-table tbody tr {
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+
+    .pedma-top-performers-table tbody tr.pedma-top-row--gold {
+        background: linear-gradient(90deg, #fffbeb 0%, #fff 55%);
+        box-shadow: 0 2px 8px rgba(234, 179, 8, 0.15);
+    }
+
+    .pedma-top-performers-table tbody td {
+        border: none !important;
+        padding: 14px 14px;
+        vertical-align: middle;
+        font-size: 14px;
+        color: #1e293b;
+    }
+
+    .pedma-top-performers-table tbody td:first-child {
+        border-top-left-radius: 8px;
+        border-bottom-left-radius: 8px;
+    }
+
+    .pedma-top-performers-table tbody td:last-child {
+        border-top-right-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }
+
+    .pedma-top-performers-table tbody tr.pedma-top-row--gold td:first-child {
+        box-shadow: inset 3px 0 0 #eab308;
+    }
+
+    .pedma-top-medal {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        font-size: 18px;
+    }
+
+    .pedma-top-medal--1 {
+        background: linear-gradient(145deg, #fde047, #eab308);
+        color: #713f12;
+        box-shadow: 0 2px 6px rgba(234, 179, 8, 0.45);
+    }
+
+    .pedma-top-medal--2 {
+        background: linear-gradient(145deg, #e2e8f0, #94a3b8);
+        color: #334155;
+        box-shadow: 0 2px 5px rgba(100, 116, 139, 0.35);
+    }
+
+    .pedma-top-medal--3 {
+        background: linear-gradient(145deg, #fdba74, #ea580c);
+        color: #431407;
+        box-shadow: 0 2px 5px rgba(234, 88, 12, 0.35);
+    }
+
+    .pedma-top-rank-num {
+        display: inline-block;
+        min-width: 28px;
+        text-align: center;
+        font-weight: 600;
+        color: #64748b;
+        font-size: 15px;
+    }
+
+    .pedma-top-name {
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .pedma-top-dept {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pedma-top-dept--data {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .pedma-top-dept--software {
+        background: #ede9fe;
+        color: #6d28d9;
+    }
+
+    .pedma-top-dept--default {
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+
+    .pedma-top-score {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 140px;
+    }
+
+    .pedma-top-score-bar {
+        flex: 1 1 auto;
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        min-width: 72px;
+    }
+
+    .pedma-top-score-bar > span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #22c55e, #16a34a);
+        border-radius: 999px;
+        min-width: 0;
+    }
+
+    .pedma-top-score-val {
+        flex: 0 0 auto;
+        font-weight: 600;
+        font-size: 13px;
+        color: #334155;
+        white-space: nowrap;
+    }
+
+    .pedma-top-grade {
+        display: inline-block;
+        min-width: 36px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .pedma-top-grade--aplus,
+    .pedma-top-grade--a {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+    .pedma-top-grade--b {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .pedma-top-grade--c {
+        background: #fef9c3;
+        color: #a16207;
+    }
+
+    .pedma-top-grade--d {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .pedma-top-performers-table .pedma-top-empty td {
+        text-align: center;
+        color: #64748b;
+        padding: 24px;
+        background: #fff;
+        border-radius: 8px;
+    }
+
     #pedmaGradeTable .hr-notes-cell {
         max-width: 320px;
         white-space: normal;
@@ -397,25 +614,25 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                     </div>
                     <div class="row" id="pedmaTopEmployeesWrap" style="margin-bottom: 20px;">
                         <div class="col-md-12 p-0">
-                            <div class="card">
+                            <div class="card pedma-top-performers-card">
                                 <div class="card-title" style="display:flex;justify-content:space-between;align-items:center; gap:10px;">
-                                    <span>Top Performers — <span id="pedmaTopMonthLabel"><?php echo date('F Y'); ?></span></span>
+                                    <span><i class="fa fa-trophy" style="margin-right:6px;opacity:0.9;"></i>Top Performers — <span id="pedmaTopMonthLabel"><?php echo date('F Y'); ?></span></span>
                                     <span id="pedmaTopEmployeesCount" style="font-weight:500; opacity:0.9;"></span>
                                 </div>
-                                <div class="card-body" style="padding:0; overflow-x:auto;">
-                                    <table class="table table-bordered table-striped" id="pedmaTopEmployeesTable" style="margin:0;">
+                                <div class="card-body" style="padding:12px 12px 4px; overflow-x:auto;">
+                                    <table class="pedma-top-performers-table" id="pedmaTopEmployeesTable">
                                         <thead>
                                             <tr>
-                                                <th style="width:70px;">Rank</th>
-                                                <th>Emp ID</th>
-                                                <th>Emp Name</th>
-                                                <th>Department</th>
-                                                <th>Score</th>
-                                                <th>Grade</th>
+                                                <th style="width:72px;"><i class="fa fa-trophy"></i>Rank</th>
+                                                <th style="width:90px;"><i class="fa fa-id-badge"></i>Emp ID</th>
+                                                <th><i class="fa fa-user"></i>Employee Name</th>
+                                                <th><i class="fa fa-building"></i>Department</th>
+                                                <th style="min-width:180px;"><i class="fa fa-star"></i>Score</th>
+                                                <th style="width:90px;"><i class="fa fa-certificate"></i>Grade</th>
                                             </tr>
                                         </thead>
                                         <tbody id="pedmaTopEmployeesBody">
-                                            <tr><td colspan="6" class="text-center">Loading top employees...</td></tr>
+                                            <tr class="pedma-top-empty"><td colspan="6">Loading top employees...</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -966,13 +1183,72 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             return empVal !== '' && empVal !== 'Filter By Employee';
         }
 
+        function pedmaTopEscapeHtml(value) {
+            return $('<div/>').text(value == null ? '' : value).html();
+        }
+
+        function pedmaTopDeptMeta(deptName) {
+            var name = (deptName || '').toString();
+            var lower = name.toLowerCase();
+            var variant = 'default';
+            var icon = 'fa-building';
+            if (lower.indexOf('software') !== -1 || lower.indexOf('dev') !== -1 || lower.indexOf('engineering') !== -1) {
+                variant = 'software';
+                icon = 'fa-code';
+            } else if (lower.indexOf('data') !== -1) {
+                variant = 'data';
+                icon = 'fa-database';
+            }
+            return { variant: variant, icon: icon, label: name || '—' };
+        }
+
+        function pedmaTopGradeClass(grade) {
+            var g = (grade || '').toString().toUpperCase();
+            if (g === 'A+') return 'pedma-top-grade--aplus';
+            if (g === 'A') return 'pedma-top-grade--a';
+            if (g === 'B') return 'pedma-top-grade--b';
+            if (g === 'C') return 'pedma-top-grade--c';
+            if (g === 'D') return 'pedma-top-grade--d';
+            return 'pedma-top-grade--b';
+        }
+
+        function pedmaTopRankHtml(rank) {
+            var r = parseInt(rank, 10) || 0;
+            if (r === 1) {
+                return '<span class="pedma-top-medal pedma-top-medal--1" title="Rank 1"><i class="fa fa-trophy"></i></span>';
+            }
+            if (r === 2) {
+                return '<span class="pedma-top-medal pedma-top-medal--2" title="Rank 2"><i class="fa fa-trophy"></i></span>';
+            }
+            if (r === 3) {
+                return '<span class="pedma-top-medal pedma-top-medal--3" title="Rank 3"><i class="fa fa-trophy"></i></span>';
+            }
+            return '<span class="pedma-top-rank-num">' + pedmaTopEscapeHtml(r) + '</span>';
+        }
+
+        function pedmaTopScoreHtml(score) {
+            var raw = (score == null || score === '') ? '0' : String(score);
+            var pct = parseFloat(raw);
+            if (isNaN(pct)) pct = 0;
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            var label = raw.indexOf('%') !== -1 ? raw : raw + '%';
+            return '<div class="pedma-top-score">' +
+                '<div class="pedma-top-score-bar"><span style="width:' + pct + '%"></span></div>' +
+                '<span class="pedma-top-score-val">' + pedmaTopEscapeHtml(label) + '</span></div>';
+        }
+
+        function pedmaTopEmptyRow(message) {
+            return '<tr class="pedma-top-empty"><td colspan="6">' + pedmaTopEscapeHtml(message) + '</td></tr>';
+        }
+
         function loadPedmaTopEmployees() {
             var month = ($('#pedma_top_month').val() || '').toString();
             if (!/^\d{4}-\d{2}$/.test(month)) {
                 return;
             }
 
-            $('#pedmaTopEmployeesBody').html('<tr><td colspan="6" class="text-center">Loading top employees...</td></tr>');
+            $('#pedmaTopEmployeesBody').html(pedmaTopEmptyRow('Loading top employees...'));
             $.ajax({
                 url: "<?php echo base_url('admin/Staff/manage_pedma_top_employees'); ?>",
                 type: 'post',
@@ -982,29 +1258,40 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                     var body = $('#pedmaTopEmployeesBody');
                     body.empty();
                     if (!resp || !resp.success) {
-                        body.html('<tr><td colspan="6" class="text-center">Unable to load top employees.</td></tr>');
+                        body.html(pedmaTopEmptyRow('Unable to load top employees.'));
                         return;
                     }
                     $('#pedmaTopMonthLabel').text(resp.month_label || month);
                     var rows = resp.rows || [];
                     $('#pedmaTopEmployeesCount').text(rows.length + ' employee(s)');
                     if (!rows.length) {
-                        body.html('<tr><td colspan="6" class="text-center">No PEDMA scores for this month.</td></tr>');
+                        body.html(pedmaTopEmptyRow('No PEDMA scores for this month.'));
                         return;
                     }
                     rows.forEach(function (row) {
+                        var rank = parseInt(row.rank, 10) || 0;
                         var tr = $('<tr></tr>');
-                        tr.append($('<td></td>').text(row.rank || ''));
+                        if (rank === 1) {
+                            tr.addClass('pedma-top-row--gold');
+                        }
+                        tr.append($('<td class="text-center"></td>').html(pedmaTopRankHtml(rank)));
                         tr.append($('<td></td>').text(row.emp_id || ''));
-                        tr.append($('<td></td>').text(row.emp_name || ''));
-                        tr.append($('<td></td>').text(row.department || '-'));
-                        tr.append($('<td></td>').html('<b>' + (row.score || '-') + '%</b>'));
-                        tr.append($('<td></td>').text(row.grade || '-'));
+                        tr.append($('<td></td>').html('<span class="pedma-top-name">' + pedmaTopEscapeHtml(row.emp_name || '') + '</span>'));
+                        var dept = pedmaTopDeptMeta(row.department);
+                        tr.append($('<td></td>').html(
+                            '<span class="pedma-top-dept pedma-top-dept--' + dept.variant + '" title="' + pedmaTopEscapeHtml(dept.label) + '">' +
+                            '<i class="fa ' + dept.icon + '"></i> ' + pedmaTopEscapeHtml(dept.label) + '</span>'
+                        ));
+                        tr.append($('<td></td>').html(pedmaTopScoreHtml(row.score)));
+                        var grade = (row.grade || '—').toString();
+                        tr.append($('<td></td>').html(
+                            '<span class="pedma-top-grade ' + pedmaTopGradeClass(grade) + '">' + pedmaTopEscapeHtml(grade) + '</span>'
+                        ));
                         body.append(tr);
                     });
                 },
                 error: function () {
-                    $('#pedmaTopEmployeesBody').html('<tr><td colspan="6" class="text-center">Unable to load top employees.</td></tr>');
+                    $('#pedmaTopEmployeesBody').html(pedmaTopEmptyRow('Unable to load top employees.'));
                 }
             });
         }

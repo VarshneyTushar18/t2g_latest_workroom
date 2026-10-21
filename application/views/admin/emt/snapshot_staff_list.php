@@ -67,7 +67,7 @@
                                                 'autoload' => '1',
                                             ], '', '&', PHP_QUERY_RFC3986);
                                             ?>
-                                            <a class="btn btn-primary btn-xs" href="<?php echo html_escape(($monitoring_url ?? admin_url('Emt/monitoring')) . '?' . $galleryQuery); ?>">Open gallery</a>
+                                            <a class="btn btn-primary btn-xs" href="<?php echo html_escape(($monitoring_url ?? admin_url('Emt/monitoring')) . '?' . $galleryQuery); ?>">Monitoring</a>
                                             <?php } elseif (empty($row['screenshot_file_id'])) { ?>
                                             —
                                             <?php } ?>
