@@ -13,7 +13,7 @@ $staffData = json_encode($performance_values);
     }
 
     .card-title {
-        background-color: #141e46;
+        background-color:rgb(42, 116, 0);
         color: #fff;
         font-size: 0.9rem;
         margin: 0;
@@ -596,6 +596,7 @@ $staffData = json_encode($performance_values);
                                             <th>Score</th>
                                             <th>HOD Remarks</th>
                                         </tr>
+
                                     </thead>
                                     <tbody>`;
 

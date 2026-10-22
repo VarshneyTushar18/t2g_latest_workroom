@@ -757,8 +757,7 @@ class Staff_model extends App_Model
     }
 
     /**
-     * For PEDMA Evaluation: managers only see assigned team (team_manage).
-     * Super Admin / Admin keep department-wide list.
+     * PEDMA employee dropdown: department roster (access enforced on department + staff in controller).
      */
     public function filter_staff_for_pedma_evaluation($staff_list = [])
     {
@@ -766,21 +765,7 @@ class Staff_model extends App_Model
             return [];
         }
 
-        if (is_admin() || is_super_admin() || is_admin2()) {
-            return $staff_list;
-        }
-
-        $manager_id = (int) get_staff_user_id();
-        $filtered = [];
-
-        foreach ($staff_list as $staff) {
-            $team_manage = isset($staff['team_manage']) ? (int) $staff['team_manage'] : 0;
-            if ($team_manage === $manager_id) {
-                $filtered[] = $staff;
-            }
-        }
-
-        return $filtered;
+        return $staff_list;
     }
 
     // this will change column name of staffid to staff_id

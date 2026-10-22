@@ -812,7 +812,7 @@ class Staff extends AdminController
 
         $this->load->model('departments_model');
 
-        $data['departments'] = $this->departments_model->get_staff_departments();
+        $data['departments'] = pedma_departments_for_viewer();
         $isManager = $this->db->query('SELECT manageleave from tblstaff_info WHERE staffid = ' . get_staff_user_id())->result_array();
 
         // Employee list is loaded after department is selected on the evaluation page.
@@ -832,12 +832,17 @@ class Staff extends AdminController
             show_404();
         }
 
+        $panelStaffId = (int) $this->input->post('staffid');
+        if ($panelStaffId < 1 || !pedma_staff_id_in_viewer_scope($panelStaffId)) {
+            show_404();
+        }
+
         $this->load->model('departments_model');
         $data = [
             'pedma_panel_partial' => true,
-            'panel_staffid'       => $this->input->post('staffid'),
+            'panel_staffid'       => $panelStaffId,
             'panel_month'         => $this->input->post('performance_month'),
-            'departments'         => $this->departments_model->get_staff_departments(),
+            'departments'         => pedma_departments_for_viewer(),
             'staffs'              => [],
         ];
 
@@ -852,7 +857,7 @@ class Staff extends AdminController
 
         $this->load->model('departments_model');
 
-        $data['departments'] = $this->departments_model->get_staff_departments();
+        $data['departments'] = pedma_departments_for_viewer();
         $isManager = $this->db->query('SELECT manageleave from tblstaff_info WHERE staffid = ' . get_staff_user_id())->result_array();
 
         // if ($isManager[0]['manageleave'] == 1) {
@@ -1023,7 +1028,7 @@ class Staff extends AdminController
 
 		$staff_id = $this->staff_model->get_kra_based_on_department();
 
-        $data['result'] = $this->departments_model->get_staff_departments();
+        $data['result'] = pedma_departments_for_viewer();
         $data['pedma_comment_sections'] = pedma_comment_sections();
         $data['pedma_can_edit_all_eval'] = pedma_can_edit_all_pedma_eval();
         $this->load->view('admin/staff/manage_pedma', $data);
@@ -1035,10 +1040,11 @@ class Staff extends AdminController
             access_denied('pedma');
         }
 
-		$id = $this->input->post('data');
-		//$id = get_staff_user_id(); 
-		
-        // $performance = $this->db->get_where('tblstaff_performance', ['staffid' => $id]);
+		$id = (int) $this->input->post('data');
+        if ($id < 1 || !pedma_staff_id_in_viewer_scope($id)) {
+            echo json_encode([]);
+            return;
+        }
 		
         $performance = $this->db->from('tblstaff_performance')->where('staffid', $id)->where('status !=',0)->order_by('date_created')->get();
 
@@ -1103,7 +1109,13 @@ class Staff extends AdminController
             return;
         }
 
+        if ($department !== '' && $department !== null && !pedma_department_id_allowed($department)) {
+            echo json_encode(['success' => false, 'message' => 'Access denied', 'rows' => []]);
+            return;
+        }
+
         $rows = $this->staff_model->get_pedma_rows_by_grade($grade, $from, $to, $department, $staffActive);
+        $rows = pedma_filter_rows_by_viewer_scope($rows);
 
         $avg = 0;
         if (count($rows)) {
@@ -1139,6 +1151,7 @@ class Staff extends AdminController
         }
 
         $rows = $this->staff_model->get_pedma_rows_by_grade('', $month, $month, '', '1', true);
+        $rows = pedma_filter_rows_by_viewer_scope($rows);
         $byStaff = [];
         foreach ($rows as $row) {
             $sid = (int) $row['staffid'];
@@ -1191,6 +1204,11 @@ class Staff extends AdminController
 
         if ($staffid <= 0) {
             echo json_encode(['success' => false, 'message' => 'Invalid employee.']);
+            return;
+        }
+
+        if (!pedma_staff_id_in_viewer_scope($staffid)) {
+            echo json_encode(['success' => false, 'message' => 'Access denied']);
             return;
         }
 
@@ -1425,7 +1443,15 @@ class Staff extends AdminController
     // get staff data in ajax
     public function get_staff_json()
     {
-        $staffId = $this->input->post('staffid');
+        $staffId = (int) $this->input->post('staffid');
+        if ($staffId < 1) {
+            echo json_encode([]);
+            return;
+        }
+        if ($staffId !== (int) get_staff_user_id() && !pedma_staff_id_in_viewer_scope($staffId)) {
+            echo json_encode([]);
+            return;
+        }
 
         $data[] = $this->staff_model->get('', ['active' => 1, 'staffid' => $staffId]);
         $data[] = $this->staff_model->get_department_by_staffid_staff_model($staffId);
@@ -1442,7 +1468,11 @@ class Staff extends AdminController
 
         $this->staff_model->ensure_pedma_overall_feedback_columns();
 
-        $staffid =  $this->input->post('staffid');
+        $staffid = (int) $this->input->post('staffid');
+        if ($staffid < 1 || !pedma_staff_id_in_viewer_scope($staffid)) {
+            access_denied('pedma');
+        }
+
         $date_created =  $this->input->post('performance_month');
         $type =  $this->input->post('kraOption');
         $kraData1 =  $this->input->post('kraData1');
@@ -1556,9 +1586,14 @@ class Staff extends AdminController
     public function get_previous_month_custom_kra_data()
     {
         $search_date = $this->input->post('date');
-        $staff_id = $this->input->post('staffid');
+        $staff_id = (int) $this->input->post('staffid');
 
-        if (empty($search_date) || empty($staff_id)) {
+        if (empty($search_date) || $staff_id < 1) {
+            echo json_encode(null);
+            return;
+        }
+
+        if (!pedma_staff_id_in_viewer_scope($staff_id)) {
             echo json_encode(null);
             return;
         }
@@ -1576,19 +1611,18 @@ class Staff extends AdminController
 
     public function get_staff_department_json()
     {
-        $departmentid = $this->input->post('department');
+        $departmentid = (int) $this->input->post('department');
+        if (!pedma_department_id_allowed($departmentid)) {
+            echo json_encode([]);
+            return;
+        }
+
         $active = $this->input->post('staff_active');
         if ($active === null || $active === '') {
             $active = 1;
         }
         $staffs = $this->staff_model->get_staff_based_on_department($departmentid, $active);
-
-        // Keep department employees visible. Prefer assigned team when available,
-        // but fall back to full department list so dropdown is never empty.
-        $assigned = $this->staff_model->filter_staff_for_pedma_evaluation($staffs);
-        if (count($assigned) > 0) {
-            $staffs = $assigned;
-        }
+        $staffs = $this->staff_model->filter_staff_for_pedma_evaluation($staffs);
 
         echo json_encode(array_values($staffs));
     }
@@ -1596,9 +1630,14 @@ class Staff extends AdminController
     public function get_staff_performance_month_and_id()
     {
         $search_date = $this->input->post('month');
-        $staff_id = $this->input->post('staffid');
+        $staff_id = (int) $this->input->post('staffid');
 
-        if (empty($search_date) || empty($staff_id)) {
+        if (empty($search_date) || $staff_id < 1) {
+            echo json_encode(null);
+            return;
+        }
+
+        if (!pedma_staff_id_in_viewer_scope($staff_id)) {
             echo json_encode(null);
             return;
         }
@@ -1632,7 +1671,7 @@ class Staff extends AdminController
     public function get_kra_based_on_department_json(){
         $departmentid = (int) $this->input->post('department');
 
-        if ($departmentid <= 0) {
+        if ($departmentid <= 0 || !pedma_department_id_allowed($departmentid)) {
             echo json_encode([
                 'default_kra' => [],
                 'custom_kra' => [],
@@ -1655,7 +1694,17 @@ class Staff extends AdminController
     }
 
     public function update_score_by_fatal_error(){
-        $staff_id = $this->input->post('staffid');
+        if (!can_open_pedma_evaluation()) {
+            echo json_encode(['status' => false]);
+            return;
+        }
+
+        $staff_id = (int) $this->input->post('staffid');
+        if ($staff_id < 1 || !pedma_staff_id_in_viewer_scope($staff_id)) {
+            echo json_encode(['status' => false]);
+            return;
+        }
+
         $score = $this->input->post('scoreAdjustment');
         $months = $this->input->post('selectedMonths');
         $comment = $this->input->post('fatal_comment');
@@ -1678,7 +1727,17 @@ class Staff extends AdminController
     }
     
     public function update_score_by_add_on(){
-        $staff_id = $this->input->post('staffid');
+        if (!can_open_pedma_evaluation()) {
+            echo json_encode(['status' => false]);
+            return;
+        }
+
+        $staff_id = (int) $this->input->post('staffid');
+        if ($staff_id < 1 || !pedma_staff_id_in_viewer_scope($staff_id)) {
+            echo json_encode(['status' => false]);
+            return;
+        }
+
         $score = $this->input->post('scoreAdjustment');
         $months = $this->input->post('selectedMonths');
         $comment = $this->input->post('addOn_comment');

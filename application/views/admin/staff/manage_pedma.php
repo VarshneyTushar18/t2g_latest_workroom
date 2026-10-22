@@ -18,7 +18,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
     }
 
     .card-title {
-        background-color: #141e46;
+        background-color:rgb(42, 116, 0);
         color: #fff;
         font-size: 0.9rem;
         margin: 0;
@@ -737,7 +737,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                         </div>
                     </div>
                     <?php } ?>
-                    <div class="row" id="twoChart">
+                    <div class="row" id="twoChart" style="display:none;">
                         <!-- KRA Performance Chart Card -->
                         <div class="col-md-8 mb-4 p-i-4">
                             <div class="card">
@@ -757,7 +757,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                             </div>
                         </div>
                     </div>
-                    <div class="row">
+                    <div class="row" id="pedmaKraCardsWrap" style="display:none;">
                         <div class="col-md-12 p-0">
                             <div class="row g-2" style="row-gap: 10px; margin:0;" id="kra-card-data"></div>
                         </div>
@@ -802,7 +802,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                             </div>
                         </div>
                     </div>
-                    <div class="row" id="pedmaDeptSummaryFeedbackRow">
+                    <div class="row" id="pedmaDeptSummaryFeedbackRow" style="display:none;">
                         <div class="col-md-12 p-0">
                             <div class="card">
                                 <div class="card-title">Summary</div>
@@ -810,7 +810,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                             </div>
                         </div>
                     </div>
-                    <div class="row tw-my-5">
+                    <div class="row tw-my-5" id="pedmaYearSection" style="display:none;">
                         <div class="col p-0">
                             <h4 class="tw-mt-0 tw-font-semibold tw-text-lg tw-flex tw-items-center">
                                 PEDMA Scores for Year &nbsp;<span class="selected_year"></span>
@@ -1296,6 +1296,35 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             });
         }
 
+        function pedmaClearChartsAndCards() {
+            $('#twoChart').hide();
+            $('#pedmaKraCardsWrap').hide();
+            $('#kra-card-data').empty();
+            $('#kraDoughnutLegend').empty();
+            if (typeof kraChart !== 'undefined' && kraChart) {
+                kraChart.destroy();
+                kraChart = null;
+            }
+            if (typeof kraDoughnutChart !== 'undefined' && kraDoughnutChart) {
+                kraDoughnutChart.destroy();
+                kraDoughnutChart = null;
+            }
+        }
+
+        function pedmaResetReportPanel() {
+            pedmaClearChartsAndCards();
+            $('#pedmaGradeResultsWrap').hide();
+            $('#pedmaGradeTableBody').empty();
+            $('#pedmaDeptSummaryFeedbackRow').hide();
+            $('#pedmaYearSection').hide();
+            $('#overall_feedback').empty();
+            $('#pedmaExportMeta').empty();
+            if (!isEmployeeSelected()) {
+                $('#avg_score').html('');
+                pedmaHideEmployeeDetailBlock();
+            }
+        }
+
         function loadPedmaListResults() {
             if (!$('#pedmaGradeResultsWrap').length) {
                 return;
@@ -1309,8 +1338,12 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             // Show list when: grade selected, OR department selected without a single employee
             var showDeptAll = department && !isEmployeeSelected();
             if (!grade && !showDeptAll) {
-                $('#pedmaGradeResultsWrap').hide();
-                $('#pedmaGradeTableBody').empty();
+                if (!isEmployeeSelected()) {
+                    pedmaResetReportPanel();
+                } else {
+                    $('#pedmaGradeResultsWrap').hide();
+                    $('#pedmaGradeTableBody').empty();
+                }
                 return;
             }
 
@@ -1378,6 +1411,8 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             if (!rows.length) {
                 body.html('<tr><td colspan="' + colCount + '" class="text-center">No PEDMA data found for the selected filters.</td></tr>');
                 $('#pedmaGradeResultsWrap').show();
+                pedmaClearChartsAndCards();
+                $('#pedmaDeptSummaryFeedbackRow').hide();
                 $('#avg_score').html('-');
                 setPedmaDaysOfDataRange(getPedmaSelectedRange().from, getPedmaSelectedRange().to, false);
                 return;
@@ -1430,7 +1465,14 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             var labels = list.map(function (r) { return r.emp_name; });
             var scores = list.map(function (r) { return parseFloat(r.score) || 0; });
 
+            if (!list.length) {
+                pedmaClearChartsAndCards();
+                return;
+            }
+
             $('#twoChart').show();
+            $('#pedmaKraCardsWrap').show();
+            $('#pedmaDeptSummaryFeedbackRow').show();
             if (kraChart) kraChart.destroy();
             if (kraDoughnutChart) kraDoughnutChart.destroy();
 
@@ -1736,6 +1778,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                 $('#pedma_top_month').val(month);
             }
             loadPedmaTopEmployees();
+            pedmaResetReportPanel();
             $('#pedma_top_month').on('change', function () {
                 loadPedmaTopEmployees();
             });
@@ -1875,8 +1918,9 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                 setPedmaDaysOfDataRange(from, to, false);
                 $('#overall_feedback').html('-');
                 $('#feedback_ack_manager_status').hide().empty();
-                $('#twoChart').hide();
-                $('#kraDoughnutLegend').empty();
+                pedmaClearChartsAndCards();
+                $('#pedmaDeptSummaryFeedbackRow').hide();
+                $('#pedmaYearSection').hide();
                 $('#pedmaExportMeta').empty();
                 pedmaHideEmployeeDetailBlock();
                 return;
@@ -1893,13 +1937,21 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                 setPedmaDaysOfDataRange(from, to, false);
                 $('#overall_feedback').html('-');
                 $('#feedback_ack_manager_status').hide().empty();
-                $('#twoChart').hide();
-                $('#kraDoughnutLegend').empty();
+                pedmaClearChartsAndCards();
+                $('#pedmaDeptSummaryFeedbackRow').hide();
+                $('#pedmaYearSection').hide();
                 $('#pedmaExportMeta').empty();
                 pedmaHideEmployeeDetailBlock();
                 return;
             } else {
                 $('#twoChart').show();
+                $('#pedmaKraCardsWrap').show();
+                $('#pedmaDeptSummaryFeedbackRow').show();
+                if (isEmployeeSelected()) {
+                    $('#pedmaYearSection').show();
+                } else {
+                    $('#pedmaYearSection').hide();
+                }
                 var selectedJoinDate = (filteredData[0] && filteredData[0].staff_join_date) ? filteredData[0].staff_join_date : '';
                 setPedmaDaysForEmployeeJoinDate(from, to, selectedJoinDate, true);
                 var empLabel = ($('#designationFilter option:selected').text() || '').trim();

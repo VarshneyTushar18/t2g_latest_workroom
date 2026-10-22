@@ -23,11 +23,16 @@ class UtilizationReport extends AdminController
 		$this->load->view('admin/utilization_report/manage', $data);
     }
 	public function getDeptemp()
-    {	
-		$deptid = $_POST['department'];
-	
+    {
+		$this->load->helper('custom');
+		$deptid = (int) ($this->input->post('department') ?? 0);
+		if (!pedma_department_id_allowed($deptid)) {
+			echo json_encode([]);
+			return;
+		}
+
 		$data['emp'] = $this->utilization_model->getDepartmentemp($deptid);
-	
+
 		echo json_encode($data['emp']);
     }
 	public function getFilterData()

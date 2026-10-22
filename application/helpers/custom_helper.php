@@ -1205,7 +1205,7 @@ function is_sales() {
 }
 
 /**
- * Snapshot screenshots: admin / super admin see all departments; others see only their own department(s).
+ * Snapshot / PEDMA: Admin, Super Admin, and HOD see all departments; managers (and others) see only their department(s).
  */
 function snapshot_can_view_all_departments($staff_id = '')
 {
@@ -1213,7 +1213,11 @@ function snapshot_can_view_all_departments($staff_id = '')
         $staff_id = get_staff_user_id();
     }
 
-    return is_admin($staff_id) || is_super_admin() || is_admin2();
+    if (is_admin($staff_id) || is_super_admin() || is_admin2()) {
+        return true;
+    }
+
+    return pedma_is_hod_role($staff_id);
 }
 
 /**
@@ -1314,6 +1318,61 @@ function snapshot_staff_id_in_viewer_scope($targetStaffId, $staff_id = '')
     }
 
     return false;
+}
+
+/**
+ * Departments the current user may pick in PEDMA / Snapshot filters.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function pedma_departments_for_viewer($staff_id = '')
+{
+    $CI = &get_instance();
+    $CI->load->model('departments_model');
+
+    return filter_snapshot_departments_for_viewer($CI->departments_model->get(), $staff_id);
+}
+
+function pedma_department_id_allowed($departmentId, $staff_id = '')
+{
+    $departmentId = (int) $departmentId;
+    if ($departmentId <= 0) {
+        return false;
+    }
+
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return true;
+    }
+
+    $scope = snapshot_viewer_department_ids($staff_id);
+
+    return $scope !== [] && in_array($departmentId, $scope, true);
+}
+
+/**
+ * @param array<int, array<string, mixed>> $rows PEDMA list rows (must include staffid)
+ * @return array<int, array<string, mixed>>
+ */
+function pedma_filter_rows_by_viewer_scope(array $rows, $staff_id = '')
+{
+    if (snapshot_can_view_all_departments($staff_id)) {
+        return $rows;
+    }
+
+    $out = [];
+    foreach ($rows as $row) {
+        $sid = (int) ($row['staffid'] ?? 0);
+        if ($sid > 0 && snapshot_staff_id_in_viewer_scope($sid, $staff_id)) {
+            $out[] = $row;
+        }
+    }
+
+    return $out;
+}
+
+function pedma_staff_id_in_viewer_scope($targetStaffId, $staff_id = '')
+{
+    return snapshot_staff_id_in_viewer_scope($targetStaffId, $staff_id);
 }
 
 /**

@@ -428,6 +428,20 @@
         letter-spacing: 0.04em;
     }
 
+    .pedma-kra-sidebar .kra-list-item.pedma-kra-locked {
+        opacity: 0.85;
+    }
+
+    .pedma-kra-sidebar .kra-list-item.pedma-kra-locked input[type="checkbox"] {
+        cursor: not-allowed;
+    }
+
+    .pedma-rating-group input[disabled] + *,
+    .pedma-rating-group input[disabled] {
+        cursor: not-allowed;
+        opacity: 0.75;
+    }
+
     .pedma-kra-sidebar .kra-list-item {
         display: flex;
         align-items: flex-start;
@@ -734,6 +748,7 @@
     var pedmaDefaultKras = [];
     var pedmaCustomKras = [];
     var pedmaScoreMap = {};
+    var pedmaPersistedByKey = {};
     var pedmaSelectedDefault = [];
     var pedmaSelectedCustom = [];
     var pedmaExistingPerformance = null;
@@ -741,6 +756,85 @@
 
     function pedmaScoreKey(kind, index) {
         return kind + ':' + index;
+    }
+
+    function pedmaTrimVal(v) {
+        return (v === undefined || v === null) ? '' : String(v).trim();
+    }
+
+    function pedmaKraHasPersistedFeedback(scored) {
+        if (!scored) {
+            return false;
+        }
+        if (pedmaTrimVal(scored.get_score) !== '') {
+            return true;
+        }
+        if (pedmaTrimVal(scored.comment) !== '') {
+            return true;
+        }
+        if (pedmaTrimVal(scored.hod_remarks) !== '') {
+            return true;
+        }
+        if (pedmaTrimVal(scored.hr_remarks) !== '') {
+            return true;
+        }
+        return false;
+    }
+
+    function pedmaIsKraDeselectLocked(kind, index) {
+        if (window.pedmaCanEditAllFields) {
+            return false;
+        }
+        var key = pedmaScoreKey(kind, index);
+        return pedmaKraHasPersistedFeedback(pedmaPersistedByKey[key]);
+    }
+
+    function pedmaPersistedFieldHasValue(field, persisted) {
+        if (!persisted) {
+            return false;
+        }
+        if (field === 'rating') {
+            return pedmaTrimVal(persisted.get_score) !== '';
+        }
+        if (field === 'manager') {
+            return pedmaTrimVal(persisted.comment) !== '';
+        }
+        if (field === 'hod') {
+            return pedmaTrimVal(persisted.hod_remarks) !== '';
+        }
+        if (field === 'hr') {
+            return pedmaTrimVal(persisted.hr_remarks) !== '';
+        }
+        return false;
+    }
+
+    function pedmaFieldLockedForCurrentUser(field, persisted) {
+        if (!pedmaPersistedFieldHasValue(field, persisted)) {
+            return false;
+        }
+        if (window.pedmaCanEditAllFields) {
+            return false;
+        }
+        if (field === 'manager' && window.pedmaCanManagerComment) {
+            return false;
+        }
+        if (field === 'hod' && window.pedmaCanHodComment) {
+            return false;
+        }
+        if (field === 'hr' && window.pedmaCanHrComment) {
+            return false;
+        }
+        return true;
+    }
+
+    function pedmaClearSessionScoreForKra(kind, index) {
+        var key = pedmaScoreKey(kind, index);
+        var list = kind === 'custom' ? pedmaCustomKras : pedmaDefaultKras;
+        var name = list[index] && list[index].name;
+        delete pedmaScoreMap[key];
+        if (name && pedmaScoreMap[name]) {
+            delete pedmaScoreMap[name];
+        }
     }
 
     function pedmaSetOverallField(section, value) {
@@ -844,12 +938,13 @@
         return '';
     }
 
-    function pedmaRatingInputHtml(fieldPrefix, displayIndex, scoreVal) {
+    function pedmaRatingInputHtml(fieldPrefix, displayIndex, scoreVal, ratingLocked) {
         scoreVal = (scoreVal === undefined || scoreVal === null) ? '' : String(scoreVal);
+        var disabledAttr = ratingLocked ? ' disabled' : '';
         var html = '<div class="pedma-rating-group">';
         for (var r = 1; r <= 5; r++) {
             var checked = scoreVal === String(r) ? ' checked' : '';
-            html += '<label><input type="radio" class="pedma-rating-input" name="' + fieldPrefix + '[' + displayIndex + '][get_score]" value="' + r + '"' + checked + '> ' + r + '</label>';
+            html += '<label><input type="radio" class="pedma-rating-input" name="' + fieldPrefix + '[' + displayIndex + '][get_score]" value="' + r + '"' + checked + disabledAttr + '> ' + r + '</label>';
         }
         html += '</div>';
         return html;
@@ -869,27 +964,30 @@
         return html;
     }
 
-    function pedmaCommentCell(commentKind, fieldPrefix, displayIndex, scored) {
+    function pedmaCommentCell(commentKind, fieldPrefix, displayIndex, scored, persisted) {
         var val = '';
+        var fieldKey = commentKind;
+        var locked = pedmaFieldLockedForCurrentUser(fieldKey, persisted);
+        var readOnlyAttr = locked ? ' readonly' : '';
         if (commentKind === 'manager') {
             val = scored.comment || '';
             if (!window.pedmaCanManagerComment) {
                 return '';
             }
-            return '<td><textarea class="form-control comment" name="' + fieldPrefix + '[' + displayIndex + '][comment]" placeholder="Manager comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+            return '<td><textarea class="form-control comment" name="' + fieldPrefix + '[' + displayIndex + '][comment]" placeholder="Manager comment..."' + readOnlyAttr + '>' + pedmaEscapeHtml(val) + '</textarea></td>';
         }
         if (commentKind === 'hod') {
             val = scored.hod_remarks || '';
             if (!window.pedmaCanHodComment) {
                 return '';
             }
-            return '<td><textarea class="form-control hod-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hod_remarks]" placeholder="HOD comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+            return '<td><textarea class="form-control hod-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hod_remarks]" placeholder="HOD comment..."' + readOnlyAttr + '>' + pedmaEscapeHtml(val) + '</textarea></td>';
         }
         val = scored.hr_remarks || '';
         if (!window.pedmaCanHrComment) {
             return '';
         }
-        return '<td><textarea class="form-control hr-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hr_remarks]" placeholder="HR comment...">' + pedmaEscapeHtml(val) + '</textarea></td>';
+        return '<td><textarea class="form-control hr-remarks" name="' + fieldPrefix + '[' + displayIndex + '][hr_remarks]" placeholder="HR comment..."' + readOnlyAttr + '>' + pedmaEscapeHtml(val) + '</textarea></td>';
     }
 
     function pedmaRecalcScore() {
@@ -935,10 +1033,12 @@
                 return;
             }
             var key = pedmaScoreKey(kind, listIndex);
-            var scored = pedmaScoreMap[key] || pedmaScoreMap[item.name] || {};
+            var persisted = pedmaPersistedByKey[key] || null;
+            var scored = $.extend({}, persisted || {}, pedmaScoreMap[key] || pedmaScoreMap[item.name] || {});
             var scoreVal = (scored.get_score !== undefined && scored.get_score !== null && scored.get_score !== '')
                 ? scored.get_score
                 : '';
+            var ratingLocked = pedmaFieldLockedForCurrentUser('rating', persisted);
             var desc = item.description ? '<br><span class="text-muted">' + pedmaEscapeHtml(item.description) + '</span>' : '';
             var typeBadge = kind === 'custom' ? ' <span class="label label-default">Custom</span>' : '';
             var row = '<tr data-kra-key="' + key + '" data-kra-kind="' + kind + '">' +
@@ -948,10 +1048,12 @@
                 '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][max_score]" value="' + pedmaEscapeHtml(item.max_score) + '">' +
                 pedmaHiddenCommentFields(rowPrefix, rowDisplayIndex, scored) +
                 '</td>' +
-                '<td>' + pedmaRatingInputHtml(rowPrefix, rowDisplayIndex, scoreVal) + '</td>' +
-                pedmaCommentCell('manager', rowPrefix, rowDisplayIndex, scored) +
-                pedmaCommentCell('hod', rowPrefix, rowDisplayIndex, scored) +
-                pedmaCommentCell('hr', rowPrefix, rowDisplayIndex, scored) +
+                '<td>' + pedmaRatingInputHtml(rowPrefix, rowDisplayIndex, scoreVal, ratingLocked) +
+                (ratingLocked && scoreVal !== '' ? '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][get_score]" value="' + pedmaEscapeHtml(scoreVal) + '">' : '') +
+                '</td>' +
+                pedmaCommentCell('manager', rowPrefix, rowDisplayIndex, scored, persisted) +
+                pedmaCommentCell('hod', rowPrefix, rowDisplayIndex, scored, persisted) +
+                pedmaCommentCell('hr', rowPrefix, rowDisplayIndex, scored, persisted) +
                 '</tr>';
             $body.append(row);
         }
@@ -985,9 +1087,10 @@
         var html = '';
         $.each(list, function(index, item) {
             var checked = selected.indexOf(index) !== -1;
-            html += '<label class="kra-list-item' + (checked ? ' unlocked' : '') + '">' +
-                '<input type="checkbox" class="' + pickClass + '" data-scope="' + scope + '" value="' + index + '"' + (checked ? ' checked' : '') + '>' +
-                '<span>' + pedmaEscapeHtml(item.name) + '</span>' +
+            var locked = pedmaIsKraDeselectLocked(scope, index);
+            html += '<label class="kra-list-item' + (checked ? ' unlocked' : '') + (locked ? ' pedma-kra-locked' : '') + '">' +
+                '<input type="checkbox" class="' + pickClass + '" data-scope="' + scope + '" value="' + index + '"' + (checked ? ' checked' : '') + (locked ? ' disabled' : '') + '>' +
+                '<span>' + pedmaEscapeHtml(item.name) + (locked ? ' <span class="text-muted">(locked)</span>' : '') + '</span>' +
                 '</label>';
         });
         if (!html) {
@@ -1026,6 +1129,7 @@
     function pedmaApplyPerformanceData(perf) {
         pedmaExistingPerformance = perf;
         pedmaScoreMap = {};
+        pedmaPersistedByKey = {};
         pedmaSelectedDefault = [];
         pedmaSelectedCustom = [];
         pedmaIsUpdate = false;
@@ -1057,7 +1161,9 @@
             pedmaDefaultKras.forEach(function(def, idx) {
                 if (def.name === row.name) {
                     pedmaSelectedDefault.push(idx);
-                    pedmaScoreMap[pedmaScoreKey('default', idx)] = row;
+                    var dKey = pedmaScoreKey('default', idx);
+                    pedmaScoreMap[dKey] = row;
+                    pedmaPersistedByKey[dKey] = $.extend(true, {}, row);
                     pedmaScoreMap[row.name] = row;
                     matched = true;
                 }
@@ -1068,7 +1174,9 @@
                         if (pedmaSelectedCustom.indexOf(idx) === -1) {
                             pedmaSelectedCustom.push(idx);
                         }
-                        pedmaScoreMap[pedmaScoreKey('custom', idx)] = row;
+                        var cKey = pedmaScoreKey('custom', idx);
+                        pedmaScoreMap[cKey] = row;
+                        pedmaPersistedByKey[cKey] = $.extend(true, {}, row);
                         pedmaScoreMap[row.name] = row;
                     }
                 });
@@ -1085,13 +1193,17 @@
                 pedmaDefaultKras.forEach(function(def, idx) {
                     if (def.name === row.name && pedmaSelectedDefault.indexOf(idx) === -1) {
                         pedmaSelectedDefault.push(idx);
-                        pedmaScoreMap[pedmaScoreKey('default', idx)] = row;
+                        var dKey2 = pedmaScoreKey('default', idx);
+                        pedmaScoreMap[dKey2] = row;
+                        pedmaPersistedByKey[dKey2] = $.extend(true, {}, row);
                     }
                 });
                 pedmaCustomKras.forEach(function(def, idx) {
                     if (def.name === row.name && pedmaSelectedCustom.indexOf(idx) === -1) {
                         pedmaSelectedCustom.push(idx);
-                        pedmaScoreMap[pedmaScoreKey('custom', idx)] = row;
+                        var cKey2 = pedmaScoreKey('custom', idx);
+                        pedmaScoreMap[cKey2] = row;
+                        pedmaPersistedByKey[cKey2] = $.extend(true, {}, row);
                     }
                 });
             });
@@ -1219,12 +1331,24 @@
         $(document).on('change', '.pedma-kra-pick', function() {
             var scope = $(this).data('scope');
             var idx = parseInt($(this).val(), 10);
-            var selected = scope === 'custom' ? pedmaSelectedCustom : pedmaSelectedDefault;
             if ($(this).is(':checked')) {
-                if (selected.indexOf(idx) === -1) {
-                    selected.push(idx);
+                if (scope === 'custom') {
+                    if (pedmaSelectedCustom.indexOf(idx) === -1) {
+                        pedmaSelectedCustom.push(idx);
+                    }
+                } else if (pedmaSelectedDefault.indexOf(idx) === -1) {
+                    pedmaSelectedDefault.push(idx);
+                }
+                if (!pedmaPersistedByKey[pedmaScoreKey(scope, idx)]) {
+                    pedmaClearSessionScoreForKra(scope, idx);
                 }
             } else {
+                if (pedmaIsKraDeselectLocked(scope, idx)) {
+                    $(this).prop('checked', true);
+                    alert('This KRA has saved feedback and cannot be removed.');
+                    return;
+                }
+                pedmaClearSessionScoreForKra(scope, idx);
                 if (scope === 'custom') {
                     pedmaSelectedCustom = pedmaSelectedCustom.filter(function(i) { return i !== idx; });
                 } else {
@@ -1239,10 +1363,26 @@
             var scope = $(this).data('scope');
             var list = scope === 'custom' ? pedmaCustomKras : pedmaDefaultKras;
             var checked = $(this).is(':checked');
-            if (scope === 'custom') {
-                pedmaSelectedCustom = checked ? list.map(function(_, i) { return i; }) : [];
+            if (checked) {
+                if (scope === 'custom') {
+                    pedmaSelectedCustom = list.map(function(_, i) { return i; });
+                } else {
+                    pedmaSelectedDefault = list.map(function(_, i) { return i; });
+                }
             } else {
-                pedmaSelectedDefault = checked ? list.map(function(_, i) { return i; }) : [];
+                var kept = [];
+                list.forEach(function(_, i) {
+                    if (pedmaIsKraDeselectLocked(scope, i)) {
+                        kept.push(i);
+                    } else {
+                        pedmaClearSessionScoreForKra(scope, i);
+                    }
+                });
+                if (scope === 'custom') {
+                    pedmaSelectedCustom = kept;
+                } else {
+                    pedmaSelectedDefault = kept;
+                }
             }
             pedmaSetKraPanelOpen(scope, true);
             pedmaRenderKraSidebar();
@@ -1279,9 +1419,27 @@
         });
 
         $('#pedma-form').on('submit', function(e) {
+            pedmaCaptureTableStateToScoreMap();
             if (!$('#default-kra-table-body tr[data-kra-key]').length) {
                 e.preventDefault();
                 alert('Select at least one KRA and enter a rating.');
+                return false;
+            }
+            var missingRating = false;
+            var missingName = '';
+            $('#default-kra-table-body tr[data-kra-key]').each(function() {
+                var $row = $(this);
+                var rating = parseInt(pedmaRowRatingValue($row), 10);
+                if (isNaN(rating) || rating < 1 || rating > 5) {
+                    missingRating = true;
+                    if (!missingName) {
+                        missingName = $row.find('[name$="[name]"]').val() || 'KRA';
+                    }
+                }
+            });
+            if (missingRating) {
+                e.preventDefault();
+                alert('Each selected KRA must have a rating from 1 to 5 before saving.' + (missingName ? ' Missing: ' + missingName : ''));
                 return false;
             }
             if (!$('#avg_score1').val()) {
@@ -1289,7 +1447,6 @@
                 alert('Please set a rating (1–5) for each selected KRA.');
                 return false;
             }
-            pedmaCaptureTableStateToScoreMap();
             pedmaSyncHiddenFilters();
             var score = $('#avg_score1').val();
             $('#avg_score2').val(score);
