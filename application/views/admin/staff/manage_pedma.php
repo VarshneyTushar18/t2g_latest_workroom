@@ -10,6 +10,9 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
 <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous"> -->
 <!-- Custom CSS -->
 <style>
+    #pedmaTopEmployeesTitle{
+        background-color:rgb(42, 116, 0);
+    }
     .card {
         border: 1px solid #ddd;
         border-radius: 8px;
@@ -18,7 +21,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
     }
 
     .card-title {
-        background-color:rgb(42, 116, 0);
+        background-color:rgb(0, 50, 116);
         color: #fff;
         font-size: 0.9rem;
         margin: 0;
@@ -608,15 +611,15 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                         <div class="col-md-3 p-0">
                             <div class="pedma-filter-item">
                                 <label for="pedma_top_month">Month</label>
-                                <input type="month" id="pedma_top_month" class="form-control" value="<?php echo date('Y-m'); ?>" max="<?php echo date('Y-m'); ?>" />
+                                <input type="month" id="pedma_top_month" class="form-control" value="<?php echo date('Y-m', strtotime('first day of last month')); ?>" max="<?php echo date('Y-m'); ?>" />
                             </div>
                         </div>
                     </div>
                     <div class="row" id="pedmaTopEmployeesWrap" style="margin-bottom: 20px;">
                         <div class="col-md-12 p-0">
                             <div class="card pedma-top-performers-card">
-                                <div class="card-title" style="display:flex;justify-content:space-between;align-items:center; gap:10px;">
-                                    <span><i class="fa fa-trophy" style="margin-right:6px;opacity:0.9;"></i>Top Performers — <span id="pedmaTopMonthLabel"><?php echo date('F Y'); ?></span></span>
+                                <div class="card-title" id="pedmaTopEmployeesTitle" style="display:flex;justify-content:space-between;align-items:center; gap:10px;">
+                                    <span><i class="fa fa-trophy" style="margin-right:6px;opacity:0.9;"></i>Top Performers — <span id="pedmaTopMonthLabel"><?php echo date('F Y', strtotime('first day of last month')); ?></span></span>
                                     <span id="pedmaTopEmployeesCount" style="font-weight:500; opacity:0.9;"></span>
                                 </div>
                                 <div class="card-body" style="padding:12px 12px 4px; overflow-x:auto;">
@@ -710,7 +713,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                                     <span id="pedmaListResultsHeading">Department data — <span id="pedmaGradeResultsTitle">-</span></span>
                                     <span style="display:flex; align-items:center; gap:12px;">
                                         <span id="pedmaGradeResultsCount" style="font-weight:500; opacity:0.9;"></span>
-                                        <button type="button" class="btn btn-default btn-xs" id="pedmaGradeCloseBtn" title="Close">Close</button>
+                                        <!-- <button type="button" class="btn btn-default btn-xs" id="pedmaGradeCloseBtn" title="Close">Close</button> -->
                                     </span>
                                 </div>
                                 <div class="card-body" style="padding:0; overflow-x:auto;">
@@ -723,7 +726,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                                                 <th>Month</th>
                                                 <th>Score</th>
                                                 <th>Grade</th>
-                                                <th>HR Notes</th>
+                                                <th>Notes</th>
                                                 <?php if (function_exists('can_view_pedma_grade_filter') && can_view_pedma_grade_filter()) { ?>
                                                 <th style="min-width:150px;">Schedule Meeting</th>
                                                 <?php } ?>
@@ -1245,15 +1248,20 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
         function loadPedmaTopEmployees() {
             var month = ($('#pedma_top_month').val() || '').toString();
             if (!/^\d{4}-\d{2}$/.test(month)) {
+                $('#pedmaTopEmployeesBody').html(pedmaTopEmptyRow('Select a valid month.'));
                 return;
             }
 
             $('#pedmaTopEmployeesBody').html(pedmaTopEmptyRow('Loading top employees...'));
+            var postData = { month: month };
+            if (typeof csrfData !== 'undefined') {
+                postData[csrfData.token_name] = csrfData.hash;
+            }
             $.ajax({
                 url: "<?php echo base_url('admin/Staff/manage_pedma_top_employees'); ?>",
                 type: 'post',
                 dataType: 'json',
-                data: { month: month },
+                data: postData,
                 success: function (resp) {
                     var body = $('#pedmaTopEmployeesBody');
                     body.empty();
