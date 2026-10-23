@@ -98,6 +98,7 @@
       // Immediate recalculation from current Applying For days (don't wait for AJAX).
       var days = parseFloat($('#number_of_leaving_day').val() || 0);
       update_remaining_balance_display(days);
+      sync_requisition_submit_button();
     });
 
     $('select[name="staff_id"]').on('change', function() {
@@ -316,15 +317,7 @@
          $('#sandwich_leave_notice').hide().text('');
        }
        update_remaining_balance_display(days);
-       var number_day_off = $('input[name="number_day_off"]').val();
-       var value = $('select[name="type_of_leave"]').val();
-       if(value == 8){
-        if(parseFloat(days) > parseFloat(number_day_off)){
-          $('button[type="submit"]').attr('disabled', 'true');
-        }else{
-          $('button[type="submit"]').removeAttr('disabled');
-        }
-      }
+       enforce_earned_vs_lop();
     });
     }
 
@@ -382,11 +375,7 @@
       enforce_earned_vs_lop();
       var leaveType = $('select[name="type_of_leave"]').val();
       var number_of_leaving_day = parseFloat($('#number_of_leaving_day').val() || 0);
-      var elBal = parseFloat(window._earnedLeaveBalance);
-      if (isNaN(elBal)) {
-        elBal = parseFloat(($('#leave_balance').val() || '0').toString().replace(/,/g, ''));
-      }
-      if (isNaN(elBal)) { elBal = 0; }
+      var elBal = earnedLeaveUsableAmount();
 
       if (!leaveType) {
         alert_float('warning', 'Please select a leave type.');
@@ -469,19 +458,63 @@
     return String(Math.round(num * 100) / 100);
   }
 
-  // Latest earned-leave balance from server (used for EL vs LOP rules).
+  // Earned leave from server: balance = displayed; usable = balance or available if pending.
   window._earnedLeaveBalance = null;
+  window._earnedLeaveUsable = null;
+  window._earnedLeavePending = 0;
+
+  function earnedLeaveUsableAmount() {
+    "use strict";
+    var bal = parseFloat(window._earnedLeaveBalance);
+    if (!isNaN(bal)) {
+      return bal;
+    }
+    var usable = parseFloat(window._earnedLeaveUsable);
+    if (!isNaN(usable)) {
+      return usable;
+    }
+    return 0;
+  }
+
+  function sync_requisition_submit_button() {
+    "use strict";
+    var $form = $('#requisition-form');
+    if (!$form.length) { return; }
+
+    var leaveType = $('select[name="type_of_leave"]').val() || '';
+    var days = parseFloat($('#number_of_leaving_day').val() || 0);
+    if (isNaN(days)) { days = 0; }
+
+    var elBal = earnedLeaveUsableAmount();
+
+    var block = false;
+    if (!leaveType) {
+      block = false;
+    } else if (leaveType === 'earned-leave' || leaveType === '8' || leaveType === 'Leave') {
+      block = elBal <= 0 || days > (elBal + 0.001);
+    }
+    if (days <= 0) {
+      block = true;
+    }
+
+    if (block) {
+      $form.find('.btn-submit, button[type="submit"]').attr('disabled', true);
+    } else {
+      $form.find('.btn-submit, button[type="submit"]').removeAttr('disabled');
+    }
+  }
 
   function enforce_earned_vs_lop() {
     "use strict";
     var $select = $('select[name="type_of_leave"]');
     if (!$select.length) { return; }
 
-    var elBal = parseFloat(window._earnedLeaveBalance);
-    if (isNaN(elBal)) {
-      elBal = parseFloat(($('#leave_balance').val() || '0').toString().replace(/,/g, ''));
+    var displayBal = parseFloat(window._earnedLeaveBalance);
+    if (isNaN(displayBal)) {
+      displayBal = parseFloat(($('#leave_balance').val() || '0').toString().replace(/,/g, ''));
     }
-    if (isNaN(elBal)) { elBal = 0; }
+    if (isNaN(displayBal)) { displayBal = 0; }
+    var elBal = earnedLeaveUsableAmount();
 
     var days = parseFloat($('#number_of_leaving_day').val() || 0);
     if (isNaN(days) || days < 0) { days = 0; }
@@ -509,9 +542,9 @@
         $elOpt.prop('disabled', false);
       }
       if (current === 'earned-leave' && days > (elBal + 0.001)) {
-        notice = 'Earned leave available: ' + format_leave_number(elBal) +
-          ' day(s), but request is ' + format_leave_number(days) +
-          ' day(s). Reduce days or choose Loss of Pay.';
+        notice = 'Earned leave balance: ' + format_leave_number(displayBal) +
+          ' — request is ' + format_leave_number(days) +
+          ' day(s). Use half-day sessions, reduce dates, or choose Loss of Pay.';
       } else if (current === '') {
         notice = 'Select leave type and dates to see balance after apply.';
       }
@@ -523,13 +556,14 @@
 
     update_remaining_balance_display(days, notice);
     update_leave_subject();
+    sync_requisition_submit_button();
   }
 
   function update_remaining_balance_display(applyingDays, forcedNotice) {
     "use strict";
     var balanceRaw = (window._earnedLeaveBalance !== null && window._earnedLeaveBalance !== undefined)
       ? String(window._earnedLeaveBalance)
-      : (($('#leave_balance').val() || $('#leave_balance_value').text() || '0').toString());
+      : (($('#leave_balance_value').text() || $('#leave_balance').val() || '0').toString());
     balanceRaw = balanceRaw.replace(/,/g, '');
     var balance = parseFloat(balanceRaw);
     var days = parseFloat(applyingDays);
@@ -652,6 +686,7 @@
       $('#applying_for_value').text(label);
       enforce_earned_vs_lop();
       update_leave_subject();
+      sync_requisition_submit_button();
     });
   }
 
@@ -705,7 +740,11 @@
       html += '</div>';
       if (showFoot) {
         html += '<div class="leave-balance-card-foot">';
-        html += '<div class="leave-balance-card-consumed">' + consumed + ' of ' + granted + ' taken → remain ' + balance + '</div>';
+        var foot = consumed + ' of ' + granted + ' taken → remain ' + balance;
+        if (card.slug === 'earned-leave' && parseFloat(card.pending || 0) > 0) {
+          foot += ' · ' + formatLeaveBalanceNumber(card.pending) + ' pending (not available until approved/cancelled)';
+        }
+        html += '<div class="leave-balance-card-consumed">' + foot + '</div>';
         html += '<div class="leave-balance-card-progress"><span style="width:' + (card.progress || 0) + '%;"></span></div>';
         html += '</div>';
       }
@@ -805,18 +844,33 @@
     }
     $.post(admin_url+'timesheets/get_remain_day_of/'+staff_id+'/'+encodeURIComponent(type_of_leave || 'earned-leave'), payload).done(function(response){
       try { response = typeof response === 'string' ? JSON.parse(response) : response; } catch(e) { response = {}; }
-      if(typeof response.available !== 'undefined'){
-        window._earnedLeaveBalance = parseFloat(response.available);
-      } else if(typeof response.earned_balance !== 'undefined'){
-        window._earnedLeaveBalance = parseFloat(response.earned_balance);
-      } else if(typeof response.balance !== 'undefined'){
-        window._earnedLeaveBalance = parseFloat(response.balance);
-      }
       window._earnedLeavePending = (typeof response.pending !== 'undefined') ? parseFloat(response.pending) : 0;
-      if(typeof response.balance !== 'undefined'){
-        var bal = format_leave_number(window._earnedLeaveBalance);
-        $('#leave_balance_value').text(bal);
+      window._earnedLeaveAvailable = (typeof response.available !== 'undefined') ? parseFloat(response.available) : null;
+      if (typeof response.balance !== 'undefined') {
+        window._earnedLeaveBalance = parseFloat(response.balance);
+      } else if (typeof response.earned_balance !== 'undefined') {
+        window._earnedLeaveBalance = parseFloat(response.earned_balance);
+      }
+      if (typeof response.usable !== 'undefined') {
+        window._earnedLeaveUsable = parseFloat(response.usable);
+      } else {
+        window._earnedLeaveUsable = earnedLeaveUsableAmount();
+      }
+      if (typeof response.balance !== 'undefined' || typeof response.earned_balance !== 'undefined') {
+        var balDisplay = format_leave_number(window._earnedLeaveBalance);
+        $('#leave_balance_value').text(balDisplay);
         $('#leave_balance').val(window._earnedLeaveBalance);
+        var pending = window._earnedLeavePending;
+        var avail = window._earnedLeaveAvailable;
+        var detail = '';
+        if (pending > 0.001 && !isNaN(avail) && window._earnedLeaveBalance > (avail + 0.001)) {
+          detail = format_leave_number(pending) + ' day(s) awaiting approval (balance still ' + format_leave_number(window._earnedLeaveBalance) + ')';
+        }
+        if (detail) {
+          $('#leave_balance_detail').text(detail).show();
+        } else {
+          $('#leave_balance_detail').hide().text('');
+        }
       }
       if(typeof response.carry_forward !== 'undefined'){
         $('#carry_forward').val(response.carry_forward);

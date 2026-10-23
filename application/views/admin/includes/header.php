@@ -4,7 +4,11 @@ use app\services\utilities\Date;
 
 defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
-<link rel="stylesheet" href="<?php echo base_url('assets/css/admin-dashboard-nav.css?v=3'); ?>" type="text/css" />
+<?php
+hooks()->add_action('app_admin_footer', static function () {
+    echo '<link rel="stylesheet" href="' . base_url('assets/css/admin-dashboard-nav.css?v=14') . '" type="text/css" />' . "\n";
+}, 9999);
+?>
 <style>
     /* adding the css for check out button and checkin/out info */
 
@@ -13,9 +17,14 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     position: static !important;
     left: auto !important;
     width: auto !important;
-    display: inline-block !important;
+    display: inline-flex !important;
+    align-items: center !important;
     margin: 0 !important;
 }
+    .navbar-nav > li > a[href*="company_policies"] {
+        text-decoration: underline !important;
+        text-underline-offset: 3px;
+    }
     nav .alert {
         padding: 3px 9px;
         margin-top: 4px;
@@ -89,11 +98,11 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     // Biometric available → show Biometric pill only. WFH / no biometric today → Workroom check in/out.
     ?>
 
-    <nav class="t2g-topnav">
+    <nav>
 
-        <div class="t2g-topnav-row">
+        <div class="tw-flex tw-justify-between tw-items-center t2g-header-bar">
 
-            <div class="t2g-topnav-left">
+            <div class="tw-flex tw-flex-1 sm:tw-flex-initial tw-items-center t2g-header-left-cluster">
 
                 <!-- commenting the search bar -->
                 <!-- <div id="top_search" class="tw-inline-flex tw-relative dropdown sm:tw-ml-1.5 sm:tw-mr-3 tw-max-w-xl tw-flex-auto" data-toggle="tooltip" data-placement="bottom" data-title="<?php echo _l('search_by_tags'); ?>">
@@ -122,9 +131,11 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </div> -->
 
-                <div class="t2g-header-workplace-inner">
-                    <a href="<?php echo admin_url('company_policies'); ?>" class="t2g-header-nav-link">Company Policies</a>
-                    <div id="headerActionButtons" class="header-action-buttons check-time-btn">
+                <ul class="nav navbar-nav visible-md visible-lg header-primary-nav">
+                    <li>
+                        <a href="<?php echo admin_url('company_policies'); ?>">Company Policies</a>
+                    </li>
+                    <li id="headerActionButtons" class="header-action-buttons check-time-btn">
                     <?php if ($biometric_navbar_active) { ?>
                         <span class="header-biometric-pill" title="Office Biometric device punch (from sheet)">
                             <span class="header-source-tag">Biometric</span> First check in : <?php echo html_escape($biometric_checkin_label); ?>
@@ -169,8 +180,8 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
                         }
                         ?>
                     <?php } ?>
-                    </div>
-                </div>
+                    </li>
+                </ul>
 
                     <!-- commenting the quick create button (legacy ul removed) -->
                     <!-- <?php if (false && $quickActions->isNotEmpty()) { ?>
@@ -418,7 +429,7 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
 
 
-            <ul class="nav navbar-nav navbar-right right-elements t2g-topnav-right">
+            <ul class="nav navbar-nav navbar-right right-elements">
 
                 <?php //do_action_deprecated('after_render_top_search', [], '3.0.0', 'admin_navbar_start'); 
                 ?>
@@ -469,13 +480,13 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 </li>-->
 				<li class="icon header-snapshot-download">
-				<a href="/Snapshot.zip" download class="t2g-header-snapshot-link" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i><span>Snapshot</span></a>
+				<a href="/Snapshot.zip" download style="color:#fff;text-decoration:underline!important;font-size:14px;" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
 				</li>
                 <li class="icon header-user-profile" data-toggle="tooltip" title="<?php echo get_staff_full_name(); ?>" data-placement="bottom">
 
-                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-1" data-toggle="dropdown" aria-expanded="false">
+                    <a href="#" class="dropdown-toggle profile tw-block rtl:!tw-px-0.5 !tw-py-0" data-toggle="dropdown" aria-expanded="false">
 
-                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-ring-1 tw-ring-offset-2 tw-ring-primary-500 tw-mx-1 tw-mt-2.5']); ?>
+                        <?php echo staff_profile_image($current_user->staffid, ['img', 'img-responsive', 'staff-profile-image-small', 'tw-mx-0.5']); ?>
 
                     </a>
 
@@ -545,21 +556,25 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
 
                 <li class="icon header-timers timer-button tw-relative ltr:tw-mr-1.5 rtl:tw-ml-1.5" data-placement="bottom" data-toggle="tooltip" data-title="<?php echo _l('my_timesheets'); ?>">
 
-                    <a href="#" id="top-timers" class="top-timers !tw-px-0 tw-group" data-toggle="dropdown">
+                    <a href="#" id="top-timers" class="top-timers !tw-px-0 tw-group tw-inline-flex tw-items-center" data-toggle="dropdown">
 
-                        <span class="tw-rounded-md tw-border tw-border-solid tw-border-neutral-200/60 tw-inline-flex tw-items-center tw-justify-center tw-h-8 tw-w-9 -tw-mt-1.5 group-hover:!tw-bg-neutral-100/60">
+                        <span class="tw-relative tw-inline-flex tw-shrink-0">
 
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-text-neutral-900 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
+                            <span class="tw-rounded-md tw-border tw-border-solid tw-border-neutral-200/60 tw-inline-flex tw-items-center tw-justify-center tw-h-8 tw-w-9 group-hover:!tw-bg-neutral-100/60">
 
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tw-w-5 tw-h-5 tw-shrink-0<?php echo  count($startedTimers) > 0 ? ' tw-animate-spin-slow' : ''; ?>">
 
-                            </svg>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
 
-                        </span>
+                                </svg>
 
-                        <span class="tw-leading-none tw-px-1 tw-py-0.5 tw-text-xs bg-success tw-z-10 tw-absolute tw-rounded-full -tw-right-1.5 tw-top-2 tw-min-w-[18px] tw-min-h-[18px] tw-inline-flex tw-items-center tw-justify-center icon-started-timers<?php echo $totalTimers = count($startedTimers) == 0 ? ' hide' : ''; ?>">
+                            </span>
 
-                            <?php echo count($startedTimers); ?>
+                            <span class="icon-started-timers tw-text-white bg-success tw-z-20 tw-absolute<?php echo $totalTimers = count($startedTimers) == 0 ? ' hide' : ''; ?>">
+
+                                <?php echo count($startedTimers); ?>
+
+                            </span>
 
                         </span>
 
@@ -789,5 +804,20 @@ defined('BASEPATH') or exit('No direct script access allowed'); ?>
     }
 })();
 </script>
+
+<style id="t2g-header-align-fix">
+body.admin #header::before {
+    display: none !important;
+    content: none !important;
+}
+body.admin #header .navbar-nav.navbar-right {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+}
+body.admin #header nav .t2g-header-bar {
+    align-items: center !important;
+}
+</style>
 
 </div>

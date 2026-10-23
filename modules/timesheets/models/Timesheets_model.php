@@ -8628,13 +8628,20 @@ public function add_requisition_ajax($data)
 
 		$tbl = db_prefix() . 'timesheets_requisition_leave';
 		$ad = db_prefix() . 'timesheets_approval_details';
+		$rel_types = array_map(function ($k) {
+			return $this->db->escape((string) $k);
+		}, $keys);
+		$rel_types[] = $this->db->escape('timesheets_requisition_leave');
+		$rel_types[] = $this->db->escape('Leave');
+		$rel_in = implode(',', array_unique($rel_types));
+
 		$this->db->select('COALESCE(SUM(' . $tbl . '.number_of_leaving_day), 0) AS total', false)
 			->from($tbl)
 			->where($tbl . '.staff_id', $staff_id)
 			->where($tbl . '.status', 0)
 			->where_in($tbl . '.type_of_leave', $keys)
 			->where(
-				'EXISTS (SELECT 1 FROM ' . $ad . ' ad WHERE ad.rel_id = ' . $tbl . '.id AND ad.rel_type = ' . $tbl . '.type_of_leave)',
+				'EXISTS (SELECT 1 FROM ' . $ad . ' ad WHERE ad.rel_id = ' . $tbl . '.id AND (ad.rel_type = ' . $tbl . '.type_of_leave OR ad.rel_type IN (' . $rel_in . ')))',
 				null,
 				false
 			);
@@ -13275,6 +13282,26 @@ public function add_requisition_ajax($data)
 			return null;
 		}
 
+		if ($this->staff_uses_bridge_daily_full_punches($staff_id)) {
+			$bio_row = $this->get_biometric_daily_report_row_for_staff_date($staff_id, $date);
+			if (is_array($bio_row) && $this->biometric_report_row_has_punches($bio_row)) {
+				$bio_events = $this->bridge_daily_row_to_timeline_events($staff_id, $date, $bio_row);
+				if (!empty($bio_events)) {
+					$punch = $this->analyze_session_punches($bio_events, $date === date('Y-m-d'), true);
+					$this->load->helper('timesheets/timesheets');
+					$this->apply_himanshu_first_last_punch_span_test_fix(
+						$staff_id,
+						$punch,
+						$bio_events,
+						$bio_row,
+						timesheets_required_span_minutes()
+					);
+
+					return $punch;
+				}
+			}
+		}
+
 		$range_from = date('Y-m-d', strtotime($date . ' -1 day'));
 		$range_to = date('Y-m-d', strtotime($date . ' +1 day'));
 		$timeline_events = $this->collect_attendance_timeline_events($staff_id, $range_from, $range_to, $wfh_dates);
@@ -13290,7 +13317,17 @@ public function add_requisition_ajax($data)
 			return null;
 		}
 
-		return $this->analyze_session_punches($bio_events, $date === date('Y-m-d'));
+		$punch = $this->analyze_session_punches($bio_events, $date === date('Y-m-d'));
+		$this->load->helper('timesheets/timesheets');
+		$this->apply_himanshu_first_last_punch_span_test_fix(
+			$staff_id,
+			$punch,
+			$bio_events,
+			null,
+			timesheets_required_span_minutes()
+		);
+
+		return $punch;
 	}
 
 	/**
@@ -17206,6 +17243,10 @@ public function add_requisition_ajax($data)
 			if ($slug === 'earned-leave') {
 				$pending = round($pending_el_all, 2);
 				$available = $this->floor_leave_balance_for_display(max(0, (float) $balance - $pending));
+				// No pending → available must match balance (same number on cards + apply).
+				if ($pending <= 0.001) {
+					$available = $balance;
+				}
 			}
 
 			$cards[] = [
@@ -17283,6 +17324,9 @@ public function add_requisition_ajax($data)
 		if ($slug === 'earned-leave' && !isset($match['available'])) {
 			$pending = $this->sum_pending_earned_leave_days($staff_id);
 			$available = $this->floor_leave_balance_for_display(max(0, $balance - $pending));
+		}
+		if ($slug === 'earned-leave' && $pending <= 0.001) {
+			$available = $balance;
 		}
 
 		return [
@@ -19900,6 +19944,7 @@ public function add_requisition_ajax($data)
 			$dow = (int) date('N', strtotime($date));
 			$is_weekend = ($dow >= 6);
 			$is_future = ($date > $today);
+			$full_bridge_punches = false;
 
 			$ts = $ts_by_date[$date] ?? null;
 			$ts_type = strtoupper((string) ($ts['type'] ?? ''));
@@ -19911,6 +19956,7 @@ public function add_requisition_ajax($data)
 			$is_wfh_day = !empty($wfh_dates[$date]);
 			$attendance_source = 'none';
 			$session = $sessions_by_start[$date] ?? null;
+			$bio_events_for_day = [];
 			$cio_source = $is_wfh_day ? 'WFH' : 'Workroom';
 			$workroom_punch = $this->analyze_day_punches($cio_for_day, [], $cio_source);
 			$has_workroom = !empty($workroom_punch['swipes']);
@@ -19918,8 +19964,27 @@ public function add_requisition_ajax($data)
 			if ($is_wfh_day) {
 				$attendance_source = 'wfh';
 				$punch = $workroom_punch;
+			} elseif (
+				$this->staff_uses_bridge_daily_full_punches($staff_id)
+				&& !empty($bio_daily_by_date[$date])
+				&& $this->biometric_report_row_has_punches($bio_daily_by_date[$date])
+			) {
+				// Match bridge export: one row per device attendance_date with full punch_records.
+				$bio_events_for_day = $this->bridge_daily_row_to_timeline_events(
+					$staff_id,
+					$date,
+					$bio_daily_by_date[$date]
+				);
+				if (!empty($bio_events_for_day)) {
+					$attendance_source = 'biometric';
+					$punch = $this->analyze_session_punches($bio_events_for_day, $date === $today, true);
+				} else {
+					$punch = $workroom_punch;
+					$attendance_source = $has_workroom ? 'workroom' : 'none';
+				}
 			} elseif ($session && !empty($session['events'])) {
 				$bio_events = $this->filter_biometric_timeline_events($session['events']);
+				$bio_events_for_day = $bio_events;
 				if (!empty($bio_events)) {
 					$attendance_source = 'biometric';
 					$punch = $this->analyze_session_punches($bio_events, $date === $today);
@@ -19932,8 +19997,49 @@ public function add_requisition_ajax($data)
 				$punch = $workroom_punch;
 				$attendance_source = $has_workroom ? ($is_wfh_day ? 'wfh' : 'workroom') : 'none';
 			}
+			$bio_row_for_day = $bio_daily_by_date[$date] ?? null;
+			if (
+				$this->staff_uses_bridge_daily_full_punches($staff_id)
+				&& empty($bio_events_for_day)
+				&& is_array($bio_row_for_day)
+				&& $this->biometric_report_row_has_punches($bio_row_for_day)
+			) {
+				$bio_events_for_day = $this->bridge_daily_row_to_timeline_events(
+					$staff_id,
+					$date,
+					$bio_row_for_day
+				);
+			}
+
 			// TEMP Oct 2026: trailing last-IN with full first-IN→last-OUT span counts as Present.
 			$this->apply_october_trailing_in_present_fix($year, $month, $punch, $required_span_minutes);
+			$this->apply_himanshu_first_last_punch_span_test_fix(
+				$staff_id,
+				$punch,
+				$bio_events_for_day,
+				$bio_row_for_day,
+				$required_span_minutes
+			);
+
+			if (
+				$this->staff_uses_bridge_daily_full_punches($staff_id)
+				&& is_array($bio_row_for_day)
+				&& $this->biometric_report_row_has_punches($bio_row_for_day)
+			) {
+				$full_bridge_events = $this->bridge_daily_row_to_timeline_events(
+					$staff_id,
+					$date,
+					$bio_row_for_day
+				);
+				if (!empty($full_bridge_events)) {
+					$punch['swipes'] = $this->timeline_events_to_swipe_rows($full_bridge_events);
+					$full_bridge_punches = true;
+					if (empty($bio_events_for_day)) {
+						$bio_events_for_day = $full_bridge_events;
+					}
+				}
+			}
+
 			$day_swipes = $punch['swipes'] ?? [];
 			$workroom_swipes_for_merge = $workroom_punch['swipes'] ?? [];
 			if ($has_workroom && $attendance_source === 'biometric') {
@@ -20376,6 +20482,10 @@ public function add_requisition_ajax($data)
 				'actual_work_hrs' => $detail['actual_work_hrs'],
 				'sessions' => $detail['sessions'],
 				'swipes' => $day_swipes,
+				'full_bridge_punches' => $full_bridge_punches,
+				'punch_records' => ($full_bridge_punches && is_array($bio_row_for_day))
+					? trim((string) ($bio_row_for_day['punch_records'] ?? ''))
+					: '',
 				'attendance_source' => $attendance_source,
 				'wfh_allotted' => $is_wfh_day,
 				'regularisation' => $reg ? [
@@ -21004,6 +21114,331 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Night shift: Present when first→last punch span >= 8h55m (IN/OUT types ignored for span ends).
+	 */
+	protected function staff_uses_night_shift_first_last_punch_span_present($staff_id)
+	{
+		$staff_id = (int) $staff_id;
+		if ($staff_id <= 0) {
+			return false;
+		}
+		if (!function_exists('is_night_shift')) {
+			$this->load->helper('custom');
+		}
+
+		return function_exists('is_night_shift') && is_night_shift($staff_id);
+	}
+
+	/** @deprecated alias — use staff_uses_night_shift_first_last_punch_span_present */
+	protected function staff_uses_first_last_punch_span_present_test($staff_id)
+	{
+		return $this->staff_uses_night_shift_first_last_punch_span_present($staff_id);
+	}
+
+	/**
+	 * Calendar + punch log: show full bridge punch_records (device sheet), not 13h session subset.
+	 */
+	protected function staff_uses_bridge_daily_full_punches($staff_id)
+	{
+		return $this->staff_uses_night_shift_first_last_punch_span_present($staff_id)
+			|| (int) $staff_id === 1261;
+	}
+
+	/**
+	 * @param array<int, array{at?:int,time?:string,type?:string,source?:string,door?:string}> $events
+	 * @return array<int, array{time:string,type:string,source:string,door:string}>
+	 */
+	protected function timeline_events_to_swipe_rows(array $events)
+	{
+		if (empty($events)) {
+			return [];
+		}
+		usort($events, function ($a, $b) {
+			return ((int) ($a['at'] ?? 0)) <=> ((int) ($b['at'] ?? 0));
+		});
+		$swipes = [];
+		foreach ($events as $ev) {
+			$at = (int) ($ev['at'] ?? 0);
+			if ($at <= 0) {
+				continue;
+			}
+			$swipes[] = [
+				'time' => date('H:i:s', $at),
+				'type' => strtoupper((string) ($ev['type'] ?? '—')),
+				'source' => (string) ($ev['source'] ?? 'Biometric'),
+				'door' => (string) ($ev['door'] ?? 'Biometrics swipe'),
+			];
+		}
+
+		return $swipes;
+	}
+
+	/**
+	 * Best tblbiometric_report row for one staff member and calendar date (bridge attendance_date).
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	protected function get_biometric_daily_report_row_for_staff_date($staff_id, $date)
+	{
+		$staff_id = (int) $staff_id;
+		$date = date('Y-m-d', strtotime((string) $date));
+		if ($staff_id <= 0 || $date === '' || $date === '1970-01-01') {
+			return null;
+		}
+		if (!file_exists(APPPATH . 'models/Biometric_model.php')) {
+			return null;
+		}
+		$this->load->model('biometric_model');
+
+		$staff_code_row = $this->db->query(
+			'SELECT s.staff_identifi, i.empid
+			 FROM ' . db_prefix() . 'staff s
+			 LEFT JOIN ' . db_prefix() . 'staff_info i ON i.staffid = s.staffid
+			 WHERE s.staffid = ?
+			 LIMIT 1',
+			[$staff_id]
+		)->row();
+		$codes = [];
+		if ($staff_code_row) {
+			foreach (['staff_identifi', 'empid'] as $field) {
+				$code = trim((string) ($staff_code_row->{$field} ?? ''));
+				if ($code !== '') {
+					$codes[$code] = true;
+				}
+			}
+		}
+		$codes = array_keys($codes);
+		if (empty($codes)) {
+			return null;
+		}
+
+		$attendance_date = date('d-M-Y', strtotime($date));
+		$placeholders = implode(',', array_fill(0, count($codes), '?'));
+		$params = $codes;
+		$params[] = $attendance_date;
+		$rows = $this->db->query(
+			'SELECT attendance_date, a_in_time, a_out_time, punch_records, status, work_duration, t_duration
+			FROM ' . db_prefix() . 'biometric_report
+			WHERE TRIM(employee_code) IN (' . $placeholders . ') AND attendance_date = ?',
+			$params
+		)->result_array();
+		if (empty($rows)) {
+			return null;
+		}
+
+		$best = null;
+		foreach ($rows as $row) {
+			if ($best === null
+				|| $this->biometric_model->biometric_row_completeness_score($row)
+					> $this->biometric_model->biometric_row_completeness_score($best)) {
+				$best = $row;
+			}
+		}
+
+		return $best;
+	}
+
+	/**
+	 * Full punch_records from one bridge row → timeline events (same anchoring as get_swipes).
+	 *
+	 * @param array<string, mixed> $bio_row
+	 * @return array<int, array{at:int,time:string,type:string,source:string,door:string}>
+	 */
+	protected function bridge_daily_row_to_timeline_events($staff_id, $date, array $bio_row)
+	{
+		$staff_id = (int) $staff_id;
+		$date = date('Y-m-d', strtotime((string) $date));
+		if (!$this->biometric_report_row_has_punches($bio_row)) {
+			return [];
+		}
+		if (!file_exists(APPPATH . 'models/Biometric_model.php')) {
+			return [];
+		}
+		$this->load->model('biometric_model');
+
+		$punch_rows = $this->parse_biometric_punch_records((string) ($bio_row['punch_records'] ?? ''));
+		if (empty($punch_rows)) {
+			$in_time = $this->normalize_bio_time($bio_row['a_in_time'] ?? '');
+			$out_time = $this->normalize_bio_time($bio_row['a_out_time'] ?? '');
+			if ($in_time !== '') {
+				$punch_rows[] = [
+					'time' => $in_time,
+					'type' => 'IN',
+					'source' => 'Biometric',
+					'door' => 'Biometrics summary',
+				];
+			}
+			if ($out_time !== '') {
+				$punch_rows[] = [
+					'time' => $out_time,
+					'type' => 'OUT',
+					'source' => 'Biometric',
+					'door' => 'Biometrics summary',
+				];
+			}
+		}
+		if (empty($punch_rows)) {
+			return [];
+		}
+
+		$allow_rollover = $this->biometric_model->infer_midnight_rollover_from_punch_tokens($punch_rows);
+		if (function_exists('is_night_shift') && is_night_shift($staff_id)) {
+			$allow_rollover = true;
+		}
+		$punch_rows = $this->biometric_model->attach_punch_timestamps($date, $punch_rows, $allow_rollover);
+		if (method_exists($this->biometric_model, 'fix_leading_phantom_early_in_morning_out')
+			|| method_exists($this->biometric_model, 'fix_trailing_night_exit_mistake_in')) {
+			$for_fix = [];
+			foreach ($punch_rows as $pr) {
+				$copy = $pr;
+				$copy['type'] = strtoupper((string) ($pr['type'] ?? ''));
+				$copy['ts'] = (int) ($pr['at'] ?? 0);
+				$for_fix[] = $copy;
+			}
+			if (method_exists($this->biometric_model, 'fix_leading_phantom_early_in_morning_out')) {
+				$for_fix = $this->biometric_model->fix_leading_phantom_early_in_morning_out($for_fix);
+			}
+			if (method_exists($this->biometric_model, 'fix_trailing_night_exit_mistake_in')) {
+				$for_fix = $this->biometric_model->fix_trailing_night_exit_mistake_in($for_fix);
+			}
+			$punch_rows = [];
+			foreach ($for_fix as $pr) {
+				$at = (int) ($pr['ts'] ?? $pr['at'] ?? 0);
+				if ($at <= 0) {
+					continue;
+				}
+				$type = strtoupper((string) ($pr['type'] ?? ''));
+				if ($type !== 'IN' && $type !== 'OUT') {
+					continue;
+				}
+				$punch_rows[] = [
+					'time' => substr((string) ($pr['time'] ?? date('H:i:s', $at)), 0, 8),
+					'type' => $type,
+					'at' => $at,
+					'door' => $pr['door'] ?? 'Biometrics swipe',
+				];
+			}
+		}
+
+		$events = [];
+		foreach ($punch_rows as $pr) {
+			$type = strtoupper((string) ($pr['type'] ?? ''));
+			if ($type !== 'IN' && $type !== 'OUT') {
+				continue;
+			}
+			$at = (int) ($pr['at'] ?? 0);
+			if ($at <= 0) {
+				continue;
+			}
+			$events[] = [
+				'at' => $at,
+				'time' => date('H:i:s', $at),
+				'type' => $type,
+				'source' => 'Biometric',
+				'door' => $pr['door'] ?? 'Biometrics swipe',
+			];
+		}
+
+		usort($events, function ($a, $b) {
+			return ($a['at'] ?? 0) <=> ($b['at'] ?? 0);
+		});
+
+		return $events;
+	}
+
+	/**
+	 * @param array<int, array{at?:int,ts?:int}> $events
+	 */
+	protected function span_minutes_from_first_last_punch_events(array $events)
+	{
+		if (count($events) < 2) {
+			return null;
+		}
+		usort($events, function ($a, $b) {
+			return ((int) ($a['at'] ?? $a['ts'] ?? 0)) <=> ((int) ($b['at'] ?? $b['ts'] ?? 0));
+		});
+		$first_at = (int) ($events[0]['at'] ?? $events[0]['ts'] ?? 0);
+		$last_at = (int) ($events[count($events) - 1]['at'] ?? $events[count($events) - 1]['ts'] ?? 0);
+		if ($first_at <= 0 || $last_at <= $first_at) {
+			return null;
+		}
+
+		return intdiv($last_at - $first_at, 60);
+	}
+
+	/**
+	 * @param array<string, mixed> $punch
+	 * @param array<int, array<string, mixed>> $bio_events
+	 * @param array<string, mixed>|null $bio_row
+	 */
+	protected function apply_himanshu_first_last_punch_span_test_fix(
+		$staff_id,
+		array &$punch,
+		array $bio_events,
+		$bio_row,
+		$required_span_minutes
+	) {
+		if (!$this->staff_uses_night_shift_first_last_punch_span_present($staff_id)) {
+			return;
+		}
+
+		if (empty($bio_events) && is_array($bio_row) && $this->biometric_report_row_has_punches($bio_row)) {
+			$att_dt = DateTime::createFromFormat('d-M-Y', (string) ($bio_row['attendance_date'] ?? ''));
+			if ($att_dt) {
+				$bio_events = $this->bridge_daily_row_to_timeline_events(
+					$staff_id,
+					$att_dt->format('Y-m-d'),
+					$bio_row
+				);
+			}
+		}
+
+		$span_minutes = $this->span_minutes_from_first_last_punch_events($bio_events);
+		if (is_array($bio_row)) {
+			$hrs = $this->parse_biometric_report_hours($bio_row['work_duration'] ?? '');
+			if ($hrs === null) {
+				$hrs = $this->parse_biometric_report_hours($bio_row['t_duration'] ?? '');
+			}
+			if ($hrs !== null) {
+				$from_report = (int) round($hrs * 60);
+				if ($span_minutes === null || $from_report > $span_minutes) {
+					$span_minutes = $from_report;
+				}
+			}
+		}
+
+		if ($span_minutes === null || $span_minutes < (int) $required_span_minutes) {
+			return;
+		}
+
+		$this->load->helper('timesheets/timesheets');
+		$punch['punch_missing'] = false;
+		$punch['span_minutes'] = $span_minutes;
+		$punch['span_hrs'] = round($span_minutes / 60, 2);
+		$punch['hours'] = max((float) ($punch['hours'] ?? 0), timesheets_present_min_hours());
+
+		if (!empty($bio_events)) {
+			usort($bio_events, function ($a, $b) {
+				return ((int) ($a['at'] ?? $a['ts'] ?? 0)) <=> ((int) ($b['at'] ?? $b['ts'] ?? 0));
+			});
+			$first_at = (int) ($bio_events[0]['at'] ?? $bio_events[0]['ts'] ?? 0);
+			$last_at = (int) ($bio_events[count($bio_events) - 1]['at'] ?? $bio_events[count($bio_events) - 1]['ts'] ?? 0);
+			if ($first_at > 0) {
+				$punch['check_in'] = date('H:i', $first_at);
+				if (empty($punch['ins'])) {
+					$punch['ins'] = [date('H:i:s', $first_at)];
+				}
+			}
+			if ($last_at > 0) {
+				$punch['check_out'] = date('H:i', $last_at);
+				$last_time = date('H:i:s', $last_at);
+				$punch['outs'] = array_values(array_unique(array_merge($punch['outs'] ?? [], [$last_time])));
+			}
+			$punch['swipes'] = $this->timeline_events_to_swipe_rows($bio_events);
+		}
+	}
+
+	/**
 	 * TEMP Oct 2026 only: staff with a terminal last-IN who still completed 8h55m
 	 * (first IN → last OUT span) should show Present, not Absent / Half day.
 	 *
@@ -21199,7 +21634,7 @@ public function add_requisition_ajax($data)
 	 *
 	 * @param array<int, array{at:int,time:string,type:string,source:string,door:string}> $events
 	 */
-	protected function analyze_session_punches(array $events, $preserve_trailing_in = false)
+	protected function analyze_session_punches(array $events, $preserve_trailing_in = false, $keep_pre_first_in_outs = false)
 	{
 		if (empty($events)) {
 			return $this->analyze_day_punches([], [], 'Workroom');
@@ -21229,20 +21664,22 @@ public function add_requisition_ajax($data)
 		}
 		$events = $this->normalize_biometric_punch_events($deduped, $preserve_trailing_in);
 
-		$first_in_at = null;
-		foreach ($events as $ev) {
-			if (($ev['type'] ?? '') === 'IN') {
-				$first_in_at = (int) $ev['at'];
-				break;
-			}
-		}
-		if ($first_in_at !== null) {
-			$events = array_values(array_filter($events, function ($ev) use ($first_in_at) {
-				if (($ev['type'] ?? '') !== 'OUT') {
-					return true;
+		if (!$keep_pre_first_in_outs) {
+			$first_in_at = null;
+			foreach ($events as $ev) {
+				if (($ev['type'] ?? '') === 'IN') {
+					$first_in_at = (int) $ev['at'];
+					break;
 				}
-				return (int) ($ev['at'] ?? 0) > $first_in_at;
-			}));
+			}
+			if ($first_in_at !== null) {
+				$events = array_values(array_filter($events, function ($ev) use ($first_in_at) {
+					if (($ev['type'] ?? '') !== 'OUT') {
+						return true;
+					}
+					return (int) ($ev['at'] ?? 0) > $first_in_at;
+				}));
+			}
 		}
 
 		$ins = [];

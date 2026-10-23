@@ -437,11 +437,11 @@ class App_mailer extends CI_Email
     public function send($auto_clear = true)
     {
         if (defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL) {
-            log_message('info', 'Email blocked because this is the local server.');
+            log_message('error', 'Outbound email blocked by app_email_policy (APP_DISABLE_EMAIL). Message was not sent.');
             if (!empty($auto_clear)) {
                 $this->clear(true);
             }
-            return true;
+            return false;
         }
 
         $auto_clear = !empty($auto_clear);

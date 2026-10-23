@@ -16,6 +16,12 @@
                 $('.snapshot-ui-loading-target.is-loading').removeClass('is-loading');
             }
         },
+        /** Clear overlay even if show() ran more than hide() (stuck Loading). */
+        forceHide: function () {
+            this._pending = 0;
+            $('#snapshot-ui-loader').removeClass('is-active').attr({ 'aria-hidden': 'true', 'aria-busy': 'false' });
+            $('.snapshot-ui-loading-target.is-loading').removeClass('is-loading');
+        },
         setLoadingTarget: function ($el, loading) {
             if (!$el || !$el.length) {
                 return;
@@ -44,9 +50,13 @@
 
     $(function () {
         snapshotUiLoader.show();
+        // Hide when DOM + page scripts run — do not wait for window.load (slow/hung images keep spinner forever).
+        setTimeout(function () {
+            snapshotUiLoader.forceHide();
+        }, 400);
     });
     $(window).on('load', function () {
-        snapshotUiLoader.hide();
+        snapshotUiLoader.forceHide();
     });
 })(jQuery);
 </script>

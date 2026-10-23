@@ -449,6 +449,63 @@ class Biometric_model extends App_Model
      * @param array<int, array{type?:string,ts?:int,at?:int}> $events
      * @return array<int, array{type?:string,ts?:int,at?:int}>
      */
+    /**
+     * Drop a phantom early IN when the device was already "in" and real arrival is the next OUT
+     * (common day-shift pattern: stray IN ~10:xx, OUT ~11:xx when entering, then IN again after break).
+     *
+     * @param array<int, array{type?:string,ts?:int,at?:int,time?:string}> $events
+     * @return array<int, array{type?:string,ts?:int,at?:int,time?:string}>
+     */
+    public function fix_leading_phantom_early_in_morning_out(array $events)
+    {
+        if (count($events) < 3) {
+            return $events;
+        }
+
+        $tsOf = function ($ev) {
+            return (int) ($ev['ts'] ?? $ev['at'] ?? 0);
+        };
+
+        $first = $events[0];
+        $second = $events[1];
+        $third = $events[2];
+        if (strtoupper((string) ($first['type'] ?? '')) !== 'IN'
+            || strtoupper((string) ($second['type'] ?? '')) !== 'OUT'
+            || strtoupper((string) ($third['type'] ?? '')) !== 'IN') {
+            return $events;
+        }
+
+        $t0 = $tsOf($first);
+        $t1 = $tsOf($second);
+        $t2 = $tsOf($third);
+        if ($t0 <= 0 || $t1 <= $t0 || $t2 <= $t1) {
+            return $events;
+        }
+
+        $gap01 = $t1 - $t0;
+        $gap12 = $t2 - $t1;
+        if ($gap01 < 45 * 60 || $gap01 > 3 * 3600 || $gap12 < 45 * 60) {
+            return $events;
+        }
+
+        $hourOut = (int) date('G', $t1);
+        if ($hourOut < 10 || $hourOut > 13) {
+            return $events;
+        }
+
+        $corrected = $second;
+        $corrected['type'] = 'IN';
+        $corrected['time'] = date('H:i:s', $t1);
+        $corrected['ts'] = $t1;
+        if (array_key_exists('at', $corrected)) {
+            $corrected['at'] = $t1;
+        }
+
+        array_splice($events, 0, 2, [$corrected]);
+
+        return $events;
+    }
+
     public function fix_trailing_night_exit_mistake_in(array $events)
     {
         if (count($events) < 2) {
@@ -1971,6 +2028,7 @@ class Biometric_model extends App_Model
         });
 
         $events = $this->dedupe_biometric_punch_events($events);
+        $events = $this->fix_leading_phantom_early_in_morning_out($events);
 
         return $this->fix_trailing_night_exit_mistake_in($events);
     }

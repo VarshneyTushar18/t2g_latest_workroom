@@ -12,7 +12,7 @@ if (is_file($pedmaEvalReminderPopup)) {
     include_once($pedmaEvalReminderPopup);
 }
 $sopComposeModal = APPPATH . 'views/admin/includes/modals/sop_compose_modal.php';
-if (is_file($sopComposeModal) && is_staff_logged_in() && can_create_sop()) {
+if (is_file($sopComposeModal) && is_staff_logged_in() && function_exists('can_create_sop') && can_create_sop()) {
     include_once($sopComposeModal);
 }
 ?>

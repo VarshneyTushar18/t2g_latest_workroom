@@ -521,7 +521,8 @@ render_datatable($table_data,'table_registration_leave',
 
           <div class="col-md-4">
             <div class="leave-summary-box" id="apply_leave_balance_box">
-              <div class="sum-row">Leave Balance: <span class="sum-val" id="leave_balance_value"><?php echo html_escape($leave_balance); ?></span></div>
+              <div class="sum-row">Leave balance: <span class="sum-val" id="leave_balance_value"><?php echo html_escape($leave_balance); ?></span></div>
+              <div class="sum-row text-muted" id="leave_balance_detail" style="font-size:12px;display:none;"></div>
               <div class="sum-row">Applying For: <span class="sum-val" id="applying_for_value">—</span></div>
               <div class="sum-row">Balance after apply: <span class="sum-val" id="remaining_balance_value">—</span></div>
               <div id="loss_of_pay_notice" class="lop-notice" style="display:none;"></div>

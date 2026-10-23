@@ -74,8 +74,9 @@
           <div class="panel-body">
             <p class="wfh-cal-hint">
               <strong>Assign Work From Home days for your team.</strong>
-              Choose any department (HR/Admin see all) or <strong>All WFH employment (category)</strong> → pick employees or <strong>Select all in department</strong> for bulk → month/year → working days (Mon–Sat) → <strong>Save</strong>.
-              On allotted days staff use <strong>Workroom check-in/out</strong> (9h / 8h 55m = Present). Same days apply to every selected employee and show in <strong>My / Team attendance</strong> as WFH.
+              Choose department + one or more employees → pick month/year → tick working days (Mon–Sat; Sunday is weekly off) → click <strong>Save</strong>.
+              On allotted WFH days, staff use <strong>Workroom check-in/out</strong>; 9 hours (8h 55m) counts as Present on their calendar.
+              When multiple employees are selected, the same WFH days apply to all of them.
             </p>
 
                         <div class="row">
@@ -83,8 +84,7 @@
                         <?php echo render_select('departments', $departments, array('departmentid', 'name'), 'department'); ?>
               </div>
               <div class="col-md-4">
-                <?php echo render_select('staffid[]', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee(s)', '', array('multiple' => true, 'data-live-search' => true, 'data-actions-box' => true, 'data-select-all-text' => 'Select all', 'data-deselect-all-text' => 'Clear all'), [], '', '', 'selectpicker', false); ?>
-                <button type="button" class="btn btn-default btn-sm mtop5" id="wfh_select_all_staff">Select all in department</button>
+                <?php echo render_select('staffid[]', $staffs, array('staffid', array('firstname', 'lastname', 'staff_identifi')), 'Select Employee(s)', '', array('multiple' => true, 'data-live-search' => true, 'data-actions-box' => true), [], '', '', 'selectpicker', false); ?>
               </div>
               <div class="col-md-2">
                 <div class="form-group">
@@ -434,27 +434,16 @@
       setStatus('No changes to save', true);
       return;
     }
-    var dateKeys = Object.keys(selected).sort();
-    if (!dateKeys.length) {
-      setStatus('Select at least one WFH day on the calendar', false);
-      return;
-    }
     var payload = {
       staffids: getSelectedStaffIds(),
       department_id: $('#departments').val(),
       month: monthKey(current),
-      dates: dateKeys
+      dates: Object.keys(selected)
     };
     payload[csrf.token_name] = csrf.hash;
     $('#wfh_save_btn').prop('disabled', true);
-    setStatus('Saving ' + dateKeys.length + ' day(s)…', true);
-    $.ajax({
-      url: admin_url + 'holiday/save_wfh_days',
-      type: 'POST',
-      traditional: true,
-      data: payload,
-      dataType: 'json'
-    }).done(function (res) {
+    setStatus('Saving…', true);
+    $.post(admin_url + 'holiday/save_wfh_days', payload, function (res) {
       if (!res || !res.ok) {
         updateSaveButton();
         setStatus((res && res.error) ? res.error : 'Save failed', false);
@@ -470,7 +459,7 @@
       paintSelected();
       refreshTable();
       setStatus(res.message || 'Saved', true);
-    }).fail(function (xhr) {
+    }, 'json').fail(function (xhr) {
       updateSaveButton();
       if (xhr && xhr.status === 419) {
         setStatus('Page expired — refreshing…', false);
@@ -535,21 +524,6 @@
     setStatus(on ? 'Mon–Fri selected — click Save to apply' : 'Mon–Fri cleared — click Save to apply', null);
   });
   $('#wfh_save_btn').on('click', saveLeaves);
-
-  $('#wfh_select_all_staff').on('click', function () {
-    var ids = [];
-    $staffSelect.find('option').each(function () {
-      var v = $(this).attr('value');
-      if (v) ids.push(v);
-    });
-    if (!ids.length) {
-      setStatus('No employees in this department', false);
-      return;
-    }
-    $staffSelect.selectpicker('val', ids);
-    $staffSelect.trigger('changed.bs.select');
-    setStatus('All ' + ids.length + ' employees selected — set WFH days and Save', true);
-  });
 
   $(document).on('click', '#wfh_days .wfh-cal-day.is-workday', function (e) {
     if ($(e.target).is('input.wfh-cb, label, span')) return;

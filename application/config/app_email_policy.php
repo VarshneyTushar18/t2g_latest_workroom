@@ -3,13 +3,42 @@
 defined('BASEPATH') or exit('No direct script access allowed');
 
 /**
- * Whether outbound email must be suppressed (local dev, staging hosts, loopback, etc.).
- * Live production: only t2gworkroom.com over non-loopback, non-Windows CLI.
+ * Suppress outbound email on local dev / staging hosts only.
+ * Live production (production_crm): allow email even when cron uses http://127.0.0.1.
  *
  * Override in app-config-local.php:
  *   define('APP_FORCE_DISABLE_EMAIL', true);
- *   define('APP_FORCE_ENABLE_EMAIL', true);  // use with care
+ *   define('APP_FORCE_ENABLE_EMAIL', true);
  */
+function app_is_live_production_workroom()
+{
+    return defined('APP_DB_NAME') && APP_DB_NAME === 'production_crm';
+}
+
+/**
+ * Would outbound email be blocked if cron called http://127.0.0.1/... (same as server crontab)?
+ */
+function app_cron_loopback_would_block_email()
+{
+    $prevHost = $_SERVER['HTTP_HOST'] ?? null;
+    $prevAddr = $_SERVER['SERVER_ADDR'] ?? null;
+    $_SERVER['HTTP_HOST']   = '127.0.0.1';
+    $_SERVER['SERVER_ADDR'] = '127.0.0.1';
+    $blocked = app_should_disable_outbound_email();
+    if ($prevHost !== null) {
+        $_SERVER['HTTP_HOST'] = $prevHost;
+    } else {
+        unset($_SERVER['HTTP_HOST']);
+    }
+    if ($prevAddr !== null) {
+        $_SERVER['SERVER_ADDR'] = $prevAddr;
+    } else {
+        unset($_SERVER['SERVER_ADDR']);
+    }
+
+    return $blocked;
+}
+
 function app_should_disable_outbound_email()
 {
     if (defined('APP_FORCE_ENABLE_EMAIL') && APP_FORCE_ENABLE_EMAIL) {
@@ -17,6 +46,10 @@ function app_should_disable_outbound_email()
     }
     if (defined('APP_FORCE_DISABLE_EMAIL') && APP_FORCE_DISABLE_EMAIL) {
         return true;
+    }
+
+    if (app_is_live_production_workroom()) {
+        return false;
     }
 
     $host = '';

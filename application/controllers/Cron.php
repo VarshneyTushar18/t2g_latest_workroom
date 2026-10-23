@@ -210,6 +210,49 @@ class Cron extends App_Controller
 		header('Content-Type: application/json');
 		echo json_encode($result);
 	}
+
+	/** Scheduled: morning daily report emails (break sheets + e-commerce). Crontab 02:30 UTC ≈ 8:00 IST */
+	public function send_scheduled_daily_morning_reports()
+	{
+		$this->load->model('cron_model');
+		$result = $this->cron_model->run_scheduled_morning_daily_reports();
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** Scheduled: Snapshot not-logged-in report. Crontab 07:35 UTC ≈ 1:05 PM IST */
+	public function send_scheduled_daily_snapshot_report()
+	{
+		$this->load->model('cron_model');
+		$result = $this->cron_model->run_scheduled_snapshot_daily_report();
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** Scheduled: biometric + late arrival + break (Harpreet/Sarab). Crontab 04:15 UTC ≈ 9:45 AM IST */
+	public function send_scheduled_daily_afternoon_reports()
+	{
+		$this->load->model('cron_model');
+		$result = $this->cron_model->run_scheduled_afternoon_daily_reports();
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** JSON list of daily reports and configured To/CC (for ops verification). */
+	public function daily_report_recipients_catalog()
+	{
+		$this->load->model('cron_model');
+		header('Content-Type: application/json');
+		echo json_encode($this->cron_model->daily_report_recipients_catalog());
+	}
+
+	/** JSON cron health (last /cron/index run, daily send flags). */
+	public function cron_health()
+	{
+		$this->load->model('cron_model');
+		header('Content-Type: application/json');
+		echo json_encode($this->cron_model->cron_health_status(), JSON_PRETTY_PRINT);
+	}
 	public function send_monthly_late_arrival_summary($year = null, $month = null){
 		$this->load->model('cron_model');
 		$this->cron_model->send_monthly_late_arrival_summary(
@@ -245,6 +288,23 @@ class Cron extends App_Controller
 		$this->load->model('cron_model');
 		$att_date = $date !== '' ? $date : null;
 		$result = $this->cron_model->send_daily_team_break_timing_to_managers($att_date);
+		header('Content-Type: application/json');
+		echo json_encode($result);
+	}
+
+	/** E-commerce break rollup to Pankaj (default: yesterday). Optional date d-M-Y; add /force to resend same day */
+	public function send_daily_ecommerce_break_timing_report($date = '', $force = '')
+	{
+		$this->load->model('cron_model');
+		$force_resend = ($force === 'force' || $force === '1');
+		$att_date = null;
+		if ($date !== '' && $date !== 'force' && $date !== '1') {
+			$att_date = $date;
+		}
+		if (($date === 'force' || $date === '1') && $force === '') {
+			$force_resend = true;
+		}
+		$result = $this->cron_model->send_daily_ecommerce_break_timing_to_pankaj($att_date, $force_resend);
 		header('Content-Type: application/json');
 		echo json_encode($result);
 	}

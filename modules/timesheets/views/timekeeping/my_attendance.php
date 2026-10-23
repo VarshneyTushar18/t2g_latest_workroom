@@ -25,7 +25,7 @@
   .t2g-att-cal-weekdays, .t2g-att-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
   .t2g-att-cal-weekdays span { text-align: center; font-size: 11px; font-weight: 700; color: #64748b; padding: 4px 0 8px; }
   .t2g-att-cal-day {
-    position: relative; min-height: 74px; padding: 5px 6px 8px; border-radius: 4px; cursor: pointer;
+    position: relative; min-height: 58px; padding: 5px 6px 8px; border-radius: 4px; cursor: pointer;
     border: 1px solid #e2e8f0; background: #fff; transition: box-shadow .15s ease, transform .1s ease;
   }
   .t2g-att-cal-day:not(.other-month):hover { box-shadow: 0 2px 6px rgba(15,23,42,.1); transform: translateY(-1px); }
@@ -106,6 +106,8 @@
   .t2g-att-source-bio { color: #0369a1; }
   .t2g-att-punch-list ul { list-style: none; margin: 0; padding: 0; font-size: 12px; }
   .t2g-att-punch-list li { padding: 5px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
+  .t2g-att-bridge-raw { font-size: 11px; color: #475569; word-break: break-word; margin-top: 6px; padding: 8px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; }
+  .t2g-att-punch-list-wrap { max-height: 320px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .t2g-att-checkio-btn {
     background: #1e3a5f !important; border-color: #1e3a5f !important; color: #fff !important;
     font-weight: 600; border-radius: 6px; padding: 8px 16px; white-space: nowrap;
@@ -117,8 +119,18 @@
   }
   @media (max-width: 1199px) {
     .t2g-att-cal-wrap, .t2g-att-detail { flex: 1 1 100%; max-width: 100%; min-width: 0; }
-    .t2g-att-cal-day { min-height: 64px; }
+    .t2g-att-cal-day { min-height: 52px; }
     .t2g-att-stat-card { min-width: 120px; }
+    .t2g-att-detail { min-height: 300px; }
+  }
+  @media (max-width: 767px) {
+    .t2g-att-cal-day { min-height: 48px; padding: 4px 3px 6px; }
+    .t2g-att-cal-code { font-size: 11px; margin-top: 4px; }
+    .t2g-att-cal-io { font-size: 8px; }
+    .t2g-att-cal-weekdays span { font-size: 10px; }
+    .t2g-att-punch-list-wrap { max-height: 220px; }
+    .t2g-att-metrics { min-width: 0; font-size: 9px; }
+    .t2g-att-head { flex-direction: column; align-items: flex-start; }
   }
   .t2g-att-checkio-btn:hover, .t2g-att-checkio-btn:focus { background: #152a47 !important; border-color: #152a47 !important; color: #fff !important; }
 </style>
@@ -204,7 +216,7 @@
                 <div class="t2g-att-empty" id="t2g_empty_tpl">
                   <i class="fa fa-calendar-o"></i>
                   <h5>Select a date</h5>
-                  <p>Click any day on the calendar to view attendance details.</p>
+                  <p>Click a calendar day to see times, status, and the full punch log here.</p>
                 </div>
               </div>
             </div>
@@ -512,10 +524,15 @@
       html += '<div class="' + cls + '" data-date="' + ds + '">';
       html += '<span class="t2g-att-cal-num">' + d + '</span>';
       if (day && day.code) html += dayCodeHtml(day);
-      if (day && day.attendance_source === 'biometric' && (day.check_in || day.first_in) && (day.check_out || day.last_out)) {
-        var calIn = day.check_in || day.first_in;
-        var calOut = day.check_out || day.last_out;
-        html += '<span class="t2g-att-cal-io">' + esc(calIn) + '–' + esc(calOut) + '</span>';
+      /* Full punch log lives in the right panel — keep calendar cells compact (date + code only). */
+      if (day && day.attendance_source === 'biometric' && !day.full_bridge_punches) {
+        if ((day.check_in || day.first_in) && (day.check_out || day.last_out)) {
+          var calIn = day.check_in || day.first_in;
+          var calOut = day.check_out || day.last_out;
+          html += '<span class="t2g-att-cal-io">' + esc(calIn) + '–' + esc(calOut) + '</span>';
+        } else if (day.check_in || day.first_in) {
+          html += '<span class="t2g-att-cal-io">' + esc(day.check_in || day.first_in) + '</span>';
+        }
       }
       html += '</div>';
       cell++;
@@ -588,14 +605,19 @@
     html += '</tbody></table>';
 
     if (day.swipes && day.swipes.length) {
-      html += '<div class="t2g-att-section">Punch Log</div><div class="t2g-att-punch-list"><ul>';
+      html += '<div class="t2g-att-section">Punch Log' + (day.full_bridge_punches ? ' (full bridge — all device punches)' : '') + '</div>';
+      html += '<div class="t2g-att-punch-list-wrap"><div class="t2g-att-punch-list"><ul>';
       day.swipes.forEach(function(sw) {
         var badge = sw.type === 'IN' ? '<span class="t2g-att-badge-in">IN</span>' : (sw.type === 'OUT' ? '<span class="t2g-att-badge-out">OUT</span>' : esc(sw.type));
         var src = String(sw.source || '');
         var srcCls = src === 'WFH' ? 't2g-att-source-wfh' : (src === 'Biometric' ? 't2g-att-source-bio' : '');
         html += '<li><span>' + esc(sw.time) + '</span><span>' + badge + (src ? '<span class="t2g-att-source ' + srcCls + '">' + esc(src) + '</span>' : '') + '</span></li>';
       });
-      html += '</ul></div>';
+      html += '</ul></div></div>';
+    }
+    if (day.full_bridge_punches && day.punch_records) {
+      html += '<div class="t2g-att-section">Bridge punch records</div>';
+      html += '<div class="t2g-att-bridge-raw">' + esc(day.punch_records) + '</div>';
     }
 
     if (day.can_regularise || day.status === 'pending') {

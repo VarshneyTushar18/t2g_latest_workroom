@@ -669,20 +669,19 @@ function get_satuday_off_dates($staffid = '')
 
 function is_night_shift($staff_id)
 {
-    $department = get_department_by_staffid($staff_id);
+    $departments = get_department_by_staffid($staff_id);
+    if (empty($departments)) {
+        return false;
+    }
 
-
-    if(!empty($department) && $department){
-
-        $department_name = $department[0]['name'] ?? '';
-        if(strpos($department_name,'Night')){
+    foreach ($departments as $dept) {
+        $department_name = (string) ($dept['name'] ?? '');
+        if ($department_name !== '' && stripos($department_name, 'Night') !== false) {
             return true;
         }
     }
-  
 
     return false;
- 
 }
 
 function is_leader() {

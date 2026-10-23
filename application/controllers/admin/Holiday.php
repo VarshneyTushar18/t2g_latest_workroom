@@ -30,10 +30,6 @@ class Holiday extends AdminController
     }
 	public function get_staff_department_json()
     {
-        if (!attendance_permission()) {
-            ajax_access_denied();
-        }
-
         $departmentid = $this->input->post('department');
         $data[] = $this->holiday_model->get_staff_based_on_department($departmentid);
         echo json_encode($data[0]);
@@ -647,10 +643,9 @@ class Holiday extends AdminController
 			access_denied('timesheets');
 		}
 
-		$this->load->helper('timesheets/timesheets');
 		$this->holiday_model->ensure_staff_wfh_day_table();
-		$data['departments'] = $this->holiday_model->get_wfh_manage_departments();
-		$data['staffs'] = [];
+		$data['departments'] = $this->departments_model->get_staff_departments();
+		$data['staffs'] = $this->holiday_model->get_staff_based_on_department();
 		$this->load->view('admin/holiday/manage_wfh', $data);
 	}
 
@@ -707,29 +702,19 @@ class Holiday extends AdminController
 			ajax_access_denied();
 		}
 
-		$this->load->helper('timesheets/timesheets');
 		$this->holiday_model->ensure_staff_wfh_day_table();
 		$staff_ids = $this->parse_staff_ids_from_request();
-		$dept_raw = $this->input->post('department_id');
-		$wfh_key = function_exists('holiday_wfh_employment_department_key')
-			? holiday_wfh_employment_department_key()
-			: 'wfh_employment';
-		$wfh_employment_mode = ((string) $dept_raw === (string) $wfh_key);
-		$department_id = $wfh_employment_mode ? 0 : (int) $dept_raw;
+		$department_id = (int) $this->input->post('department_id');
 		$month = trim((string) $this->input->post('month'));
 		$dates = $this->input->post('dates');
 
-		if (empty($staff_ids) || !preg_match('/^\d{4}-\d{2}$/', $month)) {
-			echo json_encode(['ok' => false, 'error' => 'Invalid staff or month']);
-			return;
-		}
-		if (!$wfh_employment_mode && $department_id <= 0) {
-			echo json_encode(['ok' => false, 'error' => 'Select a department or WFH employment group']);
+		if (empty($staff_ids) || $department_id <= 0 || !preg_match('/^\d{4}-\d{2}$/', $month)) {
+			echo json_encode(['ok' => false, 'error' => 'Invalid staff, department or month']);
 			return;
 		}
 
 		if (!is_array($dates)) {
-			$dates = (is_string($dates) && trim($dates) !== '') ? [trim($dates)] : [];
+			$dates = [];
 		}
 
 		$from = $month . '-01';
@@ -782,12 +767,9 @@ class Holiday extends AdminController
 				if (isset($existing[$date])) {
 					continue;
 				}
-				$dept_for_row = $department_id > 0
-					? $department_id
-					: $this->holiday_model->resolve_staff_primary_department_id($staff_id);
 				$this->db->insert(db_prefix() . 'staff_wfh_day', [
 					'staffid' => $staff_id,
-					'department_id' => $dept_for_row,
+					'department_id' => $department_id,
 					'wfh_date' => $date,
 					'status' => 1,
 					'assigned_by' => $assigned_by,
@@ -795,13 +777,6 @@ class Holiday extends AdminController
 				]);
 				$this->upsert_wfh_timesheet_marker($staff_id, $date);
 				$total_added++;
-			}
-		}
-
-		$this->load->model('timesheets/timesheets_model');
-		foreach ($staff_ids as $staff_id) {
-			if (method_exists($this->timesheets_model, 'sync_wfh_workroom_timesheets_in_range')) {
-				$this->timesheets_model->sync_wfh_workroom_timesheets_in_range((int) $staff_id, $from, $to);
 			}
 		}
 
