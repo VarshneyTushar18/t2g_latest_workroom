@@ -13335,18 +13335,8 @@ public function add_requisition_ajax($data)
 	 */
 	protected function build_check_in_out_punch_analysis($staff_id, $date)
 	{
-		$data_check_in_out = $this->get_list_check_in_out($date, $staff_id);
-		$cio_rows = [];
-		foreach ($data_check_in_out as $row) {
-			$cio_rows[] = [
-				'd' => date('Y-m-d', strtotime($row['date'])),
-				'type_check' => (int) $row['type_check'],
-				't' => date('H:i:s', strtotime($row['date'])),
-				'date' => $row['date'],
-			];
-		}
-
 		$date_work = date('Y-m-d', strtotime((string) $date));
+		$cio_rows = $this->get_paired_workroom_cio_rows_for_day($staff_id, $date_work);
 		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $date_work, $date_work);
 		$source = !empty($wfh_dates[$date_work]) ? 'WFH' : 'Workroom';
 
@@ -19829,13 +19819,15 @@ public function add_requisition_ajax($data)
 			FROM ' . db_prefix() . 'check_in_out
 			WHERE staff_id = ? AND DATE(date) BETWEEN ? AND ?
 			ORDER BY date ASC',
-			[$staff_id, $from, $to]
+			[$staff_id, $range_from, $range_to]
 		)->result_array();
 		$cio_by_date = [];
 		foreach ($cio_rows as $row) {
 			$cio_by_date[$row['d']][] = $row;
 		}
-		$cio_by_date = $this->normalize_workroom_cio_by_calendar_date($cio_by_date);
+		$workroom_pair = $this->pair_workroom_cio_by_session_window($cio_by_date);
+		$cio_by_date = $workroom_pair['cio_by_date'];
+		$workroom_carryover_dates = $workroom_pair['carryover_dates'];
 
 		$bio_by_date = [];
 		$bio_daily_by_date = [];
@@ -20241,15 +20233,17 @@ public function add_requisition_ajax($data)
 			if ($span_minutes === null && $span_hrs > 0) {
 				$span_minutes = intdiv((int) round($span_hrs * 3600), 60);
 			}
-			$carryover_parent = $carryover_dates[$date] ?? null;
+			$carryover_parent = $carryover_dates[$date] ?? ($workroom_carryover_dates[$date] ?? null);
 			$orphan_carryover_out = $this->is_workroom_orphan_carryover_punch($punch, $carryover_parent, $date);
+			$is_workroom_session_carryover = isset($workroom_carryover_dates[$date]) && empty($cio_for_day);
 			$is_night_carryover = (
 				$carryover_parent
 				&& !$session
 				&& !$is_future
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'pending', 'regularised'], true)
 				&& (
-					(
+					$is_workroom_session_carryover
+					|| (
 						$attendance_source === 'none'
 						&& empty($punch['swipes'])
 						&& $hours <= 0
@@ -22340,63 +22334,133 @@ public function add_requisition_ajax($data)
 		return true;
 	}
 
-	protected function normalize_workroom_cio_by_calendar_date(array $cio_by_date)
+	/**
+	 * Pair Workroom CIO rows into sessions anchored on check-in date (13h window).
+	 *
+	 * @param array<string, array<int, array<string, mixed>>> $cio_by_date
+	 * @param float|null $window_hours
+	 * @return array{cio_by_date: array<string, array<int, array<string, mixed>>>, carryover_dates: array<string, string>}
+	 */
+	protected function pair_workroom_cio_by_session_window(array $cio_by_date, $window_hours = null)
 	{
-		$dates = array_keys($cio_by_date);
-		sort($dates);
+		$window_hours = $window_hours ?? self::ATTENDANCE_SESSION_WINDOW_HOURS;
+		$window_sec = (int) (max(1, (float) $window_hours) * 3600);
 
-		foreach ($dates as $d) {
-			if (empty($cio_by_date[$d])) {
-				continue;
-			}
-			$keep = [];
-			foreach ($cio_by_date[$d] as $row) {
-				if ((int) ($row['type_check'] ?? 0) !== 2) {
-					$keep[] = $row;
+		$events = [];
+		foreach ($cio_by_date as $d => $rows) {
+			foreach ($rows as $row) {
+				$full = trim((string) ($row['date'] ?? ''));
+				if ($full === '' && !empty($row['d']) && !empty($row['t'])) {
+					$full = $row['d'] . ' ' . $row['t'];
+				}
+				$ts = $full !== '' ? strtotime($full) : false;
+				if ($ts === false) {
 					continue;
 				}
-
-				$ts = strtotime((string) ($row['date'] ?? ($d . ' ' . ($row['t'] ?? ''))));
-				if ($ts === false || (int) date('G', $ts) >= 12) {
-					$keep[] = $row;
-					continue;
-				}
-
-				$prev = date('Y-m-d', strtotime($d . ' -1 day'));
-				$moved = false;
-				if ($prev !== '1970-01-01' && !empty($cio_by_date[$prev])) {
-					$last_type = $this->workroom_last_punch_type_on_rows($cio_by_date[$prev]);
-					$has_evening_in = false;
-					foreach ($cio_by_date[$prev] as $pr) {
-						if ((int) ($pr['type_check'] ?? 0) !== 1) {
-							continue;
-						}
-						$in_ts = strtotime((string) ($pr['date'] ?? ($prev . ' ' . ($pr['t'] ?? ''))));
-						if ($in_ts !== false && (int) date('G', $in_ts) >= 12) {
-							$has_evening_in = true;
-							break;
-						}
-					}
-					if ($has_evening_in && $last_type === 1) {
-						$cio_by_date[$prev][] = $row;
-						$moved = true;
-					}
-				}
-				if (!$moved) {
-					$keep[] = $row;
-				}
+				$events[] = [
+					'ts' => (int) $ts,
+					'row' => $row,
+					'type' => (int) ($row['type_check'] ?? 0),
+					'cal' => date('Y-m-d', $ts),
+				];
 			}
-			$cio_by_date[$d] = $keep;
+		}
+		usort($events, function ($a, $b) {
+			return ($a['ts'] ?? 0) <=> ($b['ts'] ?? 0);
+		});
+
+		$paired = [];
+		$moved_from_date = [];
+		$n = count($events);
+		$i = 0;
+
+		while ($i < $n) {
+			while ($i < $n && $events[$i]['type'] !== 1) {
+				$ev = $events[$i];
+				$paired[$ev['cal']][] = $ev['row'];
+				$i++;
+			}
+			if ($i >= $n) {
+				break;
+			}
+
+			$start_ts = $events[$i]['ts'];
+			$start_date = date('Y-m-d', $start_ts);
+			$end_ts = $start_ts + $window_sec;
+
+			while ($i < $n) {
+				$ev = $events[$i];
+				if ($ev['ts'] > $end_ts) {
+					break;
+				}
+				if ($ev['type'] === 1 && $ev['ts'] > $start_ts && $ev['cal'] !== $start_date) {
+					break;
+				}
+				if ($ev['cal'] !== $start_date) {
+					$moved_from_date[$ev['cal']] = $start_date;
+				}
+				$paired[$start_date][] = $ev['row'];
+				$i++;
+			}
 		}
 
-		foreach ($cio_by_date as $d => &$rows) {
+		foreach ($paired as $d => $rows) {
 			usort($rows, function ($a, $b) {
 				return strcmp((string) ($a['date'] ?? ''), (string) ($b['date'] ?? ''));
 			});
+			$paired[$d] = $rows;
 		}
-		unset($rows);
 
-		return $cio_by_date;
+		$carryover_dates = [];
+		foreach ($moved_from_date as $d => $parent) {
+			if (empty($paired[$d])) {
+				$carryover_dates[$d] = $parent;
+			}
+		}
+
+		return [
+			'cio_by_date' => $paired,
+			'carryover_dates' => $carryover_dates,
+		];
+	}
+
+	/**
+	 * @param array<string, array<int, array<string, mixed>>> $cio_by_date
+	 * @return array<string, array<int, array<string, mixed>>>
+	 */
+	protected function normalize_workroom_cio_by_calendar_date(array $cio_by_date)
+	{
+		return $this->pair_workroom_cio_by_session_window($cio_by_date)['cio_by_date'];
+	}
+
+	/**
+	 * Load Workroom punches for one day after 13h session pairing (matches attendance calendar).
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	protected function get_paired_workroom_cio_rows_for_day($staff_id, $date_work, $pad_days = 2)
+	{
+		$staff_id = (int) $staff_id;
+		$date_work = date('Y-m-d', strtotime((string) $date_work));
+		if ($staff_id <= 0 || $date_work === '') {
+			return [];
+		}
+		$from = date('Y-m-d', strtotime($date_work . ' -' . (int) $pad_days . ' days'));
+		$to = date('Y-m-d', strtotime($date_work . ' +' . (int) $pad_days . ' days'));
+		$cio_rows = $this->db->query(
+			'SELECT DATE(date) AS d, type_check, TIME(date) AS t, date
+			FROM ' . db_prefix() . 'check_in_out
+			WHERE staff_id = ? AND DATE(date) BETWEEN ? AND ?
+			ORDER BY date ASC',
+			[$staff_id, $from, $to]
+		)->result_array();
+		$cio_by_date = [];
+		foreach ($cio_rows as $row) {
+			$cio_by_date[$row['d']][] = $row;
+		}
+		$pair = $this->pair_workroom_cio_by_session_window($cio_by_date);
+
+		return $pair['cio_by_date'][$date_work] ?? [];
 	}
 
 	/**
