@@ -614,11 +614,7 @@ class Emt extends AdminController
 
 	public function getDepartment()
 	{
-		$data['result'] = $this->Emt_model->getDepartment();
-		$data['dept'] = $this->Emt_model->getEmtDepartmentCount();
-		$data['emp_not_loggedin'] = $this->Emt_model->getEmpStaffNotLoggedin();
-		$data['emp_yesterday_count'] = $this->Emt_model->getEmpStaffYesterdayLoggedin();
-		$this->load->view('admin/emt/emt_department', $data);
+		redirect(admin_url('Emt/getEmployeeId'));
 	}
 
 	public function getEmployeedepartment()

@@ -1205,7 +1205,7 @@ function is_sales() {
 }
 
 /**
- * Snapshot / PEDMA: Admin, Super Admin, and HOD see all departments; managers (and others) see only their department(s).
+ * Snapshot / PEDMA: Admin, Super Admin, HR, and HOD see all departments; managers see only their department(s).
  */
 function snapshot_can_view_all_departments($staff_id = '')
 {
@@ -1214,6 +1214,10 @@ function snapshot_can_view_all_departments($staff_id = '')
     }
 
     if (is_admin($staff_id) || is_super_admin() || is_admin2()) {
+        return true;
+    }
+
+    if (is_HR($staff_id)) {
         return true;
     }
 

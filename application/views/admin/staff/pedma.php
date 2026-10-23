@@ -1,6 +1,12 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head();
-$staffData = json_encode($performance_values);
+$pedmaStaffPerformanceJson = json_encode(
+    isset($performance_values) && is_array($performance_values) ? $performance_values : [],
+    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
+if ($pedmaStaffPerformanceJson === false) {
+    $pedmaStaffPerformanceJson = '[]';
+}
 ?>
 <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous"> -->
 <!-- Custom CSS -->
@@ -392,6 +398,9 @@ $staffData = json_encode($performance_values);
     </div>
     <?php init_tail(); ?>
 
+    <script type="application/json" id="pedma-staff-performance-json"><?php echo $pedmaStaffPerformanceJson; ?></script>
+
+    <script src="<?php echo base_url('assets/plugins/Chart.js/Chart.min.js'); ?>"></script>
 
     <!-- Bootstrap JS and custom JavaScript -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
@@ -435,6 +444,27 @@ $staffData = json_encode($performance_values);
             return item && item.kpiData && item.kpiData.length ? item.kpiData : [];
         }
 
+        function pedmaLoadStaffPerformanceData() {
+            var el = document.getElementById('pedma-staff-performance-json');
+            if (!el) {
+                return [];
+            }
+            try {
+                var parsed = JSON.parse(el.textContent || '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                console.error('PEDMA performance JSON parse failed', e);
+                return [];
+            }
+        }
+
+        function pedmaLocalMonthKey(d) {
+            d = d || new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }
+
+        window.pedmaStaffData = pedmaLoadStaffPerformanceData();
+
         $(document).ready(function() {
             const startYear = 2024; // Starting year
             const currentYear = new Date().getFullYear(); // Current year
@@ -465,21 +495,19 @@ $staffData = json_encode($performance_values);
 
             // Function to load and display data based on the selected year
             function loadPerformanceData(year) {
-                // PHP JSON-encoded data of KRA (Performance Data)
-                let kraData = <?php echo $staffData; ?>
+                let kraData = pedmaLoadStaffPerformanceData();
 
-                // Check if kraData is an array
                 if (!Array.isArray(kraData)) {
                     console.error('KRA data is not an array');
-                    return; // Exit if data is not in the expected format
+                    return;
                 }
 
-                // Filter KRA data to include only those with a `date_created` field
                 const kraDataWithDate = kraData.filter(kra => {
-                    // Convert date_created to a Date object
-                    const kraDate = new Date(kra.date_created);
-                    const kraYear = kraDate.getFullYear();  // Extract year from the Date object
-                    return kraYear === parseInt(year); // Compare the year to the selected year
+                    const monthKey = pedmaMonthKeyFromRecord(kra.date_created);
+                    if (!monthKey) {
+                        return false;
+                    }
+                    return parseInt(monthKey.slice(0, 4), 10) === parseInt(year, 10);
                 });
 
                 // Function to extract month from date_created
@@ -697,12 +725,9 @@ $staffData = json_encode($performance_values);
 
 
         $(window).on('load', function() {
-            // Set the default value of the performance_month input to the current month
-            var currentMonth = new Date().toISOString().slice(0, 7);
+            var currentMonth = pedmaLocalMonthKey();
             $('#performance_month').val(currentMonth);
-            // Set the max attribute of the performance_month input to the current month
             $('#performance_month').attr('max', currentMonth);
-            // Trigger the change event for the performance_month input
             $('#performance_month').trigger('change');
         });
 
@@ -717,22 +742,19 @@ $staffData = json_encode($performance_values);
 
         let kraChart = null; // Define chart instances outside the change event
         let kraDoughnutChart = null;
-        window.pedmaStaffData = <?php echo $staffData; ?>;
 
         $('#performance_month').on('change', function() {
             var selectedMonth = $(this).val(); // Get selected month in "YYYY-MM" format
-            let staffData = window.pedmaStaffData || []; // Ensure we pass only performance_values
+            let staffData = window.pedmaStaffData || pedmaLoadStaffPerformanceData();
             const kraCardData = $("#kra-card-data");
             kraCardData.empty();
+            $('#pedmaMonthEmptyHint').hide();
 
-            // Extract year and month from the selected value
-            const [year, month] = selectedMonth.split('-').map(Number);
+            if (!selectedMonth) {
+                return;
+            }
 
-            // Filter staffData for the selected month and year
-            const filteredData = staffData.filter(item => {
-                const dateCreated = new Date(item.date_created);
-                return dateCreated.getFullYear() === year && dateCreated.getMonth() === (month - 1); // Adjust month index
-            });
+            const filteredData = staffData.filter(item => pedmaMonthKeyFromRecord(item.date_created) === selectedMonth);
 
             let cardHTML = '';
             let kraTableRows = '';
@@ -778,8 +800,23 @@ $staffData = json_encode($performance_values);
                     '</tr>';
             }
 
-            if (filteredData.length === 0) { // Check if there are any entries for the selected month
-                kraCardData.html("No Data available for this month");
+            if (filteredData.length === 0) {
+                var monthLabel = selectedMonth;
+                try {
+                    var parts = selectedMonth.split('-');
+                    if (parts.length === 2) {
+                        monthLabel = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1)
+                            .toLocaleString('default', { month: 'long', year: 'numeric' });
+                    }
+                } catch (e) {}
+                if (staffData.length === 0) {
+                    $('#pedmaMonthEmptyHintText').text('No published PEDMA evaluations are available on your account yet.');
+                    $('#pedmaMonthEmptyHint').show();
+                } else {
+                    $('#pedmaMonthEmptyHintText').text('No published PEDMA data for ' + monthLabel + '. Choose another month from the picker above.');
+                    $('#pedmaMonthEmptyHint').show();
+                }
+                kraCardData.html('');
                 $('#pedmaEmployeeKraTableWrap').hide();
                 $('#pedmaEmployeeKraTable tbody').empty();
                 $('#avg_score').html('-');
@@ -788,20 +825,23 @@ $staffData = json_encode($performance_values);
                 $('#twoChart').hide();
 
             } else {
-                $('#twoChart').show();
+                $('#twoChart').hide();
 
+                try {
                 filteredData.forEach((data) => {
                     // Parse kra_data from the item
                     let kra_data = safeParseKraData(data.kra_data);
 
                     kra_data.forEach((item) => {
+                        var kpiList = pedmaEnsureKpiList(item);
+                        var descAttr = pedmaEscapeText(item.description || '');
                         // KRA Row
                         cardHTML += `
                             <div class="col-sm-6 col-md-4 p-i-4 performance_card">
                                 <div class="card h-100">
                                     <h5 class="card-title">
-                                        ${item.name}
-                                        <i class="fa-regular fa-circle-question ml-2 info-icon" data-toggle="popover" data-bs-content="${item.description}"></i>
+                                        ${pedmaEscapeText(item.name)}
+                                        <i class="fa-regular fa-circle-question ml-2 info-icon" data-toggle="popover" data-bs-content="${descAttr}"></i>
                                     </h5>
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -811,15 +851,15 @@ $staffData = json_encode($performance_values);
                         let totalKpiMaxScore = 0;
                         let totalKpiGetScore = 0;
 
-                        if (data.type === "custom" && item.kpiData) {
-                            item.kpiData.forEach(kpi => {
+                        if (data.type === "custom" && kpiList.length) {
+                            kpiList.forEach(kpi => {
                                 totalKpiMaxScore += parseFloat(kpi.max_score);
                                 totalKpiGetScore += parseFloat(kpi.get_score);
                             });
                         }
 
-                        const scoreToDisplay = (data.type === "custom" && item.kpiData) ? totalKpiGetScore : item.get_score;
-                        const maxScoreToDisplay = (data.type === "custom" && item.kpiData) ? item.max_score : 5;
+                        const scoreToDisplay = (data.type === "custom" && kpiList.length) ? totalKpiGetScore : item.get_score;
+                        const maxScoreToDisplay = (item.max_score != null && item.max_score !== '') ? item.max_score : 5;
 
                         cardHTML += `
                                                 ${scoreToDisplay}/${maxScoreToDisplay}
@@ -827,26 +867,26 @@ $staffData = json_encode($performance_values);
                                                 <div class="hr"></div>
                         `;
 
-                        if (data.type === "custom" && item.kpiData.length > 0) {
+                        if (data.type === "custom" && kpiList.length > 0) {
                             cardHTML += `<p class="h4">KPI Details :</p>`;
-                            item.kpiData.forEach((kpi) => {
+                            kpiList.forEach((kpi) => {
                                 cardHTML += `
-                                    <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${kpi.max_score}</b></p>
-                                    <p class="">Manager Comment: ${kpi.comment || '-'}</p>
-                                    <p class="">HR Remarks: ${kpi.hr_remarks || '-'}</p>
-                                    <p class="">HOD Remarks: ${kpi.hod_remarks || '-'}</p>
+                                    <p class="mb-0"><b>${pedmaEscapeText(kpi.name)}: ${pedmaEscapeText(kpi.get_score)}/${pedmaEscapeText(kpi.max_score)}</b></p>
+                                    <p class="">Manager Comment: ${pedmaEscapeText(kpi.comment || '-')}</p>
+                                    <p class="">HR Remarks: ${pedmaEscapeText(kpi.hr_remarks || '-')}</p>
+                                    <p class="">HOD Remarks: ${pedmaEscapeText(kpi.hod_remarks || '-')}</p>
                                 `;
                             });
                         } else {
                             cardHTML += `
                                 <div class="comment">
-                                    <span style="font-weight: bold;">Manager Comment : </span>${item.comment || '-'}
+                                    <span style="font-weight: bold;">Manager Comment : </span>${pedmaEscapeText(item.comment || '-')}
                                 </div>
                                 <div class="comment">
-                                    <span style="font-weight: bold;">HR Remarks : </span>${item.hr_remarks || '-'}
+                                    <span style="font-weight: bold;">HR Remarks : </span>${pedmaEscapeText(item.hr_remarks || '-')}
                                 </div>
                                 <div class="comment">
-                                    <span style="font-weight: bold;">HOD Remarks : </span>${item.hod_remarks || '-'}
+                                    <span style="font-weight: bold;">HOD Remarks : </span>${pedmaEscapeText(item.hod_remarks || '-')}
                                 </div>
                             `;
                         }
@@ -862,6 +902,12 @@ $staffData = json_encode($performance_values);
                         `;
                     });
                 });
+                } catch (renderErr) {
+                    console.error('PEDMA month render failed:', renderErr);
+                    kraCardData.html('<div class="alert alert-danger tw-mb-0">Unable to display PEDMA details for this month. Please contact HR if this continues.</div>');
+                    $('#twoChart').hide();
+                    return;
+                }
 
                 kraCardData.html(cardHTML);
                 if (kraTableRows) {
@@ -888,15 +934,28 @@ $staffData = json_encode($performance_values);
                     return;
                 }
 
+                if (typeof Chart === 'undefined') {
+                    console.error('Chart.js is not loaded; KRA charts cannot render.');
+                    $('#twoChart').hide();
+                    return;
+                }
+
                 const kraLabels = kraData[0].map(item => item.name);
                 const kraScores = kraData[0].map(item => {
-                    return item.get_score != null ? Number(item.get_score) :
-                        item.kpiData.reduce((sum, kpi) => sum + Number(kpi.get_score || 0), 0);
+                    var kpis = pedmaEnsureKpiList(item);
+                    if (item.get_score != null && item.get_score !== '') {
+                        return Number(item.get_score);
+                    }
+                    return kpis.reduce((sum, kpi) => sum + Number(kpi.get_score || 0), 0);
                 });
 
                 const kraMaxScores = kraData[0].map(item => {
-                    if (item.kpiData && item.kpiData.length) {
-                        return item.kpiData.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
+                    var kpis = pedmaEnsureKpiList(item);
+                    if (item.max_score != null && item.max_score !== '') {
+                        return Number(item.max_score);
+                    }
+                    if (kpis.length) {
+                        return kpis.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
                     }
                     return 5;
                 });
@@ -909,71 +968,76 @@ $staffData = json_encode($performance_values);
                     kraDoughnutChart.destroy();
                 }
 
-                const kraCtx = document.getElementById('kraChart').getContext('2d');
-                kraChart = new Chart(kraCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: kraLabels,
-                        datasets: [{
-                            label: 'Achieved Score',
-                            data: kraScores,
-                            backgroundColor: '#4CAF50',
-                            borderWidth: 1
-                        }, {
-                            label: 'Total Score',
-                            data: kraMaxScores,
-                            backgroundColor: '#FFCE56',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        scales: {
-                            xAxes: [{
-                                gridLines: {
-                                    display: false
-                                }
-                            }],
-                            yAxes: [{
-                                ticks: {
-                                    beginAtZero: true,
-                                    min: 0
-                                },
-                                gridLines: {
-                                    display: true
-                                },
-                                scaleLabel: {
-                                    display: true,
-                                    labelString: 'Score'
-                                }
+                try {
+                    const kraCtx = document.getElementById('kraChart').getContext('2d');
+                    kraChart = new Chart(kraCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: kraLabels,
+                            datasets: [{
+                                label: 'Achieved Score',
+                                data: kraScores,
+                                backgroundColor: '#4CAF50',
+                                borderWidth: 1
+                            }, {
+                                label: 'Total Score',
+                                data: kraMaxScores,
+                                backgroundColor: '#FFCE56',
+                                borderWidth: 1
                             }]
                         },
-                        title: {
-                            display: true,
-                            text: 'KRA Performance: Achieved vs Max Score'
+                        options: {
+                            scales: {
+                                xAxes: [{
+                                    gridLines: {
+                                        display: false
+                                    }
+                                }],
+                                yAxes: [{
+                                    ticks: {
+                                        beginAtZero: true,
+                                        min: 0
+                                    },
+                                    gridLines: {
+                                        display: true
+                                    },
+                                    scaleLabel: {
+                                        display: true,
+                                        labelString: 'Score'
+                                    }
+                                }]
+                            },
+                            title: {
+                                display: true,
+                                text: 'KRA Performance: Achieved vs Max Score'
+                            }
                         }
-                    }
-                });
+                    });
 
-                const kraDoughnutCtx = document.getElementById('kraDoughnutChart').getContext('2d');
-                kraDoughnutChart = new Chart(kraDoughnutCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: kraLabels,
-                        datasets: [{
-                            data: kraScores,
-                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50'],
-                            hoverBackgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50']
-                        }]
-                    },
-                    options: {
-                        plugins: {
+                    const doughnutColors = ['#FF6384', '#36A2EB', '#FFCE56', '#8C9EFF', '#4CAF50', '#FF9F40', '#9966FF'];
+                    const kraDoughnutCtx = document.getElementById('kraDoughnutChart').getContext('2d');
+                    kraDoughnutChart = new Chart(kraDoughnutCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: kraLabels,
+                            datasets: [{
+                                data: kraScores,
+                                backgroundColor: doughnutColors,
+                                hoverBackgroundColor: doughnutColors
+                            }]
+                        },
+                        options: {
                             title: {
                                 display: true,
                                 text: 'KRA Distribution'
                             }
                         }
-                    }
-                });
+                    });
+                    $('#twoChart').show();
+                } catch (chartErr) {
+                    console.error('PEDMA chart render failed:', chartErr);
+                    $('#twoChart').hide();
+                }
             }
         });
 

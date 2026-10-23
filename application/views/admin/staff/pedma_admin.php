@@ -785,8 +785,21 @@
         if (window.pedmaCanEditAllFields) {
             return false;
         }
-        var key = pedmaScoreKey(kind, index);
-        return pedmaKraHasPersistedFeedback(pedmaPersistedByKey[key]);
+        var persisted = pedmaPersistedByKey[pedmaScoreKey(kind, index)];
+        if (!pedmaKraHasPersistedFeedback(persisted)) {
+            return false;
+        }
+        // Each role may change their own saved KRAs; lock sidebar only when another role has weighed in.
+        if (window.pedmaCanManagerComment) {
+            return pedmaTrimVal(persisted.hod_remarks) !== '' || pedmaTrimVal(persisted.hr_remarks) !== '';
+        }
+        if (window.pedmaCanHodComment) {
+            return pedmaTrimVal(persisted.comment) !== '' || pedmaTrimVal(persisted.hr_remarks) !== '';
+        }
+        if (window.pedmaCanHrComment) {
+            return pedmaTrimVal(persisted.comment) !== '' || pedmaTrimVal(persisted.hod_remarks) !== '';
+        }
+        return true;
     }
 
     function pedmaPersistedFieldHasValue(field, persisted) {
@@ -823,6 +836,13 @@
         }
         if (field === 'hr' && window.pedmaCanHrComment) {
             return false;
+        }
+        if (field === 'rating') {
+            // Rating is owned by managers; HOD/HR cannot change a saved manager rating.
+            if (window.pedmaCanManagerComment) {
+                return false;
+            }
+            return true;
         }
         return true;
     }

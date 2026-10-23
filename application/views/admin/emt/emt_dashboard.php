@@ -122,6 +122,7 @@
 					];
 					$departments = isset($departments) && is_array($departments) ? $departments : [];
 					$snapshotByDepartment = isset($snapshot_by_department) && is_array($snapshot_by_department) ? $snapshot_by_department : [];
+					$snapshotViewAllDepartments = !empty($snapshot_view_all_departments);
 					$snapshotListBase = admin_url('Emt/getSnapshotStaffList');
 					$monitoringUrl = admin_url('Emt/monitoring');
 					?>
@@ -132,7 +133,7 @@
 						<div class="col-md-4">
 							<label for="snapshot_dashboard_department">Filter counts by department</label>
 							<select class="selectpicker" data-live-search="true" data-width="100%" id="snapshot_dashboard_department" aria-label="Department filter">
-								<option value="">All departments</option>
+								<option value=""><?php echo $snapshotViewAllDepartments ? 'All departments' : 'All my departments'; ?></option>
 								<?php foreach ($departments as $department) {
 									$deptId = is_array($department) ? $department['departmentid'] : $department->departmentid;
 									$deptName = is_array($department) ? $department['name'] : $department->name;

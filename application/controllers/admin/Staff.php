@@ -1004,10 +1004,13 @@ class Staff extends AdminController
         $this->staff_model->ensure_pedma_feedback_ack_columns();
         $this->staff_model->ensure_pedma_overall_feedback_columns();
 
-        $id = get_staff_user_id(); 
-        // $performance = $this->db->get_where('tblstaff_performance', ['staffid' => $id]);
+        $id = get_staff_user_id();
 
-        $performance = $this->db->from('tblstaff_performance')->where('staffid', $id)->where('status !=',0)->order_by('date_created')->get();
+        $performance = $this->db->from('tblstaff_performance')
+            ->where('staffid', (int) $id)
+            ->where('status >', 0)
+            ->order_by('date_created', 'DESC')
+            ->get();
 
         $data['staffid'] = $id;
         $performance_values = $performance->result_array();
