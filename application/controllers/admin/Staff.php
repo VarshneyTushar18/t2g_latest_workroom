@@ -907,28 +907,19 @@ class Staff extends AdminController
             }
 
             $type = $this->input->post('kraType');
-            $kraMaxScore = $this->input->post('kraMaxScore');
+            $kraMaxScore = pedma_kra_rating_max();
             $kpiName = $this->input->post('kpiName');
             $kpiDescription = $this->input->post('kpiDescription');
             $kpiScore = $this->input->post('kpiScore');
 
-            if(!empty($kpiScore)){
-                $kpiScoreSum = array_sum($kpiScore);
-
-                if($kpiScoreSum < $kraMaxScore){
-                    set_alert('warning', 'Total KPI scores cannot less than the KRA Max Score.');
-                    if($id != ''){
-                        redirect(admin_url('staff/pedma_admin_kra_action/'.$id));
-                    }else{
-                        redirect(admin_url('staff/pedma_admin_kra_action'));
+            if (!empty($kpiScore)) {
+                foreach ($kpiScore as $idx => $score) {
+                    $score = (int) $score;
+                    if ($score < 1 || $score > $kraMaxScore) {
+                        set_alert('warning', 'Each KPI max score must be between 1 and ' . $kraMaxScore . '.');
+                        redirect(admin_url('staff/pedma_admin_kra_action' . ($id != '' ? '/' . $id : '')));
                     }
-                }else if($kpiScoreSum > $kraMaxScore){
-                    set_alert('warning', 'Total KPI scores cannot exceed the KRA Max Score.');
-                    if($id != ''){
-                        redirect(admin_url('staff/pedma_admin_kra_action/'.$id));
-                    }else{
-                        redirect(admin_url('staff/pedma_admin_kra_action'));
-                    }
+                    $kpiScore[$idx] = $score;
                 }
             }
 
@@ -1016,6 +1007,7 @@ class Staff extends AdminController
         $performance_values = $performance->result_array();
         foreach ($performance_values as &$perfRow) {
             $perfRow['overall_feedback'] = pedma_format_overall_feedback_display($perfRow);
+            pedma_normalize_performance_row_kra_data($perfRow);
         }
         unset($perfRow);
         $data['performance_values'] = $performance_values;
@@ -1075,12 +1067,13 @@ class Staff extends AdminController
             }
         }
 
-        if ($joinDate) {
-            foreach ($data['performance_values'] as &$row) {
+        foreach ($data['performance_values'] as &$row) {
+            pedma_normalize_performance_row_kra_data($row);
+            if ($joinDate) {
                 $row['staff_join_date'] = $joinDate;
             }
-            unset($row);
         }
+        unset($row);
 		
 		echo json_encode($data['performance_values']);
 	}
@@ -1505,11 +1498,11 @@ class Staff extends AdminController
             }
         }
 
-        if($type == "default"){
-            $kraData = json_encode($kraData1);
+        if ($type == 'default') {
+            $kraData = json_encode(pedma_normalize_kra_data_rows(is_array($kraData1) ? $kraData1 : []));
             $average = $average1;
-        }else{
-            $kraData = json_encode($kraData2);
+        } else {
+            $kraData = json_encode(pedma_normalize_kra_data_rows(is_array($kraData2) ? $kraData2 : []));
             $average = $average2;
         }
 
@@ -1687,10 +1680,10 @@ class Staff extends AdminController
         $customKra = $this->staff_model->get_custom_kra_based_on_department($departmentid);
         $departmentDefaultKra = $this->staff_model->get_department_default_kra($departmentid);
 
-        $data['global_default_kra'] = $this->staff_model->get_global_default_kra();
-        $data['department_kra'] = array_merge($departmentDefaultKra, $customKra);
-        $data['default_kra'] = $this->staff_model->get_default_kra_based_on_department($departmentid);
-        $data['custom_kra'] = $customKra;
+        $data['global_default_kra'] = pedma_normalize_kra_list($this->staff_model->get_global_default_kra());
+        $data['department_kra'] = pedma_normalize_kra_list(array_merge($departmentDefaultKra, $customKra));
+        $data['default_kra'] = pedma_normalize_kra_list($this->staff_model->get_default_kra_based_on_department($departmentid));
+        $data['custom_kra'] = pedma_normalize_kra_list($customKra);
         $data['departmentid'] = $departmentid;
 
         echo json_encode($data);

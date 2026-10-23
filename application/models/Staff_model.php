@@ -3157,6 +3157,7 @@ class Staff_model extends App_Model
     
             // Attach department name to the KRA
             $kra->departmentName = !empty($depResult) ? $depResult->name : null;
+            pedma_normalize_kra_record($kra);
         }
     
         return $kraResult;
@@ -3169,7 +3170,7 @@ class Staff_model extends App_Model
         $this->db->where('kra.type', '0');
         $this->db->order_by('kra.id', 'ASC');
 
-        return $this->db->get()->result();
+        return pedma_normalize_kra_list($this->db->get()->result());
     }
 
     public function get_department_default_kra($departmentId) {
@@ -3183,7 +3184,7 @@ class Staff_model extends App_Model
         $this->db->where('kra.type', '0');
         $this->db->order_by('kra.id', 'ASC');
 
-        return $this->db->get()->result();
+        return pedma_normalize_kra_list($this->db->get()->result());
     }
 
     public function get_default_kra_based_on_department($departmentId) {
@@ -3212,7 +3213,7 @@ class Staff_model extends App_Model
             $kraResult = $this->get_custom_kra_based_on_department($departmentId);
         }
     
-        return $kraResult;
+        return pedma_normalize_kra_list($kraResult);
     }
 
     public function get_custom_kra_based_on_department($departmentId) {
@@ -3244,6 +3245,7 @@ class Staff_model extends App_Model
     
             // Attach KPI data to the KRA
             $kra->kpi_data = !empty($kpiResult) ? $kpiResult : null;
+            pedma_normalize_kra_record($kra);
         }
     
         return $kraResult;
@@ -3255,6 +3257,9 @@ class Staff_model extends App_Model
         $this->db->where('id', $id);
 
         $kraResult = $this->db->get()->result();
+        foreach ($kraResult as &$kra) {
+            pedma_normalize_kra_record($kra);
+        }
 
         return $kraResult;
     }   
@@ -3265,6 +3270,10 @@ class Staff_model extends App_Model
         $this->db->where('kra_id', $id);
 
         $kpiResult = $this->db->get()->result();
+        $max = pedma_kra_rating_max();
+        foreach ($kpiResult as &$kpi) {
+            $kpi->max_score = $max;
+        }
 
         return $kpiResult;
     }

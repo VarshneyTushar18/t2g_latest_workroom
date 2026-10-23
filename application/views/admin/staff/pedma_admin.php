@@ -745,6 +745,7 @@
 (function($) {
     'use strict';
 
+    var PEDMA_KRA_RATING_MAX = <?php echo (int) pedma_kra_rating_max(); ?>;
     var pedmaDefaultKras = [];
     var pedmaCustomKras = [];
     var pedmaScoreMap = {};
@@ -1012,18 +1013,16 @@
 
     function pedmaRecalcScore() {
         var sum = 0;
-        var maxTotal = 0;
+        var count = 0;
         $('#default-kra-table-body tr[data-kra-key]').each(function() {
-            var $row = $(this);
-            var max = parseInt($row.find('[name$="[max_score]"]').val(), 10) || 0;
-            var rating = parseInt(pedmaRowRatingValue($row), 10);
+            var rating = parseInt(pedmaRowRatingValue($(this)), 10);
             if (!isNaN(rating) && rating >= 1) {
-                sum += (rating / 5) * max;
+                sum += rating;
+                count++;
             }
-            maxTotal += max;
         });
-        if (maxTotal > 0) {
-            var pct = ((sum / maxTotal) * 100).toFixed(2);
+        if (count > 0) {
+            var pct = ((sum / count / PEDMA_KRA_RATING_MAX) * 100).toFixed(2);
             $('#avg_score_display1').text(pct + '%');
             $('#avg_score1').val(pct);
         } else {
@@ -1065,7 +1064,7 @@
                 '<td class="performance-criteria"><b>' + pedmaEscapeHtml(item.name) + '</b>' + typeBadge + desc +
                 '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][name]" value="' + pedmaEscapeHtml(item.name) + '">' +
                 '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][description]" value="' + pedmaEscapeHtml(item.description || '') + '">' +
-                '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][max_score]" value="' + pedmaEscapeHtml(item.max_score) + '">' +
+                '<input type="hidden" name="' + rowPrefix + '[' + rowDisplayIndex + '][max_score]" value="' + PEDMA_KRA_RATING_MAX + '">' +
                 pedmaHiddenCommentFields(rowPrefix, rowDisplayIndex, scored) +
                 '</td>' +
                 '<td>' + pedmaRatingInputHtml(rowPrefix, rowDisplayIndex, scoreVal, ratingLocked) +

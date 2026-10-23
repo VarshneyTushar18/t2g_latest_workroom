@@ -1044,6 +1044,102 @@ function pedma_build_combined_overall_feedback($manager, $hod, $hr)
     return implode("\n\n", $parts);
 }
 
+/**
+ * Fixed rating scale for every PEDMA KRA (achieved score is always out of this value).
+ */
+function pedma_kra_rating_max()
+{
+    return 5;
+}
+
+/**
+ * @param array<int, array<string, mixed>> $rows
+ * @return array<int, array<string, mixed>>
+ */
+function pedma_normalize_kra_data_rows($rows)
+{
+    if (!is_array($rows)) {
+        return [];
+    }
+
+    $max = pedma_kra_rating_max();
+    foreach ($rows as &$row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $row['max_score'] = $max;
+        if (!empty($row['kpiData']) && is_array($row['kpiData'])) {
+            foreach ($row['kpiData'] as &$kpi) {
+                if (is_array($kpi)) {
+                    $kpi['max_score'] = $max;
+                }
+            }
+            unset($kpi);
+        }
+    }
+    unset($row);
+
+    return $rows;
+}
+
+/**
+ * @param object|null $kra
+ * @return object|null
+ */
+function pedma_normalize_kra_record($kra)
+{
+    if ($kra === null || !is_object($kra)) {
+        return $kra;
+    }
+
+    $max = pedma_kra_rating_max();
+    $kra->max_score = $max;
+    if (!empty($kra->kpi_data) && is_array($kra->kpi_data)) {
+        foreach ($kra->kpi_data as $kpi) {
+            if (is_object($kpi)) {
+                $kpi->max_score = $max;
+            }
+        }
+    }
+
+    return $kra;
+}
+
+/**
+ * @param array<int, object> $kraList
+ * @return array<int, object>
+ */
+function pedma_normalize_kra_list($kraList)
+{
+    if (!is_array($kraList)) {
+        return [];
+    }
+
+    foreach ($kraList as &$kra) {
+        pedma_normalize_kra_record($kra);
+    }
+    unset($kra);
+
+    return $kraList;
+}
+
+/**
+ * @param array<string, mixed> $row tblstaff_performance row
+ */
+function pedma_normalize_performance_row_kra_data(array &$row)
+{
+    if (empty($row['kra_data'])) {
+        return;
+    }
+
+    $decoded = json_decode($row['kra_data'], true);
+    if (!is_array($decoded)) {
+        return;
+    }
+
+    $row['kra_data'] = json_encode(pedma_normalize_kra_data_rows($decoded));
+}
+
 function can_manage_pedma_kra($staff_id = '')
 {
     return can_create_pedma_kra($staff_id);

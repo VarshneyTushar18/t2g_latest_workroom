@@ -87,7 +87,7 @@
                         <div id="defaultKraSelectionSummary" class="alert alert-info tw-py-2 tw-mb-2" style="padding:10px 14px;margin-bottom:10px;">
                             <strong>Selected:</strong> <span id="defaultKraSelectedCount">0</span> KRA(s)
                             &nbsp;|&nbsp;
-                            <strong>Total Max Score:</strong> <span id="defaultKraTotalMaxScore">0</span> / 100
+                            <strong>Rating scale:</strong> 1–<span id="defaultKraTotalMaxScore"><?php echo (int) pedma_kra_rating_max(); ?></span> per KRA
                         </div>
                         <div id="defaultKraSelect"></div>
                     </div>
@@ -288,6 +288,7 @@
 <?php } ?>
 
 <script>
+    var PEDMA_KRA_RATING_MAX = <?php echo (int) pedma_kra_rating_max(); ?>;
     var pedmaPanelPartial = <?php echo $pedma_panel_partial ? 'true' : 'false'; ?>;
 
     $(document).ready(function() {
@@ -340,7 +341,7 @@
         var $summary = $('#defaultKraSelectionSummary');
 
         $('#defaultKraSelectedCount').text(selectedCount);
-        $('#defaultKraTotalMaxScore').text(totalMax);
+        $('#defaultKraTotalMaxScore').text(PEDMA_KRA_RATING_MAX);
         $('#defaultKraTableTotalMax').text(totalMax);
 
         if (!$summary.length) {
@@ -348,13 +349,7 @@
         }
 
         $summary.removeClass('alert-info alert-success alert-danger');
-        if (totalMax > 100) {
-            $summary.addClass('alert-danger');
-        } else if (totalMax === 100) {
-            $summary.addClass('alert-success');
-        } else {
-            $summary.addClass('alert-info');
-        }
+        $summary.addClass(selectedCount > 0 ? 'alert-success' : 'alert-info');
 
         if (selectedCount > 0) {
             $('#default-kra-table-foot').show();
@@ -406,7 +401,7 @@
                 <div class="form-check kra-list-item ${lockClass}">
                     <input type="checkbox" class="form-check-input default-kra-check" id="default_kra_${index}" value="${index}" ${checkedAttr}>
                     <span class="kra-lock-icon"><i class="fa ${lockIcon}"></i></span>
-                    <label class="form-check-label" for="default_kra_${index}">${option.name} (Max Score:${option.max_score})</label>
+                    <label class="form-check-label" for="default_kra_${index}">${option.name} (Max Score:${PEDMA_KRA_RATING_MAX})</label>
                 </div>
             `;
         });
@@ -449,8 +444,8 @@
                         <br>${item.description || ''}
                         <input type="hidden" name="kraData1[${displayIndex}][description]" value="${safeDesc}">
                     </td>
-                    <td>${item.max_score}</td>
-                    <input type="hidden" name="kraData1[${displayIndex}][max_score]" value="${item.max_score}">
+                    <td>${PEDMA_KRA_RATING_MAX}</td>
+                    <input type="hidden" name="kraData1[${displayIndex}][max_score]" value="${PEDMA_KRA_RATING_MAX}">
                     <td>${pedmaRatingInputHtml(displayIndex, scoreVal)}</td>
                     <td><textarea class="form-control comment" name="kraData1[${displayIndex}][comment]" placeholder="Manager comment...">${commentVal}</textarea></td>
                     <td><textarea class="form-control hr-remarks" name="kraData1[${displayIndex}][hr_remarks]" placeholder="HR comment...">${hrRemarksVal}</textarea></td>
@@ -478,30 +473,21 @@
     }
 
     function checkDefaultMaxScoreSum(allDefaultKra, selectedIndexes) {
-        var total = 0;
-        selectedIndexes.forEach(function(idx) {
-            var item = allDefaultKra[parseInt(idx, 10)];
-            if (item) {
-                total += parseInt(item.max_score, 10) || 0;
-            }
-        });
-        return total;
+        return (selectedIndexes || []).length * PEDMA_KRA_RATING_MAX;
     }
 
     function recalculateDefaultScore() {
         let sum = 0;
         let count = 0;
         $('#default-kra-table-body tr[data-original-index]').each(function() {
-            let $row = $(this);
-            let value = pedmaRowRatingValue($row);
-            let maxScore = parseInt($row.find('[name$="[max_score]"]').val(), 10) || 0;
+            let value = pedmaRowRatingValue($(this));
             if (value !== '' && value !== undefined) {
                 sum += parseFloat(value) || 0;
-                count += maxScore;
+                count++;
             }
         });
         if (count > 0) {
-            let avg = ((sum / count) * 100).toFixed(2);
+            let avg = ((sum / count / PEDMA_KRA_RATING_MAX) * 100).toFixed(2);
             $('#avg_score_display1').html(avg + '%');
             $('#avg_score1').val(avg);
         } else {
@@ -836,13 +822,6 @@
         var allDefault = (window.lastKraBasedOnDepartment && window.lastKraBasedOnDepartment.default_kra) || [];
         syncKraListLockIcon($(this));
         var selected = getSelectedDefaultIndexes();
-        var total = checkDefaultMaxScoreSum(allDefault, selected);
-        if (total > 100) {
-            alert('The total max score must not exceed 100.');
-            $(this).prop('checked', false);
-            syncKraListLockIcon($(this));
-            selected = getSelectedDefaultIndexes();
-        }
         buildDefaultTableFromSelection(allDefault, selected, window.lastDefaultScoreMap || {});
     });
 
@@ -943,19 +922,19 @@
         var count = 0;
 
         $('.rating2').each(function() {
-            var value = parseFloat($(this).val()) || 0;
-            var maxScore = parseFloat($(this).attr('max')) || 0;
-
-            // Add to sum and count only if value is a valid number and not empty
-            if (!isNaN(value)) { 
+            var raw = $(this).val();
+            if (raw === '' || raw === undefined) {
+                return;
+            }
+            var value = parseFloat(raw);
+            if (!isNaN(value)) {
                 sum += value;
-                count += maxScore;
+                count++;
             }
         });
 
         if (count > 0) {
-            var average = sum / count;
-            var percentage = average * 100;
+            var percentage = (sum / count / PEDMA_KRA_RATING_MAX) * 100;
             $('#avg_score_display2').html(percentage.toFixed(2) + "%");
             $('#avg_score2').val(percentage.toFixed(2));
 
@@ -1471,7 +1450,7 @@
                 checkboxesHtml += `
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="kra_${option.id}" value="${option.id}" ${checkedAttr}>
-                    <label class="form-check-label" for="kra_${option.id}">${option.name} (Max Score:${option.max_score})</label>
+                    <label class="form-check-label" for="kra_${option.id}">${option.name} (Max Score:${PEDMA_KRA_RATING_MAX})</label>
                 </div>
             `;
                 if (isSelected) {
@@ -1496,13 +1475,7 @@
                         return $(this).val();
                     }).get();
 
-                let score = checkMaxScoreSum(kraBasedOnDepartment.custom_kra, selectedValues);
-                if (score <= 100) {
-                    updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues);
-                } else {
-                    alert("The total max score must not exceed 100.");
-                    $(this).prop('checked', false);
-                }
+                updateCustomKraTable(kraBasedOnDepartment.custom_kra, selectedValues);
             });
         }
 
@@ -1510,21 +1483,7 @@
 
     // Function to check if the max_score sum will exceed 100
     function checkMaxScoreSum(customKra, selectedValues) {
-        let totalScore = 0;
-
-        // Add the scores of the newly selected options from the dropdown
-        $.each(customKra, function(index, option) {
-            if (selectedValues.includes(option.id.toString())) {
-                let newMaxScore = parseInt(option.max_score); // Assuming max_score is a property in the option object
-                if (!isNaN(newMaxScore)) {
-                    totalScore += newMaxScore;
-                }
-            }
-        });
-
-        console.log("Selected values:", customKra);
-        // Return the total score
-        return totalScore;
+        return (selectedValues || []).length * PEDMA_KRA_RATING_MAX;
     }
 
     function editCustomKraTable(customKraEditData) {
@@ -1548,8 +1507,8 @@
                     ${selectedKRA.description ? selectedKRA.description : 'No description available'}
                     <input type="hidden" name="kraData2[${index}][description]" value="${selectedKRA.description}">
                     <br>
-                    <b>Max Score: ${selectedKRA.max_score}</b>
-                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${selectedKRA.max_score}">
+                    <b>Max Score: ${PEDMA_KRA_RATING_MAX}</b>
+                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${PEDMA_KRA_RATING_MAX}">
                 </td>
             `;
 
@@ -1561,10 +1520,10 @@
                         <td>${kpi.name}</td>
                         <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][name]" value="${kpi.name}">
                         <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][description]" value="${kpi.description}">
-                        <td>${kpi.max_score}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${kpi.max_score}">
+                        <td>${PEDMA_KRA_RATING_MAX}</td>
+                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${PEDMA_KRA_RATING_MAX}">
                         <td>
-                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
+                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${PEDMA_KRA_RATING_MAX}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
                         </td>
                         <td>
                             <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
@@ -1579,9 +1538,9 @@
                     rowHTML += `
                     <td>No KPIs</td>
                     <input type="hidden" name="kraData2[${index}][kpiData]" value="">
-                    <td>${selectedKRA.max_score}</td>
+                    <td>${PEDMA_KRA_RATING_MAX}</td>
                     <td>
-                        <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
+                        <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${PEDMA_KRA_RATING_MAX}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
                     </td>
                     <td>
                         <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
@@ -1620,8 +1579,8 @@
                     ${selectedKRA.description}
                     <input type="hidden" name="kraData2[${index}][description]" value="${selectedKRA.description}">
                     <br>
-                    <b>Max Score: ${selectedKRA.max_score}</b>
-                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${selectedKRA.max_score}">
+                    <b>Max Score: ${PEDMA_KRA_RATING_MAX}</b>
+                    <input type="hidden" name="kraData2[${index}][max_score]" class="customKRAMAXScore" value="${PEDMA_KRA_RATING_MAX}">
                 </td>
         `;
 
@@ -1633,10 +1592,10 @@
                         <td>${kpi.name}</td>
                         <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][name]" value="${kpi.name}">
                         <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][description]" value="${kpi.description}">
-                        <td>${kpi.max_score}</td>
-                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${kpi.max_score}">
+                        <td>${PEDMA_KRA_RATING_MAX}</td>
+                        <input type="hidden" name="kraData2[${index}][kpiData][${kpiIndex}][max_score]" value="${PEDMA_KRA_RATING_MAX}">
                         <td>
-                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${kpi.max_score}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
+                            <input type="number" class="form-control rating2" name="kraData2[${index}][kpiData][${kpiIndex}][get_score]" max="${PEDMA_KRA_RATING_MAX}" min="0" required value="${kpi.get_score ? kpi.get_score : ''}">
                         </td>
                         <td>
                             <textarea class="form-control comment" name="kraData2[${index}][kpiData][${kpiIndex}][comment]" placeholder="Manager comment..." required>${kpi.comment ? kpi.comment : ''}</textarea>
@@ -1654,7 +1613,7 @@
                 <input type="hidden" name="kraData2[${index}][kpiData]" value="">
                 <td>${selectedKRA.max_score}</td>
                 <td>
-                    <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${selectedKRA.max_score}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
+                    <input type="number" class="form-control rating2" name="kraData2[${index}][get_score]" max="${PEDMA_KRA_RATING_MAX}" min="0" required value="${selectedKRA.get_score ? selectedKRA.get_score : ''}">
                 </td>
                 <td>
                     <textarea class="form-control comment" name="kraData2[${index}][comment]" placeholder="Manager comment..." required>${selectedKRA.comment ? selectedKRA.comment : ''}</textarea>
@@ -1712,10 +1671,6 @@
         let avg_score2 = $("#avg_score2").val();
         let defaultOption = $("#defaultOption");
         let customOption = $("#customOption");
-        let sum = 0;
-        let count = 0;
-        let maxCount = false;
-
         if (avg_score1 === '' && avg_score2 === '') {
             Swal.fire({
                 icon: "error",
@@ -1732,44 +1687,6 @@
                 icon: "warning",
                 title: "Default KRA is locked",
                 text: "Tick a Default KRA in the list to unlock it before saving.",
-            });
-            return false;
-        }
-
-        if (defaultOption.is(':checked') || ($('#previousMonthOption').is(':checked') && $('#previous_kra_save_type').val() === 'default')) {
-            $('#default-kra-table-body .rating1').each(function() {
-                let value = $(this).val();
-                let maxScore = $(this).attr('max');
-                if (value !== "") {
-                    sum += parseInt(value);
-                    count += parseInt(maxScore);
-                }
-            });
-
-            // Update the condition with correct logic
-            if (count > 100 || (clickedButtonValue !== '0' && count < 100)) {
-                maxCount = true;
-            }
-        } else if (customOption.is(':checked')) {
-            $('.rating2').each(function() {
-                let value = $(this).val();
-                let maxScore = $(this).attr('max');
-                if (value !== "") {
-                    sum += parseInt(value);
-                    count += parseInt(maxScore);
-                }
-            });
-
-            if (count > 100 || (clickedButtonValue !== '0' && count < 100)) {
-                maxCount = true;
-            }
-        }
-
-        if (maxCount) {
-            Swal.fire({
-                icon: "error",
-                title: "Oops...",
-                text: "The total max score must be exactly 100.",
             });
             return false;
         }

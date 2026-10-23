@@ -1617,6 +1617,12 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
             return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         }
 
+        const PEDMA_KRA_RATING_MAX = <?php echo (int) pedma_kra_rating_max(); ?>;
+
+        function pedmaKraMaxScore() {
+            return PEDMA_KRA_RATING_MAX;
+        }
+
         function pedmaEnsureKpiList(item) {
             return item && item.kpiData && item.kpiData.length ? item.kpiData : [];
         }
@@ -2101,7 +2107,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                         }
 
                         const scoreToDisplay = (data.type === "custom" && kpiList.length) ? totalKpiGetScore : item.get_score;
-                        const maxScoreToDisplay = (data.type === "custom" && kpiList.length) ? item.max_score : 5;
+                        const maxScoreToDisplay = pedmaKraMaxScore();
 
                         cardHTML += `
                             <div class="col-sm-6 col-md-4 p-i-4 performance_card">
@@ -2121,7 +2127,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                             cardHTML += `<p class="h4">KPI Details :</p>`;
                             kpiList.forEach((kpi) => {
                                 cardHTML += `
-                                    <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${kpi.max_score}</b></p>
+                                    <p class="mb-0"><b>${kpi.name}: ${kpi.get_score}/${PEDMA_KRA_RATING_MAX}</b></p>
                                     <p class="">Manager Comment: ${kpi.comment || '-'}</p>
                                     <p class="">HR Remarks: ${kpi.hr_remarks || '-'}</p>
                                 `;
@@ -2181,15 +2187,8 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                     }
                     return kpis.reduce((sum, kpi) => sum + Number(kpi.get_score || 0), 0);
                 });
-                const kraMaxScores = kraData[0].map(item => {
-                    var kpis = pedmaEnsureKpiList(item);
-                    if (item.max_score != null && item.max_score !== '') {
-                        return Number(item.max_score);
-                    }
-                    if (kpis.length) {
-                        return kpis.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
-                    }
-                    return 5;
+                const kraMaxScores = kraData[0].map(function () {
+                    return pedmaKraMaxScore();
                 });
 
                 // Destroy previous chart instances
@@ -2211,10 +2210,14 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                     },
                     options: {
                         scales: {
-                            x: { grid: { display: false } },
-                            y: { beginAtZero: true, grid: { display: true }, title: { display: true, text: 'Score' } }
+                            xAxes: [{ gridLines: { display: false } }],
+                            yAxes: [{
+                                ticks: { beginAtZero: true, min: 0, max: PEDMA_KRA_RATING_MAX },
+                                gridLines: { display: true },
+                                scaleLabel: { display: true, labelString: 'Score (out of ' + PEDMA_KRA_RATING_MAX + ')' }
+                            }]
                         },
-                        plugins: { title: { display: true, text: 'KRA Performance: Achieved Score' } }
+                        title: { display: true, text: 'KRA Performance: Achieved Score' }
                     }
                 });
 
@@ -2453,7 +2456,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
 
                             // If kpiData is present, display the sum; otherwise, use kraItem.get_score
                             const scoreToDisplay = kraItem.kpiData ? totalKpiGetScore : kraItem.get_score;
-                            const maxScoreToDisplay = kraItem.kpiData ? kraItem.max_score : 5;
+                            const maxScoreToDisplay = pedmaKraMaxScore();
 
                             tableContent += `
                             <tr>
@@ -2593,7 +2596,7 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
 
                 kraList.forEach(function (item) {
                     var achieved = item.get_score;
-                    var maxScore = item.max_score;
+                    var maxScore = pedmaKraMaxScore();
                     var feedback = item.comment || '';
                     var hrRemarks = item.hr_remarks || '';
 
@@ -2601,11 +2604,8 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                         achieved = item.kpiData.reduce(function (sum, kpi) {
                             return sum + (parseFloat(kpi.get_score) || 0);
                         }, 0);
-                        maxScore = item.kpiData.reduce(function (sum, kpi) {
-                            return sum + (parseFloat(kpi.max_score) || 0);
-                        }, 0);
                         feedback = item.kpiData.map(function (kpi) {
-                            return (kpi.name || '') + ': ' + (kpi.get_score || 0) + '/' + (kpi.max_score || 0) +
+                            return (kpi.name || '') + ': ' + (kpi.get_score || 0) + '/' + PEDMA_KRA_RATING_MAX +
                                 (kpi.comment ? ' (' + kpi.comment + ')' : '');
                         }).join(' | ');
                         hrRemarks = item.kpiData.map(function (kpi) {

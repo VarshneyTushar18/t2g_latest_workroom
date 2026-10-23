@@ -89,7 +89,7 @@
                     </div>
                     <div class="form-group" id="kraMaxScoreView">
                         <label for="kraMaxScore">Max Score</label>
-                        <input type="number" id="kraMaxScore" name="kraMaxScore" class="form-control" placeholder="Enter Max Score" required <?php echo !empty($kra[0]->max_score) ? 'value="'.$kra[0]->max_score.'"' : 'value="10"'; ?> <?php echo ($kra[0]->type == 1) ? '' : 'readonly=""' ?> min="1">
+                        <input type="number" id="kraMaxScore" name="kraMaxScore" class="form-control" placeholder="Max Score" required value="<?php echo (int) pedma_kra_rating_max(); ?>" readonly min="<?php echo (int) pedma_kra_rating_max(); ?>" max="<?php echo (int) pedma_kra_rating_max(); ?>">
                     </div>
                 </div>
                 
@@ -121,7 +121,7 @@
                                         <td><?= $kpiCount; ?></td>
                                         <td><input type="text" name="kpiName[]" class="form-control" placeholder="KPI Name" required value="<?= $item->name; ?>"></td>
                                         <td><textarea name="kpiDescription[]" class="form-control" rows="2" placeholder="Description" required><?= $item->description; ?></textarea></td>
-                                        <td><input type="number" name="kpiScore[]" class="form-control kpi-score" placeholder="Score" required value="<?= $item->max_score; ?>" max="100" min="0"></td>
+                                        <td><input type="number" name="kpiScore[]" class="form-control kpi-score" placeholder="Score" required value="<?= (int) pedma_kra_rating_max(); ?>" max="<?php echo (int) pedma_kra_rating_max(); ?>" min="1"></td>
                                         <td><button type="button" class="btn btn-danger remove-kpi">Remove</button></td>
                                     </tr>
                                     <?php
@@ -167,7 +167,7 @@
                         <td>${kpiCount}</td>
                         <td><input type="text" name="kpiName[]" class="form-control" placeholder="KPI Name" required></td>
                         <td><textarea name="kpiDescription[]" class="form-control" rows="2" placeholder="Description" required></textarea></td>
-                        <td><input type="number" name="kpiScore[]" class="form-control kpi-score" placeholder="Score" required></td>
+                        <td><input type="number" name="kpiScore[]" class="form-control kpi-score" placeholder="Score" required value="<?php echo (int) pedma_kra_rating_max(); ?>" max="<?php echo (int) pedma_kra_rating_max(); ?>" min="1"></td>
                         <td><button type="button" class="btn btn-danger remove-kpi">Remove</button></td>
                     `;
         kpiTable.appendChild(newRow);
@@ -196,22 +196,18 @@
         const kraMaxScoreView = document.getElementById('kraMaxScoreView');
         const kraMaxScore = document.getElementById('kraMaxScore');
 
+        var pedmaKraMax = <?php echo (int) pedma_kra_rating_max(); ?>;
         if (this.value == 1) {
             kpiSection.style.display = 'block';
-            // kraMaxScoreView.style.display = 'block';
-            kraMaxScore.value = '';
-            kraMaxScore.max = '100';
-            kraMaxScore.removeAttribute('readonly');
-            // if (kpiCount === 0) {
-               // addKpiRow(); // Add default KPI row
-            // }
+            kraMaxScore.value = pedmaKraMax;
+            kraMaxScore.max = pedmaKraMax;
+            kraMaxScore.setAttribute('readonly', true);
         } else {
             kpiSection.style.display = 'none';
-            document.querySelector('#kpiTable tbody').innerHTML = ''; // Clear KPI rows if not custom
-            kpiCount = 0; // Reset counter
-            // kraMaxScoreView.style.display = 'none';
-            kraMaxScore.value = '10';
-            kraMaxScore.max = '10';
+            document.querySelector('#kpiTable tbody').innerHTML = '';
+            kpiCount = 0;
+            kraMaxScore.value = pedmaKraMax;
+            kraMaxScore.max = pedmaKraMax;
             kraMaxScore.setAttribute('readonly', true);
         }
     });
@@ -225,27 +221,16 @@
 
         var rowCount = $('#kpiTable tbody tr').length;
 
-        if(rowCount > 0){
-        
-            let totalKpiScore = 0;
-            const kraMaxScore = parseInt(document.getElementById('kraMaxScore').value);
+        if (rowCount > 0) {
+            const pedmaKraMax = <?php echo (int) pedma_kra_rating_max(); ?>;
             const kpiScores = document.querySelectorAll('.kpi-score');
-
-            // Sum up all KPI scores
-            kpiScores.forEach(function(kpiScore) {
-                totalKpiScore += parseInt(kpiScore.value) || 0;
-            });
-
-            // Check if total KPI score less than KRA Max Score
-            if (totalKpiScore < kraMaxScore) {
-                alert('Total KPI scores cannot less than the KRA Max Score.');
-                e.preventDefault(); // Prevent form submission
-            }
-
-            // Check if total KPI score exceeds KRA Max Score
-            if (totalKpiScore > kraMaxScore) {
-                alert('Total KPI scores cannot exceed the KRA Max Score.');
-                e.preventDefault(); // Prevent form submission
+            for (var i = 0; i < kpiScores.length; i++) {
+                var v = parseInt(kpiScores[i].value, 10);
+                if (isNaN(v) || v < 1 || v > pedmaKraMax) {
+                    alert('Each KPI max score must be between 1 and ' + pedmaKraMax + '.');
+                    e.preventDefault();
+                    break;
+                }
             }
         }
     });

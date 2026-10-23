@@ -1,5 +1,7 @@
 <?php
-$m = new mysqli('127.0.0.1', 'root', '', 'new_workroom', 3300);
+require __DIR__ . '/db_connect.php';
+$m = script_db_mysqli();
+$port = defined('APP_DB_PORT') ? (int) APP_DB_PORT : 3306;
 $bad = $ok = 0;
 $r = $m->query('SHOW TABLE STATUS');
 while ($row = $r->fetch_assoc()) {
@@ -9,14 +11,14 @@ while ($row = $r->fetch_assoc()) {
 		$ok++;
 	}
 }
-echo "MySQL8:3300 ok={$ok} bad={$bad}\n";
+echo "MySQL:{$port} ok={$ok} bad={$bad}\n";
 $r = $m->query('SHOW DATABASES');
 while ($row = $r->fetch_array()) {
 	$db = $row[0];
 	if (!preg_match('/^(new_|production|sample|test)/', $db)) {
 		continue;
 	}
-	$m2 = @new mysqli('127.0.0.1', 'root', '', $db, 3300);
+	$m2 = @new mysqli(APP_DB_HOSTNAME, APP_DB_USERNAME, APP_DB_PASSWORD, $db, $port);
 	if ($m2->connect_error) {
 		continue;
 	}

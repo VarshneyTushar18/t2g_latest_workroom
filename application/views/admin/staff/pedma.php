@@ -440,6 +440,12 @@ if ($pedmaStaffPerformanceJson === false) {
             return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         }
 
+        const PEDMA_KRA_RATING_MAX = <?php echo (int) pedma_kra_rating_max(); ?>;
+
+        function pedmaKraMaxScore() {
+            return PEDMA_KRA_RATING_MAX;
+        }
+
         function pedmaEnsureKpiList(item) {
             return item && item.kpiData && item.kpiData.length ? item.kpiData : [];
         }
@@ -646,7 +652,7 @@ if ($pedmaStaffPerformanceJson === false) {
 
                                 // If kpiData is present, display the sum; otherwise, use kraItem.get_score
                                 const scoreToDisplay = kraItem.kpiData ? totalKpiGetScore : kraItem.get_score;
-                                const maxScoreToDisplay = kraItem.kpiData ? kraItem.max_score : 5;
+                                const maxScoreToDisplay = pedmaKraMaxScore();
 
                                 tableContent += `
                                 <tr>
@@ -859,7 +865,7 @@ if ($pedmaStaffPerformanceJson === false) {
                         }
 
                         const scoreToDisplay = (data.type === "custom" && kpiList.length) ? totalKpiGetScore : item.get_score;
-                        const maxScoreToDisplay = (item.max_score != null && item.max_score !== '') ? item.max_score : 5;
+                        const maxScoreToDisplay = pedmaKraMaxScore();
 
                         cardHTML += `
                                                 ${scoreToDisplay}/${maxScoreToDisplay}
@@ -871,7 +877,7 @@ if ($pedmaStaffPerformanceJson === false) {
                             cardHTML += `<p class="h4">KPI Details :</p>`;
                             kpiList.forEach((kpi) => {
                                 cardHTML += `
-                                    <p class="mb-0"><b>${pedmaEscapeText(kpi.name)}: ${pedmaEscapeText(kpi.get_score)}/${pedmaEscapeText(kpi.max_score)}</b></p>
+                                    <p class="mb-0"><b>${pedmaEscapeText(kpi.name)}: ${pedmaEscapeText(kpi.get_score)}/${PEDMA_KRA_RATING_MAX}</b></p>
                                     <p class="">Manager Comment: ${pedmaEscapeText(kpi.comment || '-')}</p>
                                     <p class="">HR Remarks: ${pedmaEscapeText(kpi.hr_remarks || '-')}</p>
                                     <p class="">HOD Remarks: ${pedmaEscapeText(kpi.hod_remarks || '-')}</p>
@@ -949,15 +955,8 @@ if ($pedmaStaffPerformanceJson === false) {
                     return kpis.reduce((sum, kpi) => sum + Number(kpi.get_score || 0), 0);
                 });
 
-                const kraMaxScores = kraData[0].map(item => {
-                    var kpis = pedmaEnsureKpiList(item);
-                    if (item.max_score != null && item.max_score !== '') {
-                        return Number(item.max_score);
-                    }
-                    if (kpis.length) {
-                        return kpis.reduce((sum, kpi) => sum + Number(kpi.max_score || 0), 0);
-                    }
-                    return 5;
+                const kraMaxScores = kraData[0].map(function () {
+                    return pedmaKraMaxScore();
                 });
 
                 // Destroy the previous chart instances before creating new ones
@@ -996,7 +995,8 @@ if ($pedmaStaffPerformanceJson === false) {
                                 yAxes: [{
                                     ticks: {
                                         beginAtZero: true,
-                                        min: 0
+                                        min: 0,
+                                        max: PEDMA_KRA_RATING_MAX
                                     },
                                     gridLines: {
                                         display: true

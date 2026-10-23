@@ -1,5 +1,6 @@
 <?php
-$m = new mysqli('127.0.0.1', 'root', '', 'new_workroom', 3300);
+require __DIR__ . '/db_connect.php';
+$m = script_db_mysqli();
 $m->query('SET FOREIGN_KEY_CHECKS=0');
 $r = $m->query('SHOW TABLES');
 $tables = [];
