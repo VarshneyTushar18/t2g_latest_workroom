@@ -17,7 +17,8 @@ define('TIMESHEETS_CONTRACT_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEE
 define('TIMESHEETS_JOB_POSIITON_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/job_position/'));
 define('TIMESHEETS_PATH', 'modules/timesheets/uploads/');
 define('TIMESHEETS_PAYSLIPS', 'modules/timesheets/uploads/payslips/');
-define('TIMESHEETS_REVISION', 128);
+define('TIMESHEETS_REVISION', 127);
+define('TIMESHEETS_HRMS_ASSET_REVISION', 128);
 
 define('PAY_SLIP', FCPATH);
 
@@ -505,13 +506,13 @@ function timesheets_add_head_components() {
 		&& strtolower((string) $CI->router->method) === 'index'
 	) || $request_path === $admin_path || $request_path === $admin_path . '/';
 	if ($load_hrms_ui || $load_dashboard_hrms) {
-		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" rel="stylesheet" type="text/css" />';
 	}
 	if ($load_hrms_ui) {
-		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '" defer></script>';
+		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" defer></script>';
 	}
 	if ($load_dashboard_hrms) {
-		echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+		echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" rel="stylesheet" type="text/css" />';
 	}
 
 	$load_compose_css = (strpos($viewuri, '/admin/announcements') !== false || strpos($viewuri, '/admin/sop') !== false);
