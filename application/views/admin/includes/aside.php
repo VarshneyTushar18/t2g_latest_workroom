@@ -424,11 +424,23 @@
         align-items: center;
     }
 
-    /* No expand squares on Attendance / Leave / Reports (broken FA glyph) */
+    /* Show a clear expand marker for nested HRMS groups. */
     .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .fa.arrow,
     .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .arrow {
-        display: none !important;
-        visibility: hidden !important;
+        display: inline-block !important;
+        visibility: visible !important;
+        margin-left: auto !important;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        transform: rotate(45deg);
+        font-size: 0 !important;
+        opacity: 0.75;
+    }
+
+    .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li.active > a .arrow {
+        transform: rotate(225deg);
     }
 
     .sidebar.sidebar--saas #side-menu > li.menu-item-timesheets .nav-second-level > li > a .menu-icon {
