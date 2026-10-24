@@ -20,6 +20,21 @@ class timesheets extends AdminController
 
 		parent::__construct();
 
+		// Module routes remain reachable when the vendor license check has
+		// deactivated its bootstrap. Load the runtime dependencies explicitly
+		// so employee HRMS pages do not fail with undefined helpers/constants.
+		if (!defined('TIMESHEETS_MODULE_NAME')) {
+			define('TIMESHEETS_MODULE_NAME', 'timesheets');
+			define('TIMESHEETS_MODULE_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads'));
+			define('TIMESHEETS_CONTRACT_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/contracts/'));
+			define('TIMESHEETS_JOB_POSIITON_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/job_position/'));
+			define('TIMESHEETS_PATH', 'modules/timesheets/uploads/');
+			define('TIMESHEETS_PAYSLIPS', 'modules/timesheets/uploads/payslips/');
+			define('TIMESHEETS_PATH_EXPORT_FILE', 'modules/timesheets/uploads/attendance/');
+		}
+		$this->load->helper('timesheets/timesheets');
+		$this->lang->load('timesheets/timesheets', 'english');
+
 		$this->load->model('timesheets_model');
 
 		$this->load->model('departments_model');
