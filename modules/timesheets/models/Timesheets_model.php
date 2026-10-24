@@ -20231,6 +20231,16 @@ public function add_requisition_ajax($data)
 			$shift_info = $shift_cache[$date];
 			$detail = $this->build_attendance_day_detail($punch, $shift_info, $hours, $required_hours);
 			$work_hours = (float) ($detail['actual_work_hrs_num'] ?? $hours);
+			if (
+				$status === 'regularised'
+				&& is_numeric($reg['timekeeping_value'] ?? null)
+				&& (float) $reg['timekeeping_value'] > 0
+			) {
+				// Approved regularisation hours are authoritative when raw punches were missing/bad.
+				$work_hours = max($work_hours, (float) $reg['timekeeping_value']);
+				$detail['actual_work_hrs_num'] = $work_hours;
+				$detail['actual_work_hrs'] = round($work_hours, 2) . 'h';
+			}
 			$span_hrs = (float) ($punch['span_hrs'] ?? 0);
 			if ($span_hrs <= 0) {
 				$span_hrs = (float) ($detail['span_hrs_num'] ?? 0);
