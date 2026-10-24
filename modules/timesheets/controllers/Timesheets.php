@@ -14566,12 +14566,15 @@ class timesheets extends AdminController
 		}
 
 		// Workroom check-in / check-out punches for the month
+		$cio_range_from = date('Y-m-d', strtotime($from . ' -1 day'));
+		$cio_range_to = date('Y-m-d', strtotime($to . ' +1 day'));
 		$check_in_out = $this->db->query(
 			'SELECT date, type_check FROM ' . db_prefix() . 'check_in_out
 			 WHERE staff_id = ' . $staffid . '
-			   AND DATE(date) BETWEEN ' . $this->db->escape($from) . ' AND ' . $this->db->escape($to) . '
+			   AND DATE(date) BETWEEN ' . $this->db->escape($cio_range_from) . ' AND ' . $this->db->escape($cio_range_to) . '
 			 ORDER BY date ASC'
 		)->result_array();
+		$check_in_out = $this->timesheets_model->normalize_workroom_cio_rows_for_display($check_in_out);
 
 		// Biometric swipes from imported report (API hook later)
 		$bio_swipes = [];
@@ -14604,7 +14607,10 @@ class timesheets extends AdminController
 
 		$cio_rows = [];
 		foreach ($check_in_out as $cio) {
-			$cio_date = date('Y-m-d', strtotime($cio['date']));
+			$cio_date = (string) ($cio['attendance_date'] ?? date('Y-m-d', strtotime($cio['date'])));
+			if ($cio_date < $from || $cio_date > $to) {
+				continue;
+			}
 			if (!empty($bio_punch_dates[$cio_date]) && empty($wfh_dates[$cio_date])) {
 				continue;
 			}

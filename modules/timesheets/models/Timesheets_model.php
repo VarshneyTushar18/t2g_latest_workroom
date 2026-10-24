@@ -22436,6 +22436,44 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Normalize raw Workroom rows for attendance-detail APIs.
+	 *
+	 * The returned attendance_date is the session IN date. The original
+	 * datetime remains available for the displayed time and audit trail.
+	 *
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function normalize_workroom_cio_rows_for_display(array $rows)
+	{
+		$cio_by_date = [];
+		foreach ($rows as $row) {
+			$timestamp = strtotime((string) ($row['date'] ?? ''));
+			if ($timestamp === false) {
+				continue;
+			}
+			$date = date('Y-m-d', $timestamp);
+			$row['d'] = $date;
+			$row['t'] = date('H:i:s', $timestamp);
+			$cio_by_date[$date][] = $row;
+		}
+
+		$paired = $this->pair_workroom_cio_by_session_window($cio_by_date);
+		$normalized = [];
+		foreach ($paired['cio_by_date'] as $attendance_date => $day_rows) {
+			foreach ($day_rows as $row) {
+				$row['attendance_date'] = $attendance_date;
+				$normalized[] = $row;
+			}
+		}
+		usort($normalized, function ($a, $b) {
+			return strcmp((string) ($a['date'] ?? ''), (string) ($b['date'] ?? ''));
+		});
+
+		return $normalized;
+	}
+
+	/**
 	 * Load Workroom punches for one day after 13h session pairing (matches attendance calendar).
 	 *
 	 * @return array<int, array<string, mixed>>
