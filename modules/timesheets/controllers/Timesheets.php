@@ -14469,14 +14469,8 @@ class timesheets extends AdminController
 			if ($code === '' || $code === 'O') {
 				continue;
 			}
-			$wfh_allotted = !empty($day['wfh_allotted']);
 			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
-				$code = $wfh_allotted ? 'WFH' : 'P';
-			} elseif ($code === 'WFH' || $wfh_allotted) {
-				// Allotted WFH day (Manage WFH module) — keep label on team calendar.
-				if ($code === 'P' || $code === '') {
-					$code = 'WFH';
-				}
+				$code = 'P';
 			} elseif ($status === 'absent' || $status === 'punch_missing' || $status === 'rejected') {
 				$code = 'AB';
 			} elseif ($status === 'short_hours' && $code === 'P') {
