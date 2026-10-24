@@ -1,5 +1,7 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php init_head(); ?>
+<link rel="stylesheet" href="<?php echo base_url('modules/timesheets/assets/css/hrms_design.css'); ?>?v=128" type="text/css">
+<link rel="stylesheet" href="<?php echo base_url('assets/css/admin-dashboard-hrms.css'); ?>?v=128" type="text/css">
 <?php $staff_id = get_staff_user_id(); if ($staff_id == 000): ?>	
 <!-- 🎉 Birthday Modal -->
 <div id="birthday-celebration">

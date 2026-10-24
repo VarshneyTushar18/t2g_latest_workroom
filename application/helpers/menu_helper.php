@@ -14,6 +14,83 @@ function app_init_admin_sidebar_menu_items()
         'badge' => [],
     ]);
 
+    // Keep employee HRMS reachable even when the vendor timesheets module
+    // deactivates itself after a transient license-verification failure.
+    // The underlying controllers remain available; permissions inside each
+    // destination continue to protect manager/HR-only functions.
+    if (is_staff_logged_in()) {
+        $CI->app_menu->add_sidebar_menu_item('timesheets', [
+            'name' => 'HRMS',
+            'href' => admin_url('timesheets/hrms_home'),
+            'position' => 5,
+            'icon' => 'fa fa-user-circle',
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets', [
+            'slug' => 'timesheets_hrms_home',
+            'name' => 'Home',
+            'href' => admin_url('timesheets/hrms_home'),
+            'icon' => 'fa fa-home',
+            'position' => 0,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets', [
+            'slug' => 'timesheets_attendance',
+            'name' => 'Attendance',
+            'href' => '#',
+            'icon' => 'fa fa-clock',
+            'position' => 1,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+            'slug' => 'timesheets_attendance_info',
+            'name' => 'Attendance Info',
+            'href' => admin_url('timesheets/my_attendance'),
+            'icon' => 'fa fa-calendar-check',
+            'position' => 1,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets_attendance', [
+            'slug' => 'timesheets_attendance_regularization',
+            'name' => 'Regularization & Permission',
+            'href' => admin_url('timesheets/attendance_regularization'),
+            'icon' => 'fa fa-edit',
+            'position' => 2,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets', [
+            'slug' => 'timesheets_leave',
+            'name' => 'Leave',
+            'href' => '#',
+            'icon' => 'fa fa-suitcase',
+            'position' => 2,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+            'slug' => 'timesheets_apply_leave',
+            'name' => 'Leave apply',
+            'href' => admin_url('timesheets/requisition_manage'),
+            'icon' => 'fa fa-file-text',
+            'position' => 1,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+            'slug' => 'timesheets_leave_balance',
+            'name' => 'Leave Balance',
+            'href' => admin_url('staff/leave_balance'),
+            'icon' => 'fa fa-pie-chart',
+            'position' => 2,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('timesheets_leave', [
+            'slug' => 'timesheets_holiday_calendar',
+            'name' => 'Holiday Calendar',
+            'href' => admin_url('holiday/calendar'),
+            'icon' => 'fa fa-sun',
+            'position' => 3,
+        ]);
+    }
+
     // if (
     //     has_permission('customers', '', 'view')
     //     || (have_assigned_customers()
