@@ -57,7 +57,7 @@ function pair_workroom_cio_by_session_window_test(array $cio_by_date, $window_ho
 
 		$start_ts = $events[$i]['ts'];
 		$start_date = date('Y-m-d', $start_ts);
-		$end_ts = $start_ts + $window_sec;
+		$end_ts = $start_ts + $window_sec + 59;
 
 		while ($i < $n) {
 			$ev = $events[$i];
@@ -140,6 +140,20 @@ $pair3 = pair_workroom_cio_by_session_window_test([
 	],
 ]);
 assert_true(count($pair3['cio_by_date']['2025-10-15']) === 2, 'Same-day shift');
+
+// Displayed duration is exactly 13h, although hidden seconds differ by 46s.
+$pairBoundary = pair_workroom_cio_by_session_window_test([
+	'2026-10-03' => [cio_row('2026-10-03', '17:43:17', 1)],
+	'2026-10-04' => [cio_row('2026-10-04', '06:44:03', 2)],
+]);
+assert_true(
+	count($pairBoundary['cio_by_date']['2026-10-03']) === 2,
+	'13h displayed boundary pairs despite hidden seconds'
+);
+assert_true(
+	($pairBoundary['carryover_dates']['2026-10-04'] ?? '') === '2026-10-03',
+	'Boundary checkout date becomes carryover'
+);
 
 $pair4 = pair_workroom_cio_by_session_window_test([
 	'2025-10-16' => [cio_row('2025-10-16', '09:00:00', 1)],

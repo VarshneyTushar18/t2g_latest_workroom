@@ -24,6 +24,8 @@ class timesheets_model extends app_model
 
 	/** Hours from first check-in during which all punches belong to the same attendance session. */
 	protected const ATTENDANCE_SESSION_WINDOW_HOURS = 13;
+	/** Compare the 13h Workroom boundary by displayed whole minute, not hidden seconds. */
+	protected const WORKROOM_SESSION_BOUNDARY_GRACE_SECONDS = 59;
 
 	public function __construct()
 	{
@@ -22386,7 +22388,7 @@ public function add_requisition_ajax($data)
 
 			$start_ts = $events[$i]['ts'];
 			$start_date = date('Y-m-d', $start_ts);
-			$end_ts = $start_ts + $window_sec;
+			$end_ts = $start_ts + $window_sec + self::WORKROOM_SESSION_BOUNDARY_GRACE_SECONDS;
 
 			while ($i < $n) {
 				$ev = $events[$i];
