@@ -441,17 +441,6 @@
     if (day.status === 'night_carryover' || day.code === 'NC') {
       return '<span class="t2g-att-cal-code code-off" title="Night shift hours on prior day">NC</span>';
     }
-    if (isWfhAllottedDay(day)) {
-      var wfhTone = dayHealthTone(day);
-      var wfhCls = (wfhTone === 'ok' || day.code === 'P' || day.status === 'ok') ? 'code-wfh-present' : 'code-wfh';
-      if (day.status === 'punch_missing' || day.code === 'INC' || day.code === 'WFH') {
-        wfhCls = 'code-wfh';
-      }
-      if (wfhTone === 'bad' && day.code !== 'P') {
-        return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
-      }
-      return '<span class="t2g-att-cal-code ' + wfhCls + '" title="WFH allotted (Manage WFH)">WFH</span>';
-    }
     if (day.status === 'punch_missing' || day.code === 'INC') {
       return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
     }
