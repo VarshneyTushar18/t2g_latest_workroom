@@ -30,8 +30,10 @@ function _apply_menu_items_options($items, $options)
         if (isset($options->{$item['slug']})) {
             if (isset($options->{$item['slug']}->disabled)
                 && $options->{$item['slug']}->disabled === 'true') {
-                // Main item is disabled
-                unset($items[$key]);
+                // HRMS must stay reachable (attendance/leave routes live under timesheets).
+                if (($item['slug'] ?? '') !== 'timesheets') {
+                    unset($items[$key]);
+                }
             } else {
                 // Main item has custom icon
                 if (isset($options->{$item['slug']}->icon) && $options->{$item['slug']}->icon === false) {
@@ -42,26 +44,104 @@ function _apply_menu_items_options($items, $options)
                 }
             }
 
-            foreach ($item['children'] as $childKey => $child) {
-                if (isset($options->{$item['slug']}->children->{$child['slug']})) {
-                    if (isset($options->{$item['slug']}->children->{$child['slug']}->disabled)
-                        && $options->{$item['slug']}->children->{$child['slug']}->disabled === 'true') {
-                        // Is disabled
-                        unset($items[$key]['children'][$childKey]);
-                    } else {
-                        // Has custom icon
-                        if ($options->{$item['slug']}->children->{$child['slug']}->icon === false) {
-                            $items[$key]['children'][$childKey]['icon'] = '';
-                        } elseif (!empty($options->{$item['slug']}->children->{$child['slug']}->icon)) {
-                            $items[$key]['children'][$childKey]['icon'] = $options->{$item['slug']}->children->{$child['slug']}->icon;
-                        }
-                    }
-                }
+            if (isset($items[$key]['children']) && is_array($items[$key]['children'])) {
+                $items[$key]['children'] = _apply_menu_items_children_options(
+                    $items[$key]['children'],
+                    $options->{$item['slug']}->children ?? null
+                );
             }
         }
     }
 
     return $items;
+}
+
+/**
+ * Apply Menu Setup disabled/icon flags to nested sidebar children (HRMS 3-level menus).
+ *
+ * @param array<int, array<string, mixed>> $children
+ * @param object|null $options_children
+ * @return array<int, array<string, mixed>>
+ */
+function _apply_menu_items_children_options(array $children, $options_children)
+{
+    if ($options_children === null) {
+        return $children;
+    }
+
+    foreach ($children as $childKey => $child) {
+        $slug = $child['slug'] ?? '';
+        if ($slug === '' || !isset($options_children->{$slug})) {
+            if (!empty($child['children'])) {
+                $children[$childKey]['children'] = _apply_menu_items_children_options(
+                    $child['children'],
+                    $options_children
+                );
+            }
+            continue;
+        }
+
+        $node = $options_children->{$slug};
+        if (isset($node->disabled) && $node->disabled === 'true') {
+            unset($children[$childKey]);
+            continue;
+        }
+
+        if (isset($node->icon) && $node->icon === false) {
+            $children[$childKey]['icon'] = '';
+        } elseif (!empty($node->icon)) {
+            $children[$childKey]['icon'] = $node->icon;
+        }
+
+        if (!empty($child['children'])) {
+            $children[$childKey]['children'] = _apply_menu_items_children_options(
+                $child['children'],
+                $node->children ?? null
+            );
+        }
+    }
+
+    return array_values($children);
+}
+
+/**
+ * Keep Menu Setup order but merge in new default submenu items (e.g. HRMS nested links).
+ *
+ * @param array<int, array<string, mixed>> $ordered
+ * @param array<int, array<string, mixed>> $defaults
+ * @return array<int, array<string, mixed>>
+ */
+function _menu_merge_menu_children_lists(array $ordered, array $defaults)
+{
+    $indexBySlug = [];
+    foreach ($ordered as $i => $child) {
+        $slug = $child['slug'] ?? '';
+        if ($slug !== '') {
+            $indexBySlug[$slug] = $i;
+        }
+    }
+
+    foreach ($defaults as $defaultChild) {
+        $slug = $defaultChild['slug'] ?? '';
+        if ($slug === '') {
+            continue;
+        }
+
+        if (!isset($indexBySlug[$slug])) {
+            $ordered[] = $defaultChild;
+            $indexBySlug[$slug] = count($ordered) - 1;
+            continue;
+        }
+
+        $i = $indexBySlug[$slug];
+        $existingChildren = $ordered[$i]['children'] ?? [];
+        $defaultChildren = $defaultChild['children'] ?? [];
+        if (!empty($defaultChildren)) {
+            $ordered[$i]['children'] = _menu_merge_menu_children_lists($existingChildren, $defaultChildren);
+        }
+    }
+
+    return array_values($ordered);
 }
 
 function _apply_menu_items_position($items, $options)
@@ -87,6 +167,13 @@ function _apply_menu_items_position($items, $options)
                             $newItemsAddedKeys[]          = $newChildItem['slug'];
                         }
                     }
+                }
+
+                if (isset($items[$key]['children']) && is_array($items[$key]['children'])) {
+                    $newItems[$key]['children'] = _menu_merge_menu_children_lists(
+                        $newItems[$key]['children'],
+                        $items[$key]['children']
+                    );
                 }
             }
         }
