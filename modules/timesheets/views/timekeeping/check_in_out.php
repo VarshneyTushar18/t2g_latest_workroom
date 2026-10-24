@@ -164,9 +164,6 @@
 
                         }
 
-                        $workroom_day_complete = function_exists('timesheets_staff_completed_workroom_today')
-                            && timesheets_staff_completed_workroom_today(get_staff_user_id(), date('Y-m-d'));
-
                         $allows_to_choose_an_older_date = 0;
 
                         $data_order_date = get_timesheets_option('allows_to_choose_an_older_date');
@@ -239,7 +236,7 @@
 
                                 //                    if($data_length < 2 && ($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin())){
 
-                                if ($type_check_in_out == '' || ($type_check_in_out == 2 && !$workroom_day_complete) || $allows_updating_check_in_time == 1 || is_admin()) {
+                                if ($type_check_in_out == '' || $type_check_in_out == 2 || $allows_updating_check_in_time == 1 || is_admin()) {
                                     echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in', 'onsubmit' => 'get_data()')); ?>
 
                                     <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">

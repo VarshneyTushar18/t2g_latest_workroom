@@ -6098,10 +6098,6 @@ public function add_requisition_ajax($data)
 				if ($type_check === 1 && $last_type === 1) {
 					return false;
 				}
-				if ($type_check === 1 && function_exists('timesheets_staff_completed_workroom_today')
-					&& timesheets_staff_completed_workroom_today($staff_id, date('Y-m-d'))) {
-					return false;
-				}
 				if ($type_check === 2 && $last_type !== 1) {
 					return false;
 				}
@@ -6114,6 +6110,9 @@ public function add_requisition_ajax($data)
 			$insert_id = $this->db->insert_id();
 
 			if ($insert_id) {
+				if (function_exists('timesheets_invalidate_navbar_punch_cache')) {
+					timesheets_invalidate_navbar_punch_cache($staff_id);
+				}
 
 				$affectedrows++;
 			}
