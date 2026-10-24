@@ -53,13 +53,7 @@ class timesheets extends AdminController
 	 */
 	public function hrms_home()
 	{
-		if (!(
-			has_permission('attendance_management', '', 'view_own') ||
-			has_permission('attendance_management', '', 'view') ||
-			has_permission('leave_management', '', 'view_own') ||
-			has_permission('leave_management', '', 'view') ||
-			is_admin()
-		)) {
+		if (!is_staff_logged_in()) {
 			access_denied('timesheets');
 		}
 
