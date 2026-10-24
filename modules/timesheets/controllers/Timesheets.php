@@ -14469,7 +14469,7 @@ class timesheets extends AdminController
 			if ($code === '' || $code === 'O') {
 				continue;
 			}
-			$wfh_allotted = !empty($day['wfh_allotted']) || (($day['attendance_source'] ?? '') === 'wfh');
+			$wfh_allotted = !empty($day['wfh_allotted']);
 			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
 				$code = $wfh_allotted ? 'WFH' : 'P';
 			} elseif ($code === 'WFH' || $wfh_allotted) {

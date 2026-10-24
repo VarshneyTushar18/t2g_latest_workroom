@@ -19785,6 +19785,7 @@ public function add_requisition_ajax($data)
 		$range_from = date('Y-m-d', strtotime($from . ' -1 day'));
 		$range_to = date('Y-m-d', strtotime($to . ' +1 day'));
 		$wfh_dates = $this->get_staff_wfh_dates_in_range($staff_id, $from, $to);
+		$wfh_allotted_dates = $this->get_staff_wfh_allotted_dates_in_range($staff_id, $from, $to);
 
 		// Leave codes only (HD = half-day attendance, not leave — must stay regularisable).
 		// WFH is handled separately — approved WFH is a workday without biometric punches.
@@ -20500,7 +20501,7 @@ public function add_requisition_ajax($data)
 					? trim((string) ($bio_row_for_day['punch_records'] ?? ''))
 					: '',
 				'attendance_source' => $attendance_source,
-				'wfh_allotted' => $is_wfh_day,
+				'wfh_allotted' => !empty($wfh_allotted_dates[$date]),
 				'regularisation' => $reg ? [
 					'id' => (int) $reg['id'],
 					'status' => (int) $reg['status'],
@@ -20535,7 +20536,39 @@ public function add_requisition_ajax($data)
 	 * @return array
 	 */
 	/**
-	 * Dates with approved WFH (leave or timesheet WFH code) in range.
+	 * Dates explicitly allotted through the Manage WFH module.
+	 *
+	 * @return array<string, true>
+	 */
+	public function get_staff_wfh_allotted_dates_in_range($staff_id, $from, $to)
+	{
+		$staff_id = (int) $staff_id;
+		$from = date('Y-m-d', strtotime($from));
+		$to = date('Y-m-d', strtotime($to));
+		$dates = [];
+		if (
+			$staff_id <= 0
+			|| $from === ''
+			|| $to === ''
+			|| !$this->db->table_exists(db_prefix() . 'staff_wfh_day')
+		) {
+			return $dates;
+		}
+
+		$rows = $this->db->query(
+			'SELECT wfh_date FROM ' . db_prefix() . 'staff_wfh_day
+			 WHERE staffid = ? AND status = 1 AND wfh_date BETWEEN ? AND ?',
+			[$staff_id, $from, $to]
+		)->result_array();
+		foreach ($rows as $row) {
+			$dates[$row['wfh_date']] = true;
+		}
+
+		return $dates;
+	}
+
+	/**
+	 * Dates treated operationally as WFH for attendance-source selection.
 	 *
 	 * @return array<string, true>
 	 */

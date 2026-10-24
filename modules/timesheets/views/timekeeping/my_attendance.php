@@ -360,12 +360,7 @@
   }
 
   function isWfhAllottedDay(day) {
-    if (!day) return false;
-    if (day.wfh_allotted) return true;
-    if (day.attendance_source === 'wfh') return true;
-    var c = String(day.code || '').toUpperCase();
-    var ts = String(day.timesheet_type || '').toUpperCase();
-    return c === 'WFH' || ts === 'WFH';
+    return !!(day && day.wfh_allotted);
   }
 
   function dayCodeLabel(code) {
@@ -440,6 +435,17 @@
     if (!day) return '';
     if (day.status === 'night_carryover' || day.code === 'NC') {
       return '<span class="t2g-att-cal-code code-off" title="Night shift hours on prior day">NC</span>';
+    }
+    if (isWfhAllottedDay(day)) {
+      var wfhTone = dayHealthTone(day);
+      var wfhCls = (wfhTone === 'ok' || day.code === 'P' || day.status === 'ok') ? 'code-wfh-present' : 'code-wfh';
+      if (day.status === 'punch_missing' || day.code === 'INC' || day.code === 'WFH') {
+        wfhCls = 'code-wfh';
+      }
+      if (wfhTone === 'bad' && day.code !== 'P') {
+        return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
+      }
+      return '<span class="t2g-att-cal-code ' + wfhCls + '" title="WFH allotted (Manage WFH)">WFH</span>';
     }
     if (day.status === 'punch_missing' || day.code === 'INC') {
       return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
