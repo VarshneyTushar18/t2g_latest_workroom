@@ -20072,10 +20072,16 @@ public function add_requisition_ajax($data)
 					$reg_in = trim((string) ($reg['time_in'] ?? ''));
 					$reg_out = trim((string) ($reg['time_out'] ?? ''));
 					if ($reg_in !== '' && $reg_out !== '') {
-						$in_ts = strtotime('1970-01-01 ' . substr($reg_in, 0, 8));
-						$out_ts = strtotime('1970-01-01 ' . substr($reg_out, 0, 8));
+						$in_ts = strtotime($date . ' ' . substr($reg_in, 0, 8));
+						$out_ts = strtotime($date . ' ' . substr($reg_out, 0, 8));
+						if ($out_ts !== false && $in_ts !== false && $out_ts <= $in_ts) {
+							$out_ts = strtotime('+1 day', $out_ts);
+						}
 						if ($out_ts > $in_ts) {
-							$hours = max($hours, ($out_ts - $in_ts) / 3600);
+							$reg_span_hours = ($out_ts - $in_ts) / 3600;
+							$hours = max($hours, $reg_span_hours);
+							$punch['span_hrs'] = $reg_span_hours;
+							$punch['span_minutes'] = intdiv((int) ($out_ts - $in_ts), 60);
 						}
 						$punch['check_in'] = substr($reg_in, 0, 5);
 						$punch['check_out'] = substr($reg_out, 0, 5);
@@ -20084,6 +20090,7 @@ public function add_requisition_ajax($data)
 					if (is_numeric($reg['timekeeping_value'] ?? null) && (float) $reg['timekeeping_value'] > 0) {
 						$hours = max($hours, (float) $reg['timekeeping_value']);
 					}
+					$punch['hours'] = max((float) ($punch['hours'] ?? 0), $hours);
 					$issues = [];
 				} elseif ((int) $reg['status'] === 2) {
 					$status = 'rejected';
