@@ -1926,7 +1926,10 @@ function timesheets_get_leave_cc_staff_list($staff_id = '')
 }
 
 /**
- * Build navbar punch context (Workroom + Biometric). Cached per staff ~90s to cut DB load on every admin page.
+ * Build navbar punch context (Workroom + Biometric).
+ *
+ * This correctness-critical state is intentionally read fresh on every request so
+ * check-in/out and biometric changes cannot leave stale navbar controls.
  *
  * @return array<string, mixed>
  */
@@ -1934,11 +1937,6 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 {
 	$CI = &get_instance();
 	$staff_id = (int) get_staff_user_id();
-	$cache_key = 'ts_navbar_punch_v2_' . $staff_id;
-	$cached = $CI->session->userdata($cache_key);
-	if (is_array($cached) && !empty($cached['expires']) && (int) $cached['expires'] > time() && !empty($cached['data'])) {
-		return $cached['data'];
-	}
 
 	// Auto-checkout stale open check-ins at most once every 5 minutes per user (cron also handles this).
 	$throttle_key = 'ts_process_checkin_' . $staff_id;
@@ -2055,11 +2053,6 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 			$data['allows_updating_check_in_time'] = $data_allows;
 		}
 	}
-
-	$CI->session->set_userdata($cache_key, [
-		'expires' => time() + 90,
-		'data'    => $data,
-	]);
 
 	return $data;
 }
