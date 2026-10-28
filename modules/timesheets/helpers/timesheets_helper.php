@@ -2003,9 +2003,10 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	try {
 		$CI->load->model('biometric_model');
 		$biometric_row = null;
-		if (!$on_wfh_today && !$workroom_open_checkin && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
+		// Biometric punches replace an open Workroom check-in in the navbar.
+		if (method_exists($CI->biometric_model, 'get_staff_active_punch')) {
 			$biometric_row = $CI->biometric_model->get_staff_active_punch($staff_id, $cooldown_hours);
-		} elseif (!$on_wfh_today && !$workroom_open_checkin) {
+		} else {
 			$biometric_row = $CI->biometric_model->get_staff_today_punch($staff_id);
 		}
 		if (is_array($biometric_row)) {

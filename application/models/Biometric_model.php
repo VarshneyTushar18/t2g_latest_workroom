@@ -92,6 +92,21 @@ class Biometric_model extends App_Model
                     $force_replace = true;
                 }
 
+                // Live bridge often resends today with only the new swipes. Merge those
+                // into the stored day instead of dropping them for being "thinner".
+                if (!$keeper_is_official) {
+                    $merged_punches = $this->merge_punch_record_strings(
+                        (string) ($keeper->punch_records ?? ''),
+                        (string) ($row['punch_records'] ?? '')
+                    );
+                    $keeper_punches = $this->normalize_punch_records_string($keeper->punch_records ?? '');
+                    if ($merged_punches !== '' && $merged_punches !== $keeper_punches) {
+                        $row['punch_records'] = $merged_punches;
+                        $row = $this->prepare_biometric_report_row($row);
+                        $force_replace = true;
+                    }
+                }
+
                 // Never replace a richer punch day with a thinner sync payload (unless official report import).
                 $incoming_score = $this->biometric_row_completeness_score($row);
                 $keeper_score = $this->biometric_row_completeness_score((array) $keeper);
@@ -111,13 +126,15 @@ class Biometric_model extends App_Model
         }
 
         $result = [
-            'success'  => ($inserted + $updated) > 0,
+            // Skipped-only batches are still a successful sync. A 422 here
+            // aborts the bridge before it can send the rest of the day.
+            'success'  => ($inserted + $updated + $skipped) > 0,
             'inserted' => $inserted,
             'updated'  => $updated,
             'skipped'  => $skipped,
         ];
 
-        if ($inserted > 0 || $updated > 0) {
+        if ($inserted > 0 || $updated > 0 || $skipped > 0) {
             $this->record_sync_run([
                 'source'   => 'biometric_import',
                 'received' => count($data),
@@ -203,6 +220,35 @@ class Biometric_model extends App_Model
         }
 
         return implode(', ', $normalized);
+    }
+
+    /**
+     * Keep existing punches and append any new swipe the bridge did not include yet.
+     */
+    public function merge_punch_record_strings($existing, $incoming)
+    {
+        $seen = [];
+        $merged = [];
+        foreach ([$existing, $incoming] as $raw) {
+            $normalized = $this->normalize_punch_records_string($raw);
+            if ($normalized === '') {
+                continue;
+            }
+            foreach (preg_split('/\s*,\s*/', $normalized) as $part) {
+                $part = trim((string) $part);
+                if ($part === '') {
+                    continue;
+                }
+                $key = strtolower(preg_replace('/\s+/', ' ', $part));
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $merged[] = $part;
+            }
+        }
+
+        return implode(', ', $merged);
     }
 
     /**

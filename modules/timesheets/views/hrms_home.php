@@ -680,7 +680,6 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
   function dayHealthTone(day) {
     if (!day || day.status === 'future') return 'neutral';
     var code = day.code || '';
-    if (day.status === 'night_carryover' || code === 'NC') return 'off';
     if (day.status === 'weekend' || code === 'O') return 'off';
     if (day.status === 'holiday' || code === 'HO' || code === 'H') return 'holiday';
     if (day.status === 'leave' || day.status === 'saturday_leave') return 'leave';
@@ -690,7 +689,7 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
     var presentMin = day.present_min_hours || 8.0;
     var halfMin = day.half_day_min_hours || 5;
     var hrs = dayHours(day);
-    if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') return 'bad';
+    if (day.status === 'absent' || day.status === 'night_carryover' || day.status === 'punch_missing' || code === 'AB' || code === 'A' || code === 'NC') return 'bad';
     if (day.status === 'rejected') {
       if (hrs + 0.001 >= presentMin) return 'ok';
       if (hrs + 0.001 >= halfMin) return 'half';
@@ -718,8 +717,7 @@ $biometric_checkin_label = $biometric_checkin_label ?? '';
   }
 
   function dayCodeLabel(code) {
-    if (code === 'AB') return 'A';
-    if (code === 'NC') return 'NC';
+    if (code === 'AB' || code === 'NC') return 'A';
     return code || '';
   }
 

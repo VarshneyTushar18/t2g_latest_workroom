@@ -19955,10 +19955,7 @@ public function add_requisition_ajax($data)
 			$workroom_punch = $this->analyze_day_punches($cio_for_day, [], $cio_source);
 			$has_workroom = !empty($workroom_punch['swipes']);
 
-			if ($is_wfh_day) {
-				$attendance_source = 'wfh';
-				$punch = $workroom_punch;
-			} elseif (
+			if (
 				$this->staff_uses_bridge_daily_full_punches($staff_id)
 				&& !empty($bio_daily_by_date[$date])
 				&& $this->biometric_report_row_has_punches($bio_daily_by_date[$date])
@@ -19974,7 +19971,7 @@ public function add_requisition_ajax($data)
 					$punch = $this->analyze_session_punches($bio_events_for_day, $date === $today, true);
 				} else {
 					$punch = $workroom_punch;
-					$attendance_source = $has_workroom ? 'workroom' : 'none';
+					$attendance_source = $has_workroom ? ($is_wfh_day ? 'wfh' : 'workroom') : 'none';
 				}
 			} elseif ($session && !empty($session['events'])) {
 				$bio_events = $this->filter_biometric_timeline_events($session['events']);
@@ -19984,7 +19981,7 @@ public function add_requisition_ajax($data)
 					$punch = $this->analyze_session_punches($bio_events, $date === $today);
 				} else {
 					$punch = $workroom_punch;
-					$attendance_source = $has_workroom ? 'workroom' : 'none';
+					$attendance_source = $has_workroom ? ($is_wfh_day ? 'wfh' : 'workroom') : 'none';
 				}
 			} else {
 				// No biometric session starting this day — still show Workroom check-in/out if any.
@@ -20035,16 +20032,10 @@ public function add_requisition_ajax($data)
 			}
 
 			$day_swipes = $punch['swipes'] ?? [];
-			$workroom_swipes_for_merge = $workroom_punch['swipes'] ?? [];
-			if ($has_workroom && $attendance_source === 'biometric') {
-				$workroom_swipes_for_merge = $this->filter_workroom_swipes_for_biometric_day(
-					$day_swipes,
-					$workroom_swipes_for_merge
-				);
-				if (!empty($workroom_swipes_for_merge)) {
-					$day_swipes = $this->merge_attendance_swipe_rows($day_swipes, $workroom_swipes_for_merge);
-				}
-			}
+			// Biometric attendance replaces a Workroom check-in for the same day.
+			$workroom_swipes_for_merge = ($attendance_source === 'biometric')
+				? []
+				: ($workroom_punch['swipes'] ?? []);
 			$hours = $punch['hours'];
 			if ($hours <= 0 && $ts && is_numeric($ts['value'])) {
 				$hours = (float) $ts['value'];
@@ -20104,8 +20095,8 @@ public function add_requisition_ajax($data)
 				}
 			} elseif ($ts_type === 'HO' || $ts_type === 'M' || $ts_type === 'H') {
 				$status = 'holiday';
-			} elseif ($is_wfh_day && ($ts_type === '' || $ts_type === 'WFH' || $ts_type === 'AB' || $ts_type === 'HD')) {
-				// WFH workday — Workroom check-in/out only (no biometric).
+			} elseif ($is_wfh_day && $attendance_source !== 'biometric' && ($ts_type === '' || $ts_type === 'WFH' || $ts_type === 'AB' || $ts_type === 'HD')) {
+				// WFH workday with no biometric punches — Workroom check-in/out only.
 				$has_in = !empty($punch['check_in']) || !empty($punch['ins']);
 				$has_out = !empty($punch['check_out']) || !empty($punch['outs']);
 				$span_minutes_early = isset($punch['span_minutes']) ? (int) $punch['span_minutes'] : null;
@@ -20125,9 +20116,13 @@ public function add_requisition_ajax($data)
 					$status = 'short_hours';
 					$issues[] = 'WFH — punch in/out incomplete';
 					$can_regularise = !$weekend_blocks_reg;
+				} elseif (!$has_in && !$has_out && empty($punch['swipes'])) {
+					$status = 'absent';
+					$issues[] = 'No attendance recorded';
+					$can_regularise = !$weekend_blocks_reg;
 				} elseif ($punch['punch_missing'] || (!$has_in && !$has_out)) {
 					$status = 'punch_missing';
-					$issues[] = 'WFH day — no attendance recorded; submit regularization with your work hours';
+					$issues[] = 'WFH — punch in/out incomplete';
 					$can_regularise = !$weekend_blocks_reg;
 				} elseif (
 					($span_minutes_early !== null && $span_minutes_early > 0 && $span_minutes_early < $required_span_minutes)
@@ -20271,12 +20266,16 @@ public function add_requisition_ajax($data)
 				)
 			);
 			if ($is_night_carryover) {
-				$status = 'night_carryover';
-				$issues = [
-					'Night shift hours counted on ' . date('d M', strtotime($carryover_parent))
-						. ' (session spans past midnight)',
-				];
-				$can_regularise = false;
+				// Morning punch belongs to the previous session. This calendar day has no attendance of its own.
+				$status = 'absent';
+				$issues = ['No attendance recorded'];
+				$can_regularise = true;
+				$hours = 0;
+				$span_hrs = 0;
+				$span_minutes = 0;
+				$work_hours = 0;
+				$has_in = false;
+				$has_out = false;
 			} elseif (
 				$is_wfh_day
 				&& !in_array($status, ['future', 'holiday', 'saturday_leave', 'pending', 'regularised', 'ok', 'night_carryover'], true)
@@ -20291,11 +20290,18 @@ public function add_requisition_ajax($data)
 					$has_complete = ($span_minutes !== null && $span_minutes >= $half_min)
 						|| ($hours >= timesheets_half_day_min_hours());
 					if (!$has_complete) {
-						if (in_array($status, ['neutral', 'leave', 'absent'], true)) {
-							$status = 'punch_missing';
+						$no_own_punch = !$has_in && !$has_out && empty($punch['swipes']);
+						if ($no_own_punch) {
+							$status = 'absent';
+							$issues = ['No attendance recorded'];
+							$can_regularise = !$weekend_blocks_reg;
+						} else {
+							if (in_array($status, ['neutral', 'leave', 'absent'], true)) {
+								$status = 'punch_missing';
+							}
+							$issues = ['WFH — punch in/out incomplete'];
+							$can_regularise = !$weekend_blocks_reg;
 						}
-						$issues = ['WFH day — no attendance recorded; submit regularization with your work hours'];
-						$can_regularise = !$weekend_blocks_reg;
 					}
 				}
 			} elseif (!in_array($status, ['future', 'weekend', 'holiday', 'leave', 'saturday_leave', 'regularised', 'ok'], true)) {
@@ -20330,7 +20336,8 @@ public function add_requisition_ajax($data)
 			}
 			// WFH / Workroom check-in-out: first IN → last OUT >= 8h55m → Present on calendar.
 			if (
-				in_array($attendance_source, ['wfh', 'workroom', 'biometric+workroom'], true)
+				!$is_night_carryover
+				&& in_array($attendance_source, ['wfh', 'workroom', 'biometric+workroom'], true)
 				&& !in_array($status, ['future', 'holiday', 'saturday_leave', 'regularised', 'pending', 'leave', 'night_carryover'], true)
 				&& !($date === $today && $has_in && empty($punch['outs']))
 				&& $this->workroom_punch_meets_present_threshold($punch, $required_span_minutes, $required_hours)
@@ -20364,6 +20371,7 @@ public function add_requisition_ajax($data)
 				&& !isset($off_dates[$date])
 				&& !($reg && (int) $reg['status'] === 0)
 				&& !($reg && (int) $reg['status'] === 1)
+				&& !$is_night_carryover
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'ok', 'night_carryover', 'future'], true)
 			) {
 				// Any absent / incomplete working day (office, WFH, or no punch) may be regularised.
@@ -20394,6 +20402,7 @@ public function add_requisition_ajax($data)
 				&& $span_minutes < $required_span_minutes
 				&& !empty($punch['swipes'])
 				&& !($reg && in_array((int) $reg['status'], [0, 1], true))
+				&& !$is_night_carryover
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'future', 'night_carryover', 'pending'], true)
 			) {
 				$classified = $this->classify_attendance_by_hours($span_minutes);
@@ -20423,6 +20432,7 @@ public function add_requisition_ajax($data)
 				isset($bio_daily_by_date[$date])
 				&& !$is_wfh_day
 				&& in_array($attendance_source, ['biometric', 'workroom', 'none', 'biometric+workroom'], true)
+				&& !$is_night_carryover
 				&& !in_array($status, ['holiday', 'leave', 'saturday_leave', 'future', 'night_carryover', 'regularised', 'pending'], true)
 				&& !($date === $today && $has_in && !$has_out)
 			) {
@@ -20451,6 +20461,29 @@ public function add_requisition_ajax($data)
 			}
 			$display_first_in = ($detail['first_in'] !== '—' && $detail['first_in'] !== '') ? $detail['first_in'] : $display_check_in;
 			$display_last_out = ($detail['last_out'] !== '—' && $detail['last_out'] !== '') ? $detail['last_out'] : $display_check_out;
+			if ($is_night_carryover) {
+				$status = 'absent';
+				$code = 'AB';
+				$issues = ['No attendance recorded'];
+				$calendar_hours = 0;
+				$span_hrs = 0;
+				$span_minutes = 0;
+				$work_hours = 0;
+				$display_check_in = '';
+				$display_check_out = '';
+				$display_first_in = '';
+				$display_last_out = '';
+				$day_swipes = [];
+				$detail['first_in'] = '—';
+				$detail['last_out'] = '—';
+				$detail['late_in'] = '—';
+				$detail['early_out'] = '—';
+				$detail['total_work_hrs'] = '—';
+				$detail['break_hrs'] = '—';
+				$detail['actual_work_hrs'] = '—';
+				$detail['actual_work_hrs_num'] = 0;
+				$detail['sessions'] = [];
+			}
 			if ($has_workroom && $attendance_source === 'biometric' && !empty($workroom_swipes_for_merge)) {
 				$attendance_source = 'biometric+workroom';
 			}
@@ -20473,7 +20506,7 @@ public function add_requisition_ajax($data)
 				'half_day_min_span_minutes' => $half_day_min_span_minutes,
 				'present_min_hours' => $present_min_hours,
 				'half_day_min_hours' => $half_day_min_hours,
-				'night_carryover_parent' => $is_night_carryover ? $carryover_parent : null,
+				'night_carryover_parent' => null,
 				'check_in' => $display_check_in,
 				'check_out' => $display_check_out,
 				'punch_missing' => $punch['punch_missing'],
@@ -22181,7 +22214,7 @@ public function add_requisition_ajax($data)
 			return 'O';
 		}
 		if ($status === 'night_carryover') {
-			return 'NC';
+			return 'AB';
 		}
 		// Hour-based status wins over stale timesheet AB / rejected regularization.
 		if ($status === 'half_day') {
@@ -22295,7 +22328,7 @@ public function add_requisition_ajax($data)
 	protected function map_attendance_status_label($status, $ts_type = '', $code = '')
 	{
 		if ($status === 'night_carryover') {
-			return 'Night carryover';
+			return 'Absent';
 		}
 		if ($status === 'punch_missing') {
 			return 'Incomplete';
@@ -22354,7 +22387,7 @@ public function add_requisition_ajax($data)
 	 * @return array<string, array<int, array<string, mixed>>>
 	 */
 	/**
-	 * After midnight, Workroom OUT may still sit on the next calendar day; treat as NC not Absent.
+	 * Morning OUT closes the previous session. That calendar day has no punch of its own, so it is Absent.
 	 *
 	 * @param array<string, mixed> $punch
 	 */

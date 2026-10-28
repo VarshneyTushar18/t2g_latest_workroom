@@ -208,7 +208,7 @@
                     <span><i class="lg-half"></i> <span id="t2g_legend_half">Half day (5h–8h 54m span)</span></span>
                     <span><i class="lg-bad"></i> Absent (&lt;5 hrs)</span>
                     <span><i class="lg-leave"></i> Leave</span>
-                    <span><i class="lg-off"></i> Off / Holiday / Night carryover</span>
+                    <span><i class="lg-off"></i> Off / Holiday</span>
                   </div>
                 </div>
               </div>
@@ -361,8 +361,7 @@
 
   function dayCodeLabel(code) {
     if (code === 'INC') return 'Inc';
-    if (code === 'AB') return 'A';
-    if (code === 'NC') return 'NC';
+    if (code === 'AB' || code === 'NC') return 'A';
     return code || '';
   }
 
@@ -377,7 +376,6 @@
   function dayHealthTone(day) {
     if (!day || day.status === 'future') return 'neutral';
     var code = day.code || '';
-    if (day.status === 'night_carryover' || code === 'NC') return 'off';
     if (day.status === 'weekend' || code === 'O') return 'off';
     if (day.status === 'holiday' || code === 'HO' || code === 'H') return 'holiday';
     if (day.status === 'leave' || day.status === 'saturday_leave') return 'leave';
@@ -394,7 +392,7 @@
     var halfMin = day.half_day_min_hours || 5;
     var hrs = dayHours(day);
 
-    if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') {
+    if (day.status === 'absent' || day.status === 'night_carryover' || day.status === 'punch_missing' || code === 'AB' || code === 'A' || code === 'NC') {
       return 'bad';
     }
     // Rejected regularization must not force Absent if hours say half day / present.
@@ -430,7 +428,7 @@
   function dayCodeHtml(day) {
     if (!day) return '';
     if (day.status === 'night_carryover' || day.code === 'NC') {
-      return '<span class="t2g-att-cal-code code-off" title="Night shift hours on prior day">NC</span>';
+      return '<span class="t2g-att-cal-code code-bad">A</span>';
     }
     if (day.status === 'punch_missing' || day.code === 'INC') {
       return '<span class="t2g-att-cal-code code-bad">' + esc('Inc') + '</span>';
@@ -449,10 +447,12 @@
       // Do not count short_hours / half-day as penalty — those are exceptions only.
       var isAbsent = (
         d.status === 'absent' ||
+        d.status === 'night_carryover' ||
         d.status === 'punch_missing' ||
         d.status === 'rejected' ||
         code === 'AB' ||
-        code === 'A'
+        code === 'A' ||
+        code === 'NC'
       );
       if (isAbsent) {
         penalty++;
