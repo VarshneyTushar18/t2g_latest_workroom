@@ -8254,16 +8254,29 @@ public function send_daily_timesheet_optimise_report($data)
 	public function maybe_send_daily_team_break_timing_emails()
 	{
 		$run_hour = (int) hooks()->apply_filters('daily_team_break_timing_email_hour', 8);
-		if ((int) date('G') < $run_hour) {
+		$tz       = function_exists('get_option') ? trim((string) get_option('default_timezone')) : '';
+		$previous = date_default_timezone_get();
+		if ($tz !== '') {
+			@date_default_timezone_set($tz);
+		}
+
+		$current_hour = (int) date('G');
+		$today        = date('Y-m-d');
+
+		if ($tz !== '') {
+			@date_default_timezone_set($previous);
+		}
+
+		if ($current_hour < $run_hour) {
 			return;
 		}
 
-		$today = date('Y-m-d');
 		if (get_option('daily_team_break_timing_last_send') === $today) {
 			return;
 		}
 
 		$this->send_daily_team_break_timing_to_managers();
+		$this->send_daily_ecommerce_break_timing_to_pankaj();
 		update_option('daily_team_break_timing_last_send', $today);
 	}
 
@@ -8402,6 +8415,314 @@ public function send_daily_timesheet_optimise_report($data)
 		}
 
 		return $stats;
+	}
+
+	/**
+	 * Daily E-commerce break rollup → Pankaj Lohani (CC Sarabjeet). All active staff in e-commerce depts.
+	 *
+	 * @param string|null $date Biometric attendance_date d-M-Y; default yesterday.
+	 * @param bool $force_resend Skip once-per-day guard (manual test/resend).
+	 * @return array<string, mixed>
+	 */
+	public function send_daily_ecommerce_break_timing_to_pankaj($date = null, $force_resend = false)
+	{
+		$this->load->helper('timesheets/timesheets');
+		$this->load->library('email');
+		$this->load->model('timesheets/timesheets_model');
+		$this->load->model('biometric_model');
+
+		if (!$date) {
+			$date = date('d-M-Y', strtotime('-1 day'));
+		}
+
+		$date_obj = DateTime::createFromFormat('d-M-Y', $date);
+		if (!$date_obj) {
+			return [
+				'success' => false,
+				'error' => 'Invalid date',
+				'date' => (string) $date,
+			];
+		}
+
+		$date_ymd = $date_obj->format('Y-m-d');
+		$date_label = $date_obj->format('d-M-Y');
+		$today = date('Y-m-d');
+
+		if (!$force_resend && get_option('daily_ecommerce_break_pankaj_last_send') === $today) {
+			return [
+				'success' => true,
+				'skipped' => true,
+				'reason' => 'already_sent_today',
+				'date' => $date_label,
+			];
+		}
+
+		$dept_ids = function_exists('timesheets_ecommerce_department_ids')
+			? timesheets_ecommerce_department_ids()
+			: [6, 31, 35, 37, 40, 41];
+		$dept_in = implode(',', array_map('intval', $dept_ids));
+		$prefix = db_prefix();
+
+		$staff_rows = $this->db->query(
+			"SELECT DISTINCT s.staffid
+			 FROM {$prefix}staff s
+			 INNER JOIN {$prefix}staff_departments sd ON sd.staffid = s.staffid
+			 WHERE s.active = 1 AND sd.departmentid IN ({$dept_in})
+			 ORDER BY s.staffid ASC"
+		)->result_array();
+		$staff_ids = array_values(array_filter(array_map('intval', array_column($staff_rows, 'staffid'))));
+
+		$summary_rows = $staff_ids
+			? $this->timesheets_model->get_team_daily_break_total_rows($date_ymd, $staff_ids)
+			: [];
+
+		$detail_rows = $staff_ids
+			? $this->timesheets_model->get_team_break_timing_rows($date_ymd, $date_ymd, $staff_ids, true)
+			: [];
+
+		$staff_punch_for_day = [];
+		$load_staff_punch = function ($sid) use (&$staff_punch_for_day, $date_label) {
+			$sid = (int) $sid;
+			if ($sid <= 0) {
+				return [];
+			}
+			if (!isset($staff_punch_for_day[$sid])) {
+				$punch_row = $this->biometric_model->get_staff_punch_for_date($sid, $date_label);
+				$staff_punch_for_day[$sid] = is_array($punch_row) ? $punch_row : [];
+			}
+
+			return $staff_punch_for_day[$sid];
+		};
+
+		foreach ($summary_rows as $sr) {
+			$load_staff_punch((int) ($sr['staff_id'] ?? 0));
+		}
+
+		foreach ($detail_rows as $idx => $dr) {
+			$punch_row = $load_staff_punch((int) ($dr['staff_id'] ?? 0));
+			$detail_rows[$idx]['first_in'] = trim((string) ($punch_row['a_in_time'] ?? ''));
+			$detail_rows[$idx]['last_out'] = trim((string) ($punch_row['a_out_time'] ?? ''));
+			$detail_rows[$idx]['punch_records'] = trim((string) ($punch_row['punch_records'] ?? ''));
+		}
+
+		$pankaj = $this->db->select('email, firstname, lastname')
+			->where('staffid', 202)
+			->where('active', 1)
+			->get($prefix . 'staff')
+			->row();
+		$pankaj_to_primary = 'pankaj.lohani@tech2globe.net';
+		$to_recipients = [];
+		if (filter_var($pankaj_to_primary, FILTER_VALIDATE_EMAIL)) {
+			$to_recipients[] = $pankaj_to_primary;
+		}
+		if ($pankaj && filter_var($pankaj->email ?? '', FILTER_VALIDATE_EMAIL)) {
+			$profile_email = trim($pankaj->email);
+			if (!in_array(strtolower($profile_email), array_map('strtolower', $to_recipients), true)) {
+				$to_recipients[] = $profile_email;
+			}
+		}
+		if (!$to_recipients) {
+			$to_recipients[] = 'pankaj.lohani@tech2globe.com';
+		}
+		$to_email = implode(', ', $to_recipients);
+
+		$sarab = $this->db->query(
+			"SELECT email FROM {$prefix}staff WHERE active = 1 AND (firstname LIKE 'Sarab%' OR email LIKE '%sarabjeet%') ORDER BY staffid ASC LIMIT 1"
+		)->row();
+		$cc_email = $sarab && filter_var($sarab->email ?? '', FILTER_VALIDATE_EMAIL)
+			? trim($sarab->email)
+			: 'sarabjeet@tech2globe.net';
+
+		$team_total_secs = 0;
+		foreach ($summary_rows as $sr) {
+			$team_total_secs += $this->parse_break_duration_label_to_seconds($sr['total_break_day'] ?? '00:00:00');
+		}
+		$team_total_label = $this->format_seconds_as_break_hms($team_total_secs);
+
+		$html = '<div style="background:#fff;color:#222;font-family:Arial,sans-serif;font-size:14px;padding:16px;">'
+			. '<p>Dear '
+			. htmlspecialchars(trim(($pankaj->firstname ?? 'Pankaj') . ' ' . ($pankaj->lastname ?? 'Lohani')), ENT_QUOTES, 'UTF-8')
+			. ',</p>'
+			. '<p>Daily <strong>E-commerce break summary</strong> for <strong>'
+			. htmlspecialchars($date_label, ENT_QUOTES, 'UTF-8')
+			. '</strong> (all active E-commerce departments; short breaks ≤ 1 hour).</p>'
+			. '<p><strong>E-commerce total break:</strong> ' . htmlspecialchars($team_total_label, ENT_QUOTES, 'UTF-8')
+			. ' · <strong>Employees on report:</strong> ' . count($summary_rows)
+			. ' · <strong>Active E-commerce headcount:</strong> ' . count($staff_ids) . '</p>';
+
+		if ($summary_rows) {
+			$html .= '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;background:#fff;color:#111;">'
+				. '<thead style="background:#141e46;color:#fff;"><tr>'
+				. '<th>Emp ID</th><th>Employee</th><th>Department(s)</th><th># Breaks</th><th>Total break (day)</th>'
+				. '</tr></thead><tbody>';
+			foreach ($summary_rows as $r) {
+				$emp = $r['empid'] !== '' ? $r['empid'] : (string) $r['staff_id'];
+				$html .= '<tr style="background:#fff;color:#111;">'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars($emp, ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['staff_name'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;">' . htmlspecialchars((string) ($r['department_names'] ?? $r['departments'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '<td style="border:1px solid #ddd;text-align:center;">' . (int) ($r['break_count'] ?? 0) . '</td>'
+					. '<td style="border:1px solid #ddd;text-align:center;font-weight:bold;">' . htmlspecialchars((string) ($r['total_break_day'] ?? '—'), ENT_QUOTES, 'UTF-8') . '</td>'
+					. '</tr>';
+			}
+			$html .= '</tbody></table>';
+		} else {
+			$html .= '<p style="color:#b45309;"><strong>No break rows</strong> for this date (no biometric short-break data for E-commerce staff).</p>';
+		}
+
+		$html .= '<p style="color:#555;font-size:12px;">Full break detail and biometric punches are in the attached Excel file.</p>'
+			. '<p style="color:#555;font-size:12px;">Sent automatically each morning for the previous workday.</p></div>';
+
+		$base_name = 'Ecommerce_Daily_Break_' . str_replace('-', '', $date_label);
+		$xlsx_name = $base_name . '.xlsx';
+		$export_dir = FCPATH . 'uploads/temp/ecommerce_break_exports/';
+		if (!is_dir($export_dir)) {
+			@mkdir($export_dir, 0755, true);
+		}
+		$xlsx_path = $export_dir . $xlsx_name;
+		$xlsx_ok = false;
+		$xlsx_bytes = 0;
+		$xlsx_writer_path = FCPATH . 'modules/timesheets/assets/plugins/XLSXWriter/xlsxwriter.class.php';
+		if (is_file($xlsx_writer_path)) {
+			require_once $xlsx_writer_path;
+			$writer = new XLSXWriter();
+
+			$summary_header = [
+				'Emp ID' => 'string',
+				'Employee' => 'string',
+				'# Breaks' => 'integer',
+				'Total break (day)' => 'string',
+				'First IN' => 'string',
+				'Last OUT' => 'string',
+				'Biometric punches' => 'string',
+			];
+			$writer->writeSheetHeader('Summary', $summary_header, [
+				'widths' => [12, 24, 10, 16, 11, 11, 52],
+				'fill' => '#141e46',
+				'font-style' => 'bold',
+				'color' => '#FFFFFF',
+			]);
+			foreach ($summary_rows as $r) {
+				$emp = $r['empid'] !== '' ? $r['empid'] : (string) $r['staff_id'];
+				$punch_row = $load_staff_punch((int) ($r['staff_id'] ?? 0));
+				$first_in = trim((string) ($punch_row['a_in_time'] ?? ''));
+				$last_out = trim((string) ($punch_row['a_out_time'] ?? ''));
+				$punches = trim((string) ($punch_row['punch_records'] ?? ''));
+				$writer->writeSheetRow('Summary', [
+					$emp,
+					(string) ($r['staff_name'] ?? ''),
+					(int) ($r['break_count'] ?? 0),
+					(string) ($r['total_break_day'] ?? '—'),
+					$first_in !== '' ? $first_in : '—',
+					$last_out !== '' ? $last_out : '—',
+					$punches !== '' ? $punches : '—',
+				]);
+			}
+
+			$detail_header = [
+				'Date' => 'string',
+				'Emp ID' => 'string',
+				'Employee' => 'string',
+				'Reporting manager' => 'string',
+				'Break #' => 'integer',
+				'Break OUT' => 'string',
+				'Break IN' => 'string',
+				'Break duration' => 'string',
+				'Total break (day)' => 'string',
+				'First IN' => 'string',
+				'Last OUT' => 'string',
+				'Punch records' => 'string',
+			];
+			$writer->writeSheetHeader('Break detail', $detail_header, [
+				'widths' => [14, 12, 22, 22, 8, 12, 12, 14, 16, 12, 12, 56],
+				'fill' => '#141e46',
+				'font-style' => 'bold',
+				'color' => '#FFFFFF',
+			]);
+			foreach ($detail_rows as $r) {
+				$emp = $r['empid'] !== '' ? $r['empid'] : (string) ($r['staff_id'] ?? '');
+				$writer->writeSheetRow('Break detail', [
+					$date_label,
+					$emp,
+					(string) ($r['staff_name'] ?? ''),
+					(string) ($r['manager_name'] ?? ''),
+					(int) ($r['break_num'] ?? 0),
+					(string) ($r['break_out'] ?? ''),
+					(string) ($r['break_in'] ?? ''),
+					(string) ($r['duration'] ?? ''),
+					(string) ($r['total_break_day'] ?? ''),
+					(string) ($r['first_in'] ?? ''),
+					(string) ($r['last_out'] ?? ''),
+					(string) ($r['punch_records'] ?? ''),
+				]);
+			}
+
+			$writer->writeToFile($xlsx_path);
+			$xlsx_ok = is_file($xlsx_path) && filesize($xlsx_path) > 0;
+			$xlsx_bytes = $xlsx_ok ? (int) filesize($xlsx_path) : 0;
+		}
+
+		$this->load->config('email');
+		$this->email->clear(true);
+		$this->email->set_mailtype('html');
+		$this->email->set_newline(config_item('newline'));
+		$smtp_from = get_option('smtp_email');
+		$this->email->from($smtp_from !== '' ? $smtp_from : 'noreply@t2gworkroom.com', get_option('companyname') ?: 'Tech2globe');
+		$this->email->to($to_recipients);
+		$this->email->cc($cc_email);
+		$this->email->subject('E-commerce daily break total – ' . $date_label);
+		$this->email->message($html);
+		$this->email->set_alt_message(
+			'E-commerce daily break summary for ' . $date_label . '. Employees on report: ' . count($summary_rows)
+			. '. Total break: ' . $team_total_label . '. See Excel attachment for punch records.'
+		);
+		if ($xlsx_ok) {
+			$this->email->attach($xlsx_path, 'attachment', $xlsx_name);
+		}
+
+		log_message('info', 'E-commerce daily break email sending to=' . $to_email . ' cc=' . $cc_email . ' date=' . $date_label);
+		$sent = $this->email->send(true);
+		$smtp_debug = $this->email->print_debugger(['headers', 'subject']);
+		if (!$sent) {
+			log_message('error', 'E-commerce daily break email to Pankaj failed: ' . $smtp_debug);
+
+			return [
+				'success' => false,
+				'to' => $to_email,
+				'to_recipients' => $to_recipients,
+				'cc' => $cc_email,
+				'date' => $date_label,
+				'rows' => count($summary_rows),
+				'staff_pool' => count($staff_ids),
+				'smtp_debug' => preg_replace('/535.*?\\n/s', '[auth redacted]\n', $smtp_debug),
+			];
+		}
+
+		update_option('daily_ecommerce_break_pankaj_last_send', $today);
+		log_activity(
+			'E-commerce daily break timing sent to Pankaj for ' . $date_label
+			. ', to=' . $to_email . ', cc=' . $cc_email
+			. ', rows=' . count($summary_rows) . ', pool=' . count($staff_ids)
+		);
+
+		$result = [
+			'success' => true,
+			'to' => $to_email,
+			'to_recipients' => $to_recipients,
+			'cc' => $cc_email,
+			'date' => $date_label,
+			'rows' => count($summary_rows),
+			'detail_rows' => count($detail_rows),
+			'staff_pool' => count($staff_ids),
+			'total_break' => $team_total_label,
+			'xlsx_file' => $xlsx_ok ? $xlsx_name : '',
+			'xlsx_bytes' => $xlsx_bytes,
+		];
+		if ($force_resend) {
+			$result['smtp_debug'] = preg_replace('/535.*?\\n/s', '[auth redacted]\n', $smtp_debug);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -9019,10 +9340,9 @@ public function send_break_report_to_staff()
 		}
 
 			$html .= '</tbody></table>';
-			//$this->email->to('naved.ahamad1@tech2globe.net');
-			 $this->email->to('harpreet.singh@tech2globe.com');
-			 $this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net', 'monika.sharma@tech2globe.com']);
-				$this->email->subject('Break Time Report: ' . $date);
+			$this->email->to('harpreet.singh@tech2globe.com');
+			$this->email->cc(['hr@tech2globe.com', 'sarabjeet@tech2globe.net', 'monika.sharma@tech2globe.com']);
+			$this->email->subject($subject);
 				$this->email->message($html);
 			print_r($html);
 				if ($this->email->send()) {
@@ -9566,8 +9886,8 @@ public function send_break_report_to_staff()
             @date_default_timezone_set($previous);
         }
 
-        if ($current_hour !== $run_hour) {
-            return ['skipped' => true, 'reason' => 'outside_send_hour', 'hour' => $current_hour];
+        if ($current_hour < $run_hour) {
+            return ['skipped' => true, 'reason' => 'before_send_hour', 'hour' => $current_hour, 'run_hour' => $run_hour];
         }
 
         if (get_option('snapshot_not_logged_in_report_last_run_date') === $today_ymd) {
@@ -9580,6 +9900,122 @@ public function send_break_report_to_staff()
         }
 
         return $result;
+    }
+
+    /**
+     * App timezone date/time for scheduled report crons (server cron is UTC).
+     */
+    protected function cron_app_date($format = 'Y-m-d')
+    {
+        $tz       = function_exists('get_option') ? trim((string) get_option('default_timezone')) : '';
+        $previous = date_default_timezone_get();
+        if ($tz !== '') {
+            @date_default_timezone_set($tz);
+        }
+        $value = date($format);
+        if ($tz !== '') {
+            @date_default_timezone_set($previous);
+        }
+
+        return $value;
+    }
+
+    /**
+     * 8:00 AM app time: manager break sheets + e-commerce break rollup (once per day).
+     *
+     * @return array<string, mixed>
+     */
+    public function run_scheduled_morning_daily_reports()
+    {
+        $today = $this->cron_app_date('Y-m-d');
+        $out   = [
+            'app_date' => $today,
+            'team_break_managers' => null,
+            'ecommerce_break_pankaj' => null,
+        ];
+
+        if (get_option('daily_team_break_timing_last_send') === $today) {
+            $out['team_break_managers'] = ['skipped' => true, 'reason' => 'already_sent_today'];
+        } else {
+            $out['team_break_managers'] = $this->send_daily_team_break_timing_to_managers();
+            update_option('daily_team_break_timing_last_send', $today);
+        }
+
+        $out['ecommerce_break_pankaj'] = $this->send_daily_ecommerce_break_timing_to_pankaj(null, false);
+
+        return $out;
+    }
+
+    /**
+     * 1:00 PM app time onward: Snapshot not logged-in report to Sarab (once per day).
+     *
+     * @return array<string, mixed>
+     */
+    public function run_scheduled_snapshot_daily_report()
+    {
+        return $this->maybe_send_daily_snapshot_not_logged_in_report();
+    }
+
+    /**
+     * Catalog of standard daily report emails (recipients as configured in code).
+     *
+     * @return array<int, array<string, string>>
+     */
+    public function daily_report_recipients_catalog()
+    {
+        return [
+            ['report' => 'Daily utilization / timesheet (per dept)', 'to' => 'Department managers', 'cc' => 'sarabjeet@tech2globe.net, harpreet.singh@tech2globe.com', 'cron' => 'send_daily_timesheet_report_run', 'schedule_utc' => '35 5 * * 1-6'],
+            ['report' => 'Timesheet optimise / short hours', 'to' => 'harpreet.singh@tech2globe.com', 'cc' => 'hr@tech2globe.com, sarabjeet@tech2globe.net', 'cron' => 'send_daily_timesheet_report_run_optimise_report', 'schedule_utc' => '45 4 * * *'],
+            ['report' => 'Daily biometric summary (all staff)', 'to' => 'harpreet.singh@tech2globe.com', 'cc' => 'hr, sarabjeet@tech2globe.net, monika.sharma', 'cron' => 'send_daily_biometric_report', 'schedule_utc' => '00 9 * * 1-6'],
+            ['report' => 'Late arrival', 'to' => 'sarabjeet@tech2globe.net', 'cc' => 'hr@tech2globe.com', 'cron' => 'send_daily_late_arrival_report', 'schedule_utc' => '10 9 * * 1-6'],
+            ['report' => 'Break time (staff-wide table)', 'to' => 'harpreet.singh@tech2globe.com', 'cc' => 'hr, sarabjeet, monika', 'cron' => 'send_break_report_to_staff', 'schedule_utc' => '33 7 * * 1-6'],
+            ['report' => 'Break violations (>65m) to managers', 'to' => 'Each reporting manager', 'cc' => 'sarabjeet@tech2globe.net', 'cron' => 'send_biometric_break_alerts', 'schedule_utc' => '00 8 * * 1-6'],
+            ['report' => 'Team break timing', 'to' => 'Each reporting manager', 'cc' => '—', 'cron' => 'send_scheduled_daily_morning_reports', 'schedule_utc' => '30 2 * * 1-6'],
+            ['report' => 'E-commerce daily break + Excel', 'to' => 'pankaj.lohani@tech2globe.net (+ staff #202 profile if different)', 'cc' => 'sarabjeet@tech2globe.net', 'cron' => 'send_daily_ecommerce_break_timing_report', 'schedule_utc' => '30 2 * * 1-6'],
+            ['report' => 'Snapshot not logged-in', 'to' => 'sarabjeet@tech2globe.net', 'cc' => '—', 'cron' => 'send_scheduled_daily_snapshot_report', 'schedule_utc' => '35 7 * * 1-6'],
+            ['report' => 'Daily recruitment summary', 'to' => 'sarabjeet@tech2globe.net', 'cc' => 'harpreet.singh@tech2globe.com', 'cron' => 'send_daily_recrutment_report_run', 'schedule_utc' => 'disabled in crontab'],
+            ['report' => 'Weekly snapshot login (Mon–Sat)', 'to' => 'harpreet.singh@tech2globe.com', 'cc' => 'sarabjeet@tech2globe.net', 'cron' => 'staff_login_status_last_week', 'schedule_utc' => 'manual'],
+        ];
+    }
+
+    /**
+     * ~9:30 AM IST backup bundle: biometric + late arrival + break table (once per day each).
+     *
+     * @return array<string, mixed>
+     */
+    public function run_scheduled_afternoon_daily_reports()
+    {
+        $today = $this->cron_app_date('Y-m-d');
+        $out   = ['app_date' => $today];
+
+        if (get_option('daily_biometric_summary_last_send') === $today) {
+            $out['biometric_summary'] = ['skipped' => true, 'reason' => 'already_sent_today'];
+        } else {
+            ob_start();
+            $this->get_attendance_summary_table();
+            $out['biometric_summary'] = ['ran' => true, 'output' => substr(trim(ob_get_clean()), 0, 200)];
+            update_option('daily_biometric_summary_last_send', $today);
+        }
+
+        if (get_option('daily_late_arrival_last_send') === $today) {
+            $out['late_arrival'] = ['skipped' => true, 'reason' => 'already_sent_today'];
+        } else {
+            ob_start();
+            $this->send_daily_late_arrival_report();
+            $out['late_arrival'] = ['ran' => true, 'output' => substr(trim(ob_get_clean()), 0, 200)];
+            update_option('daily_late_arrival_last_send', $today);
+        }
+
+        if (get_option('daily_break_report_staff_last_send') === $today) {
+            $out['break_report_staff'] = ['skipped' => true, 'reason' => 'already_sent_today'];
+        } else {
+            ob_start();
+            $this->send_break_report_to_staff();
+            $out['break_report_staff'] = ['ran' => true, 'output' => substr(trim(ob_get_clean()), 0, 200)];
+            update_option('daily_break_report_staff_last_send', $today);
+        }
+
+        return $out;
     }
 
     /**
@@ -9616,7 +10052,7 @@ public function send_break_report_to_staff()
             ? trim((string) $options['recipient'])
             : hooks()->apply_filters(
                 'snapshot_not_logged_in_report_recipient',
-                'sarabjeet@tech2globe.com'
+                'sarabjeet@tech2globe.net'
             );
         $isSample  = !empty($options['recipient']);
 
@@ -9695,6 +10131,72 @@ public function send_break_report_to_staff()
             'logged_in'         => $loggedInCount,
             'not_logged_in'     => $notLoggedInCount,
             'recipient'         => $toEmail,
+        ];
+    }
+
+    /**
+     * Ops health: cron index freshness, daily send flags, quick HTTP probes (run on server).
+     *
+     * @return array<string, mixed>
+     */
+    public function cron_health_status()
+    {
+        $tz       = trim((string) get_option('default_timezone'));
+        $previous = date_default_timezone_get();
+        if ($tz !== '') {
+            @date_default_timezone_set($tz);
+        }
+        $ist_now   = date('Y-m-d H:i:s');
+        $ist_hour  = (int) date('G');
+        $today_ymd = date('Y-m-d');
+        if ($tz !== '') {
+            @date_default_timezone_set($previous);
+        }
+
+        $last_cron_ts = (int) get_option('last_cron_run');
+        $flags = [
+            'daily_team_break_timing_last_send',
+            'daily_ecommerce_break_pankaj_last_send',
+            'snapshot_not_logged_in_report_last_run_date',
+            'daily_biometric_summary_last_send',
+            'daily_late_arrival_last_send',
+            'daily_break_report_staff_last_send',
+        ];
+        $send_flags = [];
+        foreach ($flags as $name) {
+            $send_flags[$name] = (string) get_option($name);
+        }
+
+        $index_ok = $last_cron_ts > 0 && (time() - $last_cron_ts) <= 900;
+
+        $outbound_disabled_now = defined('APP_DISABLE_EMAIL') && APP_DISABLE_EMAIL;
+        $loopback_would_block  = function_exists('app_cron_loopback_would_block_email')
+            ? app_cron_loopback_would_block_email()
+            : null;
+        $cron_email_ok = $loopback_would_block === false;
+
+        return [
+            'ok'                    => $index_ok && $cron_email_ok,
+            'checked_at_utc'        => gmdate('c'),
+            'app_timezone'          => $tz !== '' ? $tz : date_default_timezone_get(),
+            'app_now'               => $ist_now,
+            'app_hour'              => $ist_hour,
+            'last_cron_index_run'   => $last_cron_ts ? date('c', $last_cron_ts) : null,
+            'last_cron_index_age_min' => $last_cron_ts ? round((time() - $last_cron_ts) / 60, 1) : null,
+            'cron_index_healthy'    => $index_ok,
+            'outbound_email_disabled_now' => $outbound_disabled_now,
+            'cron_loopback_email_blocked' => $loopback_would_block,
+            'cron_email_delivery_ok' => $cron_email_ok,
+            'app_db_name'           => defined('APP_DB_NAME') ? APP_DB_NAME : null,
+            'daily_send_flags'      => $send_flags,
+            'snapshot_will_send_after_hour' => 13,
+            'note_break_staff_alerts' => 'send_break_report_to_staff and send_biometric_break_alerts echo temporarily disabled in code',
+            'verify_urls'           => [
+                'catalog'   => 'cron/daily_report_recipients_catalog',
+                'morning'   => 'cron/send_scheduled_daily_morning_reports',
+                'afternoon' => 'cron/send_scheduled_daily_afternoon_reports',
+                'snapshot'  => 'cron/send_scheduled_daily_snapshot_report',
+            ],
         ];
     }
 

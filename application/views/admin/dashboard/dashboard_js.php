@@ -219,9 +219,6 @@ function fix_user_data_widget_tabs() {
             return 'neutral';
         }
         var code = day.code || '';
-        if (day.status === 'night_carryover' || code === 'NC') {
-            return 'off';
-        }
         if (day.status === 'weekend' || code === 'O') {
             return 'off';
         }
@@ -243,7 +240,7 @@ function fix_user_data_widget_tabs() {
         var presentMin = day.present_min_hours || 8.0;
         var halfMin = day.half_day_min_hours || 5;
         var hrs = dayHours(day);
-        if (day.status === 'absent' || day.status === 'punch_missing' || code === 'AB' || code === 'A') {
+        if (day.status === 'absent' || day.status === 'night_carryover' || day.status === 'punch_missing' || code === 'AB' || code === 'A' || code === 'NC') {
             return 'bad';
         }
         if (day.status === 'rejected') {
@@ -299,11 +296,8 @@ function fix_user_data_widget_tabs() {
     }
 
     function dayCodeLabel(code) {
-        if (code === 'AB') {
+        if (code === 'AB' || code === 'NC') {
             return 'A';
-        }
-        if (code === 'NC') {
-            return 'NC';
         }
         return code || '';
     }

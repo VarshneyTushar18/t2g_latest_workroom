@@ -1469,6 +1469,12 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 	}
 
 	$CI = &get_instance();
+	$CI->load->model('staff_model');
+	if (method_exists($CI->staff_model, 'get_employment_category')
+		&& $CI->staff_model->get_employment_category($staff_id) === 'wfh') {
+		return true;
+	}
+
 	$row = $CI->db->query(
 		'SELECT id FROM ' . db_prefix() . 'timesheets_requisition_leave
 		 WHERE staff_id = ?
@@ -1489,7 +1495,6 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 		 LIMIT 1',
 		[$staff_id, $date]
 	)->row();
-
 	if ($ts) {
 		return true;
 	}
@@ -1510,9 +1515,6 @@ function timesheets_is_staff_wfh_on_date($staff_id, $date)
 
 /**
  * Staff already completed Workroom check-out for the given date.
- *
- * Checkout just after midnight closes the prior shift; it must not block
- * a new check-in later the same calendar day unless they also checked in that day.
  */
 function timesheets_staff_completed_workroom_today($staff_id, $date = null)
 {
@@ -1528,17 +1530,7 @@ function timesheets_staff_completed_workroom_today($staff_id, $date = null)
 		[$staff_id, $date]
 	)->row_array();
 
-	if (!$row || (int) ($row['type_check'] ?? 0) !== 2) {
-		return false;
-	}
-
-	$checkin_same_day = $CI->db->query(
-		'SELECT id FROM ' . db_prefix() . 'check_in_out
-		 WHERE staff_id = ? AND DATE(date) = ? AND type_check = 1 LIMIT 1',
-		[$staff_id, $date]
-	)->row();
-
-	return $checkin_same_day !== null;
+	return $row && (int) ($row['type_check'] ?? 0) === 2;
 }
 
 /**
@@ -1934,7 +1926,10 @@ function timesheets_get_leave_cc_staff_list($staff_id = '')
 }
 
 /**
- * Build navbar punch context (Workroom + Biometric). Cached per staff ~90s to cut DB load on every admin page.
+ * Build navbar punch context (Workroom + Biometric).
+ *
+ * This correctness-critical state is intentionally read fresh on every request so
+ * check-in/out and biometric changes cannot leave stale navbar controls.
  *
  * @return array<string, mixed>
  */
@@ -1942,11 +1937,6 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 {
 	$CI = &get_instance();
 	$staff_id = (int) get_staff_user_id();
-	$cache_key = 'ts_navbar_punch_v2_' . $staff_id;
-	$cached = $CI->session->userdata($cache_key);
-	if (is_array($cached) && !empty($cached['expires']) && (int) $cached['expires'] > time() && !empty($cached['data'])) {
-		return $cached['data'];
-	}
 
 	// Auto-checkout stale open check-ins at most once every 5 minutes per user (cron also handles this).
 	$throttle_key = 'ts_process_checkin_' . $staff_id;
@@ -2009,19 +1999,14 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$on_wfh_today = function_exists('timesheets_staff_uses_workroom_attendance')
 		&& timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'));
 	$workroom_open_checkin = ($type_check_in_out === 1 || $type_check_in_out === '1');
-	$workroom_day_complete = timesheets_staff_completed_workroom_today($staff_id, date('Y-m-d'));
 
 	try {
-		if (!$on_wfh_today) {
-			$on_wfh_today = function_exists('timesheets_is_staff_wfh_on_date')
-				&& timesheets_is_staff_wfh_on_date($staff_id, date('Y-m-d'));
-		}
-
 		$CI->load->model('biometric_model');
 		$biometric_row = null;
-		if (!$on_wfh_today && !$workroom_open_checkin && method_exists($CI->biometric_model, 'get_staff_active_punch')) {
+		// Biometric punches replace an open Workroom check-in in the navbar.
+		if (method_exists($CI->biometric_model, 'get_staff_active_punch')) {
 			$biometric_row = $CI->biometric_model->get_staff_active_punch($staff_id, $cooldown_hours);
-		} elseif (!$on_wfh_today && !$workroom_open_checkin) {
+		} else {
 			$biometric_row = $CI->biometric_model->get_staff_today_punch($staff_id);
 		}
 		if (is_array($biometric_row)) {
@@ -2061,7 +2046,6 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 		'biometric_break_summary' => $biometric_break_summary,
 		'on_wfh_today' => $on_wfh_today,
 		'workroom_open_checkin' => $workroom_open_checkin,
-		'workroom_day_complete' => $workroom_day_complete,
 	];
 
 	if (function_exists('get_timesheets_option')) {
@@ -2070,11 +2054,6 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 			$data['allows_updating_check_in_time'] = $data_allows;
 		}
 	}
-
-	$CI->session->set_userdata($cache_key, [
-		'expires' => time() + 90,
-		'data'    => $data,
-	]);
 
 	return $data;
 }

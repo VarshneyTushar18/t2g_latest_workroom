@@ -18,6 +18,7 @@ define('TIMESHEETS_JOB_POSIITON_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIME
 define('TIMESHEETS_PATH', 'modules/timesheets/uploads/');
 define('TIMESHEETS_PAYSLIPS', 'modules/timesheets/uploads/payslips/');
 define('TIMESHEETS_REVISION', 127);
+define('TIMESHEETS_HRMS_ASSET_REVISION', 128);
 
 define('PAY_SLIP', FCPATH);
 
@@ -155,21 +156,7 @@ $CI->load->helper(TIMESHEETS_MODULE_NAME . '/timesheets');
  */
 function timesheets_module_init_menu_items() {
 	$CI = &get_instance();
-	if (has_permission('attendance_management', '', 'view_own') ||
-		has_permission('attendance_management', '', 'view') ||
-		has_permission('leave_management', '', 'view_own') ||
-		has_permission('leave_management', '', 'view') ||
-		has_permission('table_shiftwork_management', '', 'view_own') ||
-		has_permission('table_shiftwork_management', '', 'view') ||
-		has_permission('timesheets_shift_management', '', 'view_own') ||
-		has_permission('timesheets_shift_management', '', 'view') ||
-		has_permission('timesheets_shift_categories_management', '', 'view_own') ||
-		has_permission('timesheets_shift_categories_management', '', 'view') ||
-		has_permission('report_management', '', 'view_own') ||
-		has_permission('report_management', '', 'view') ||
-		has_permission('setting_management', '', 'view_own') ||
-		has_permission('setting_management', '', 'view') ||
-		is_admin()) {
+	if (is_staff_logged_in()) {
 		$CI->app_menu->add_sidebar_menu_item('timesheets', [
 			// 'name' => _l('timesheets_and_leave'),
 			'name' => 'HRMS',
@@ -511,14 +498,18 @@ function timesheets_add_head_components() {
 			break;
 		}
 	}
-	$load_dashboard_hrms = isset($CI->router)
-		&& $CI->router->class === 'dashboard'
-		&& $CI->router->method === 'index';
+	$request_path = parse_url($viewuri, PHP_URL_PATH);
+	$admin_path = '/' . trim(get_admin_uri(), '/');
+	$load_dashboard_hrms = (
+		isset($CI->router)
+		&& strtolower((string) $CI->router->class) === 'dashboard'
+		&& strtolower((string) $CI->router->method) === 'index'
+	) || $request_path === $admin_path || $request_path === $admin_path . '/';
 	if ($load_hrms_ui || $load_dashboard_hrms) {
-		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+		echo '<link href="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/css/hrms_design.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" rel="stylesheet" type="text/css" />';
 	}
 	if ($load_hrms_ui) {
-		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '" defer></script>';
+		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" defer></script>';
 	}
 	if ($load_dashboard_hrms) {
 		echo '<link rel="preconnect" href="https://fonts.googleapis.com" />';
@@ -545,10 +536,10 @@ function timesheets_add_head_components() {
 					}
 				};
 			</script>';
-			echo '<link href="' . base_url('assets/css/admin-dashboard-apex-workhub.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
-			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '-apex-cal" rel="stylesheet" type="text/css" />';
+			echo '<link href="' . base_url('assets/css/admin-dashboard-apex-workhub.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '" rel="stylesheet" type="text/css" />';
+			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '-apex-cal" rel="stylesheet" type="text/css" />';
 		} else {
-			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '-apex" rel="stylesheet" type="text/css" />';
+			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_HRMS_ASSET_REVISION . '-apex" rel="stylesheet" type="text/css" />';
 		}
 	}
 

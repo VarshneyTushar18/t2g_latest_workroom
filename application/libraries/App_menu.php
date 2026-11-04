@@ -188,12 +188,13 @@ class App_menu
     public function filter_item($items, $slug)
     {
         foreach ($items as $item) {
-            if ($item['slug'] == $slug) {
+            if (($item['slug'] ?? '') == $slug) {
                 return $item;
             }
-            foreach ($item['children'] as $child) {
-                if ($child['slug'] == $slug) {
-                    return $child;
+            if (!empty($item['children'])) {
+                $found = $this->filter_item($item['children'], $slug);
+                if ($found) {
+                    return $found;
                 }
             }
         }
@@ -206,21 +207,41 @@ class App_menu
         $items = isset($this->items[$group]) ? $this->items[$group] : [];
 
         foreach ($items as $parent => $item) {
-            $items[$parent]['children'] = $this->get_child($parent, $group);
+            $items[$parent]['children'] = $this->build_menu_children($parent, $group);
         }
 
         foreach ($items as $item) {
-            if ($item['slug'] == $slug) {
+            if (($item['slug'] ?? '') == $slug) {
                 return $item['icon'];
             }
-
-            foreach ($item['children'] as $child) {
-                if ($child['slug'] == $slug) {
-                    return $child['icon'];
+            if (!empty($item['children'])) {
+                $found = $this->find_icon_in_children($item['children'], $slug);
+                if ($found !== null) {
+                    return $found;
                 }
             }
         }
 
         return '';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $children
+     */
+    protected function find_icon_in_children(array $children, $slug)
+    {
+        foreach ($children as $child) {
+            if (($child['slug'] ?? '') == $slug) {
+                return $child['icon'] ?? '';
+            }
+            if (!empty($child['children'])) {
+                $found = $this->find_icon_in_children($child['children'], $slug);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
     }
 }

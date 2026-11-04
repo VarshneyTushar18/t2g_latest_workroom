@@ -36,3 +36,7 @@ _sync_*.php
 _check_*.php
 _ensure_*.php
 Timesheets_model.php
+biometric-bridge/config.json
+biometric-bridge/checkpoint.json
+biometric-bridge/logs/
+_deploy/
