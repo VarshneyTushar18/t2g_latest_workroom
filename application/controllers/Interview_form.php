@@ -20,17 +20,13 @@ class Interview_form extends App_Controller
     }
 
     public function uploadFileToGoogleDrive($filePath, $fileName) {
-        require_once 'google-client/vendor/autoload.php';
+        $this->load->helper('recruitment/recruitment');
+        $service = recruitment_init_google_drive_service();
+        if (!$service) {
+            return false;
+        }
 
-        // Initialize the Google Client
         try {
-            // Initialize the Google Client
-            $client = new Google_Client();
-            $client->setAuthConfig('google-client/hr-recruit-cv-429106-f3626e643c56.json');
-            $client->addScope(Google_Service_Drive::DRIVE_FILE);
-    
-            // Create the Google Drive service
-            $service = new Google_Service_Drive($client);
     
             // Prepare file metadata for the upload
             $fileMetadata = new Google_Service_Drive_DriveFile([
@@ -52,8 +48,8 @@ class Interview_form extends App_Controller
             return $file->id; // Return the file ID on success
     
         } catch (Exception $e) {
-            // Handle error
-            echo 'Google Drive upload error: ' . $e->getMessage();
+            log_message('error', 'Interview form Google Drive upload: ' . $e->getMessage());
+
             return false;
         }
     }

@@ -514,6 +514,324 @@ body.hrms-ui.dashboard .dashboard-fc-compact .fc-daygrid-day-frame {
   background-color: #f1f5f9;
 }
 
+/* ——— Apex WorkHub associate dashboard (code.html) ——— */
+body.associate-dashboard.apex-workhub {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+body.associate-dashboard.dashboard #wrapper > .content {
+  background: #f1f5f9 !important;
+}
+
+body.associate-dashboard .admin-dashboard-hrms-content.apex-dashboard-body {
+  max-width: 1720px;
+  padding: 24px 28px 32px;
+}
+
+body.associate-dashboard .apex-dashboard-row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.apex-dashboard-greeting {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 24px;
+  padding: 0 4px;
+}
+
+.apex-dashboard-greeting-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: #fef3c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.apex-dashboard-greeting-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.apex-dashboard-greeting-title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.apex-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.apex-badge-online {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.apex-dashboard-greeting-date {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.apex-dashboard-greeting-role {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.apex-dashboard-kpi-wrap {
+  width: 100%;
+  margin-bottom: 28px;
+}
+
+.apex-kpi-widget {
+  width: 100%;
+}
+
+.apex-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1400px) {
+  .apex-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .apex-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .apex-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.apex-kpi-card {
+  display: block;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  text-decoration: none !important;
+  color: inherit;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+a.apex-kpi-card:hover {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
+
+.apex-kpi-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.apex-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.apex-kpi-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.apex-kpi-tone-blue .apex-kpi-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.apex-kpi-tone-purple .apex-kpi-icon {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.apex-kpi-tone-teal .apex-kpi-icon {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+.apex-kpi-tone-amber .apex-kpi-icon {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.apex-kpi-tone-rose .apex-kpi-icon {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.apex-kpi-tone-cyan .apex-kpi-icon {
+  background: #ecfeff;
+  color: #0891b2;
+}
+
+.apex-kpi-chevron {
+  color: #cbd5e1;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.apex-kpi-label {
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.apex-kpi-value {
+  margin-top: 4px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.apex-kpi-unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.apex-kpi-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.apex-kpi-meta {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.apex-kpi-pill {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.apex-kpi-pill-purple {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.apex-kpi-pill-rose {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.apex-kpi-pill-emerald {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+body.associate-dashboard .apex-dashboard-main-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 28px;
+  width: 100%;
+}
+
+body.associate-dashboard .apex-dashboard-main-grid > .widget {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+body.associate-dashboard #widget-user_data {
+  grid-column: 1 / span 7;
+}
+
+body.associate-dashboard #widget-upcoming_events {
+  grid-column: 8 / span 5;
+}
+
+body.associate-dashboard #widget-calendar {
+  grid-column: 1 / -1;
+}
+
+body.associate-dashboard #widget-leads_chart,
+body.associate-dashboard #widget-projects_chart,
+body.associate-dashboard #widget-projects_activity,
+body.associate-dashboard #widget-todos {
+  grid-column: 1 / -1;
+}
+
+body.associate-dashboard .widget .panel_s {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  margin-bottom: 0;
+}
+
+body.associate-dashboard .widget .panel_s > .panel-body {
+  border-radius: 16px;
+  padding: 22px 24px;
+}
+
+body.associate-dashboard .widget .panel_s > .panel-heading {
+  border-radius: 16px 16px 0 0;
+  background: #fff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+body.associate-dashboard .dashboard-hrms-panel {
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+body.associate-dashboard .dashboard-cal-birthday-row {
+  gap: 28px;
+}
+
+@media (max-width: 1200px) {
+  body.associate-dashboard #widget-user_data,
+  body.associate-dashboard #widget-upcoming_events {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 992px) {
   .dashboard-cal-birthday-row {
     grid-template-columns: 1fr;

@@ -521,7 +521,35 @@ function timesheets_add_head_components() {
 		echo '<script src="' . module_dir_url(TIMESHEETS_MODULE_NAME, 'assets/js/hrms_ui.js') . '?v=' . TIMESHEETS_REVISION . '" defer></script>';
 	}
 	if ($load_dashboard_hrms) {
-		echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+		echo '<link rel="preconnect" href="https://fonts.googleapis.com" />';
+		echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />';
+		echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" type="text/css" />';
+		if (!function_exists('t2g_apex_associate_dashboard_user')) {
+			$CI->load->helper('apex_workhub');
+		}
+		if (t2g_apex_associate_dashboard_user()) {
+			echo '<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>';
+			echo '<script>
+				tailwind.config = {
+					blocklist: ["collapse"],
+					theme: {
+						extend: {
+							colors: {
+								brand: {
+									50: "#f0f5ff", 100: "#e0ebfe", 500: "#2563eb", 600: "#1d4ed8",
+									700: "#1e40af", 800: "#1e3a8a", 900: "#0f172a"
+								}
+							},
+							fontFamily: { sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"] }
+						}
+					}
+				};
+			</script>';
+			echo '<link href="' . base_url('assets/css/admin-dashboard-apex-workhub.css') . '?v=' . TIMESHEETS_REVISION . '" rel="stylesheet" type="text/css" />';
+			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '-apex-cal" rel="stylesheet" type="text/css" />';
+		} else {
+			echo '<link href="' . base_url('assets/css/admin-dashboard-hrms.css') . '?v=' . TIMESHEETS_REVISION . '-apex" rel="stylesheet" type="text/css" />';
+		}
 	}
 
 	$load_compose_css = (strpos($viewuri, '/admin/announcements') !== false || strpos($viewuri, '/admin/sop') !== false);

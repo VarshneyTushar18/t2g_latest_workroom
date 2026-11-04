@@ -76,8 +76,12 @@
               <div class="col-md-12">
                 <!-- <a href="<?php echo admin_url('recruitment/candidates'); ?>"
                   class="btn btn-info pull-left display-block"><?php echo _l('new_candidate'); ?></a> -->
-                  <a href="<?php echo admin_url('recruitment/candidatesaddmore'); ?>"
+                  <a href="<?php echo admin_url('recruitment/candidates'); ?>"
                   class="btn btn-info pull-left display-block"><?php echo _l('new_candidate'); ?></a>
+                  <a href="<?php echo admin_url('recruitment/candidatesaddmore'); ?>"
+                  class="btn btn-default pull-left display-block mleft5"><?php echo _l('Add Multiple Candidates'); ?></a>
+                  <a href="<?php echo site_url('interview_form'); ?>" target="_blank"
+                  class="btn btn-default pull-left display-block mleft5" title="Public form link to send to candidates">Candidate interview form</a>
                 <a href="#" onclick="send_mail_candidate(); return false;"
                   class="btn btn-success pull-left display-block mleft5"><i
                     class="fa fa-envelope"></i><?php echo ' ' . _l('send_mail'); ?></a>

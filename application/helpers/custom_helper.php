@@ -1145,6 +1145,14 @@ function can_manage_pedma_kra($staff_id = '')
     return can_create_pedma_kra($staff_id);
 }
 
+/**
+ * Create / edit KRA definitions (Manage KRA actions). HR and system admins only.
+ */
+function can_edit_pedma_kra($staff_id = '')
+{
+    return can_create_pedma_kra($staff_id);
+}
+
 function can_access_manage_pedma_menu($staff_id = '')
 {
     // Do NOT show Manage PEDMA to all members
@@ -1268,6 +1276,24 @@ function super_hr_staff_can_filter($retVal, $capability, $feature, $staff_id)
 if (function_exists('hooks') && empty($GLOBALS['super_hr_staff_can_filter_registered'])) {
     $GLOBALS['super_hr_staff_can_filter_registered'] = true;
     hooks()->add_filter('staff_can', 'super_hr_staff_can_filter', 10, 4);
+}
+
+/**
+ * Associate / staff home dashboard — Apex WorkHub KPI row (see code.html).
+ */
+function t2g_associate_dashboard_widgets($widgets)
+{
+    if (!function_exists('is_staff_member') || !is_staff_member()) {
+        return $widgets;
+    }
+
+    // Staff dashboard uses full Apex WorkHub markup from code.html.
+    return $widgets;
+}
+
+if (function_exists('hooks') && empty($GLOBALS['t2g_associate_dashboard_widgets_registered'])) {
+    $GLOBALS['t2g_associate_dashboard_widgets_registered'] = true;
+    hooks()->add_filter('get_dashboard_widgets', 't2g_associate_dashboard_widgets');
 }
 
 function is_IT() {

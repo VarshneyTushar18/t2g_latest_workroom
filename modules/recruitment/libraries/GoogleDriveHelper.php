@@ -1,110 +1,91 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-require_once 'google-client/vendor/autoload.php';
-
 use Google\Client;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
 
 class GoogleDriveHelper
 {
-    private $client;
     private $driveService;
 
     public function __construct()
     {
-
-        $this->CI = &get_instance();
-        $this->CI->load->config('google_drive');
-        $credentialsPath = $this->CI->config->item('service_account_credentials_json');
-
-        $this->client = new Client();
-        $this->client->setAuthConfig($credentialsPath);
-        $this->client->addScope(Drive::DRIVE);
-
-        $this->driveService = new Google_Service_Drive($this->client);
+        $this->driveService = recruitment_init_google_drive_service();
     }
 
     public function uploadFile($filePath, $fileName)
     {
-        // Check if the folder with the current date exists, if not create it
+        if (!$this->driveService) {
+            log_message('error', 'GoogleDriveHelper: Drive service not configured.');
+
+            return false;
+        }
+
         $folderName = date('Y-m-d');
         $folderId = $this->getOrCreateFolder($folderName);
 
-        // Upload the file to the folder
         if (!$folderId) {
-            echo ('Failed to get or create folder: ' . $folderName);
+            log_message('error', 'GoogleDriveHelper: Failed to get or create folder: ' . $folderName);
+
             return false;
         }
 
         $file = new Google_Service_Drive_DriveFile();
-
         $file->setName($fileName);
-        $file->setParents(array($folderId));
-
-        echo '<pre>';
-        print_r($file);
-
-        echo 'this is parent id : ';
-        print_r($file->getParents());
+        $file->setParents([$folderId]);
 
         $data = file_get_contents($filePath);
 
         try {
-            $createdFile = $this->service->files->create($file, [
+            return $this->driveService->files->create($file, [
                 'data' => $data,
                 'mimeType' => mime_content_type($filePath),
-                'uploadType' => 'multipart'
+                'uploadType' => 'multipart',
             ]);
         } catch (Exception $e) {
             log_message('error', 'Failed to upload file: ' . $e->getMessage());
+
             return false;
         }
-
-        echo '<pre>';
-        print_r($createdFile);
-        echo ('this is parent id : ' . $createdFile->getParents());
-        die;
-
-        return $createdFile;
     }
 
     private function getOrCreateFolder($folderName)
     {
-        $folderName = 'test';
-        // Check if the folder exists
-        $query = sprintf("mimeType='application/vnd.google-apps.folder' and name='%s'", $folderName);
-        $response = $this->service->files->listFiles(['q' => $query]);
+        if (!$this->driveService) {
+            return false;
+        }
 
-        if (count($response->files) == 0) {
-            // Folder does not exist, create it
-            $folder = new Google_Service_Drive_DriveFile();
-            $folder->setName($folderName);
-            $folder->setMimeType('application/vnd.google-apps.folder');
-            $folder->setParents(array('1X8igwsOqOPkPP9fgORKicpCIhYqmBbUZ'));
+        $parentId = '1X8igwsOqOPkPP9fgORKicpCIhYqmBbUZ';
+        $query = sprintf(
+            "mimeType='application/vnd.google-apps.folder' and name='%s' and '%s' in parents and trashed=false",
+            $folderName,
+            $parentId
+        );
+        $response = $this->driveService->files->listFiles(['q' => $query]);
 
-            // echo '<pre>';
-            // print_r($folder);
-            // die;
-            $createdFolder = $this->service->files->create($folder);
-            return $createdFolder->id;
-
-        } else {
-
-            // echo '<pre>';
-            // print_r($response);
-            // die;
-            // Folder exists, return its ID
+        if (count($response->files) > 0) {
             return $response->files[0]->id;
         }
+
+        $folder = new Google_Service_Drive_DriveFile();
+        $folder->setName($folderName);
+        $folder->setMimeType('application/vnd.google-apps.folder');
+        $folder->setParents([$parentId]);
+        $createdFolder = $this->driveService->files->create($folder);
+
+        return $createdFolder->id;
     }
 
     public function createFolder($folderName, $parentId = null)
     {
+        if (!$this->driveService) {
+            return false;
+        }
+
         $fileMetadata = new DriveFile([
             'name' => $folderName,
-            'mimeType' => 'application/vnd.google-apps.folder'
+            'mimeType' => 'application/vnd.google-apps.folder',
         ]);
 
         if ($parentId) {
@@ -112,7 +93,7 @@ class GoogleDriveHelper
         }
 
         $folder = $this->driveService->files->create($fileMetadata, [
-            'fields' => 'id'
+            'fields' => 'id',
         ]);
 
         return $folder->id;

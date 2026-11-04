@@ -1153,7 +1153,7 @@
         pedmaSelectedCustom = [];
         pedmaIsUpdate = false;
         $('#pedmaPublishBtn, #pedmaDraftBtn').show();
-        $('#pedmaUpdateBtn').hide();
+        $('#pedmaUpdateBtn, #pedmaDeleteBtn').hide();
         $('#pedmaStaffResponseArea').hide();
         pedmaSetOverallFeedbackFromPerf(null);
         $('#pedmaStaffResp').val('');
@@ -1231,7 +1231,9 @@
         if (perf.status && String(perf.status) !== '0') {
             pedmaIsUpdate = true;
             $('#pedmaPublishBtn, #pedmaDraftBtn').hide();
-            $('#pedmaUpdateBtn').show();
+            $('#pedmaUpdateBtn, #pedmaDeleteBtn').show();
+        } else if (perf.id) {
+            $('#pedmaDeleteBtn').show();
         }
 
         pedmaSetOverallFeedbackFromPerf(perf);
@@ -1435,6 +1437,44 @@
         $('#pedmaUpdateBtn').on('click', function() {
             $('#pedma_submit_status').val('2');
             $('#pedma-form').trigger('submit');
+        });
+
+        $('#pedmaDeleteBtn').on('click', function() {
+            if (!pedmaFiltersReady()) {
+                return;
+            }
+            var staffName = ($('#pedma-full-name').text() || 'this employee').trim();
+            var month = $('#performance_month').val();
+            var monthLabel = month;
+            if (month && $('#performance_month option:selected').length) {
+                monthLabel = $('#performance_month option:selected').text().trim() || month;
+            }
+            var msg = 'Delete the PEDMA evaluation for ' + staffName + ' (' + monthLabel + ')?\n\nAll scores and feedback for this month will be permanently removed.';
+            if (!window.confirm(msg)) {
+                return;
+            }
+            var $btn = $(this);
+            $btn.prop('disabled', true);
+            $.ajax({
+                url: admin_url + 'staff/delete_staff_performance',
+                type: 'POST',
+                data: pedmaPostData({
+                    staffid: $('#staffid').val(),
+                    performance_month: month
+                }),
+                dataType: 'json'
+            }).done(function(res) {
+                if (res && res.success) {
+                    alert_float('success', res.message || 'PEDMA record deleted.');
+                    pedmaLoadEmployeeEvaluation();
+                } else {
+                    alert_float('danger', (res && res.message) ? res.message : 'Could not delete PEDMA record.');
+                }
+            }).fail(function() {
+                alert_float('danger', 'Could not delete PEDMA record.');
+            }).always(function() {
+                $btn.prop('disabled', false);
+            });
         });
 
         $('#pedma-form').on('submit', function(e) {

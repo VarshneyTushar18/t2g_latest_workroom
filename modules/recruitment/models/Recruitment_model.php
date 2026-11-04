@@ -484,17 +484,23 @@ class Recruitment_model extends App_Model
 	 */
 	public function add_candidate($data)
 	{
-
-		$data['birthday'] = $data['birthday'];
-
-		if (!$this->check_format_date($data['birthday'])) {
+		if (!isset($data['birthday']) || $data['birthday'] === '') {
+			$data['birthday'] = null;
+		} elseif (!$this->check_format_date($data['birthday'])) {
 			$data['birthday'] = to_sql_date($data['birthday']);
 		}
 
-		$data['days_for_identity'] = $data['days_for_identity'];
-
-		if (!$this->check_format_date($data['days_for_identity'])) {
+		if (!isset($data['days_for_identity']) || $data['days_for_identity'] === '') {
+			$data['days_for_identity'] = null;
+		} elseif (!$this->check_format_date($data['days_for_identity'])) {
 			$data['days_for_identity'] = to_sql_date($data['days_for_identity']);
+		}
+
+		if (!isset($data['nation']) || $data['nation'] === '') {
+			$data['nation'] = 'India';
+		}
+		if (!isset($data['desired_salary']) || $data['desired_salary'] === '') {
+			$data['desired_salary'] = 0;
 		}
 
 		$data['desired_salary'] = reformat_currency_rec($data['desired_salary']);
@@ -627,6 +633,70 @@ class Recruitment_model extends App_Model
 		$this->db->insert(db_prefix() . 'rec_candidate', $data);
 		$insert_id = $this->db->insert_id();
 		if ($insert_id) {
+			if (!isset($from_date) || !is_array($from_date)) {
+				$from_date = [];
+			}
+			if (!isset($to_date) || !is_array($to_date)) {
+				$to_date = [];
+			}
+			if (!isset($company) || !is_array($company)) {
+				$company = [];
+			}
+			if (!isset($position) || !is_array($position)) {
+				$position = [];
+			}
+			if (!isset($contact_person) || !is_array($contact_person)) {
+				$contact_person = [];
+			}
+			if (!isset($salary) || !is_array($salary)) {
+				$salary = [];
+			}
+			if (!isset($reason_quitwork) || !is_array($reason_quitwork)) {
+				$reason_quitwork = [];
+			}
+			if (!isset($job_description) || !is_array($job_description)) {
+				$job_description = [];
+			}
+			if (!isset($literacy_from_date) || !is_array($literacy_from_date)) {
+				$literacy_from_date = [];
+			}
+			if (!isset($literacy_to_date) || !is_array($literacy_to_date)) {
+				$literacy_to_date = [];
+			}
+			if (!isset($diploma) || !is_array($diploma)) {
+				$diploma = [];
+			}
+			if (!isset($training_places) || !is_array($training_places)) {
+				$training_places = [];
+			}
+			if (!isset($specialized) || !is_array($specialized)) {
+				$specialized = [];
+			}
+			if (!isset($training_form) || !is_array($training_form)) {
+				$training_form = [];
+			}
+			if (!isset($relationship) || !is_array($relationship)) {
+				$relationship = [];
+			}
+			if (!isset($name) || !is_array($name)) {
+				$name = [];
+			}
+			if (!isset($fi_birthday) || !is_array($fi_birthday)) {
+				$fi_birthday = [];
+			}
+			if (!isset($job) || !is_array($job)) {
+				$job = [];
+			}
+			if (!isset($phone) || !is_array($phone)) {
+				$phone = [];
+			}
+			if (!isset($skill_name) || !is_array($skill_name)) {
+				$skill_name = [];
+			}
+			if (!isset($skill_description) || !is_array($skill_description)) {
+				$skill_description = [];
+			}
+
 			foreach ($from_date as $key => $val) {
 				if ($from_date[$key] != '') {
 
@@ -1133,58 +1203,70 @@ class Recruitment_model extends App_Model
 
 	public function add_interview_schedules($data)
 	{
-		$no_of_interviews = count($data['interview_day']);
+		$insert_id = 0;
+		$roundIndices = recruitment_interview_schedule_round_indices($data);
 
-		if ($no_of_interviews > 0) {
-			for ($i = 0; $i < $no_of_interviews; $i++) {
+		foreach ($roundIndices as $i) {
+			$processed_data = $this->build_interview_schedule_row($data, $i);
+			if ($processed_data === null) {
+				continue;
+			}
 
-				$processed_data['campaign'] = $data['campaign'];
-				$processed_data['position'] = $data['position'];
+			$this->db->insert(db_prefix() . 'rec_interview', $processed_data);
+			$insert_id = (int) $this->db->insert_id();
 
-				$processed_data['interview_day'] = $data['interview_day'][$i];
-				if (!$this->check_format_date($processed_data['interview_day'])) {
-					$processed_data['interview_day'] = to_sql_date($processed_data['interview_day']);
+			if ($insert_id > 0) {
+				foreach (recruitment_interviewer_ids_to_array($data['interviewer'][$i] ?? '') as $interviewer) {
+					add_notification([
+						'fromuserid'  => get_staff_user_id(),
+						'description' => 'You have Interview Scheduled',
+						'link'        => 'recruitment/view_interviews',
+						'touserid'    => $interviewer,
+					]);
 				}
-				$processed_data['interviewer'] = implode(',', $data['interviewer'][$i]);
-				$processed_data['added_from'] = get_staff_user_id();
-				$processed_data['added_date'] = date('Y-m-d');
-
-				$processed_data['from_time'] = $data['from_time'][$i];
-				$processed_data['to_time'] = $data['to_time'][$i];
-
-				$processed_data['from_hours'] = ($processed_data['interview_day'] . ' ' . $processed_data['from_time'] . ':00');
-				$processed_data['to_hours'] = $processed_data['interview_day'] . ' ' . $processed_data['to_time'] . ':00';
-
-				$processed_data['round'] = $data['round'][$i];
-
-				if (!$this->check_format_date($processed_data['interview_day'])) {
-					$processed_data['from_hours'] = to_sql_date($processed_data['interview_day']) . ' ' . $data['from_time'][$i] . ':00';
-				}
-
-				if (!$this->check_format_date($data['interview_day'][$i])) {
-					$processed_data['to_hours'] = to_sql_date($processed_data['interview_day']) . ' ' . $data['to_time'][$i] . ':00';
-				}
-
-				$processed_data['interview_link'] = $data['interview_link'][$i];
-				$processed_data['candidate'] = $data['candidate'];
-
-				$this->db->insert(db_prefix() . 'rec_interview', $processed_data);
-
-				if ($this->db->affected_rows() > 0) {
-
-					foreach ($data['interviewer'][$i] as $interviewer) {
-
-						add_notification([
-							'fromuserid' => get_staff_user_id(),
-							'description' => 'You have Interview Scheduled',
-							'link' => 'recruitment/view_interviews',
-							'touserid' => $interviewer,
-						]);
-					}
-				}
-
 			}
 		}
+
+		return $insert_id;
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 * @param int|string $i Round index from POST
+	 * @return array<string, mixed>|null
+	 */
+	private function build_interview_schedule_row($data, $i)
+	{
+		if (empty($data['interview_day'][$i])) {
+			return null;
+		}
+
+		$processed_data = [];
+		$processed_data['campaign'] = $data['campaign'] ?? null;
+		$processed_data['position'] = $data['position'] ?? null;
+		$processed_data['candidate'] = $data['candidate'] ?? null;
+
+		$processed_data['interview_day'] = $data['interview_day'][$i];
+		if (!$this->check_format_date($processed_data['interview_day'])) {
+			$processed_data['interview_day'] = to_sql_date($processed_data['interview_day']);
+		}
+
+		$processed_data['interviewer'] = recruitment_interviewer_ids_to_csv($data['interviewer'][$i] ?? '');
+		$processed_data['added_from'] = get_staff_user_id();
+		$processed_data['added_date'] = date('Y-m-d');
+		$processed_data['from_time'] = $data['from_time'][$i] ?? '';
+		$processed_data['to_time'] = $data['to_time'][$i] ?? '';
+		$processed_data['from_hours'] = $processed_data['interview_day'] . ' ' . $processed_data['from_time'] . ':00';
+		$processed_data['to_hours'] = $processed_data['interview_day'] . ' ' . $processed_data['to_time'] . ':00';
+		$processed_data['round'] = $data['round'][$i] ?? ((int) $i + 1);
+		$processed_data['interview_link'] = trim((string) ($data['interview_link'][$i] ?? ''));
+
+		$roundLabel = (string) $processed_data['round'];
+		$processed_data['is_name'] = !empty($data['is_name'])
+			? (string) $data['is_name']
+			: ('Round ' . $roundLabel);
+
+		return $processed_data;
 	}
 	/**
 	 * update interview schedules
@@ -1235,52 +1317,24 @@ class Recruitment_model extends App_Model
 
 	public function update_interview_schedules($data, $id)
 	{
+		$roundIndices = recruitment_interview_schedule_round_indices($data);
+		if ($roundIndices === []) {
+			return false;
+		}
 
-		$no_of_interviews = count($data['interview_day']);
+		$first = true;
+		foreach ($roundIndices as $i) {
+			$processed_data = $this->build_interview_schedule_row($data, $i);
+			if ($processed_data === null) {
+				continue;
+			}
 
-		if ($no_of_interviews > 0) {
-			for ($i = 0; $i < $no_of_interviews; $i++) {
-
-				$processed_data['campaign'] = $data['campaign'];
-				$processed_data['position'] = $data['position'];
-
-				$processed_data['interview_day'] = $data['interview_day'][$i];
-				if (!$this->check_format_date($processed_data['interview_day'])) {
-					$processed_data['interview_day'] = to_sql_date($processed_data['interview_day']);
-				}
-				$processed_data['interviewer'] = implode(',', $data['interviewer'][$i]);
-				$processed_data['added_from'] = get_staff_user_id();
-				$processed_data['added_date'] = date('Y-m-d');
-
-				$processed_data['from_time'] = $data['from_time'][$i];
-				$processed_data['to_time'] = $data['to_time'][$i];
-
-				$processed_data['from_hours'] = ($processed_data['interview_day'] . ' ' . $processed_data['from_time'] . ':00');
-				$processed_data['to_hours'] = $processed_data['interview_day'] . ' ' . $processed_data['to_time'] . ':00';
-
-				$processed_data['round'] = $data['round'][$i];
-
-				if (!$this->check_format_date($processed_data['interview_day'])) {
-					$processed_data['from_hours'] = to_sql_date($processed_data['interview_day']) . ' ' . $data['from_time'][$i] . ':00';
-				}
-
-				if (!$this->check_format_date($data['interview_day'][$i])) {
-					$processed_data['to_hours'] = to_sql_date($processed_data['interview_day']) . ' ' . $data['to_time'][$i] . ':00';
-				}
-
-				$processed_data['interview_link'] = $data['interview_link'][$i];
-				$processed_data['candidate'] = $data['candidate'];
-
-
-
-				if ($i == 0) {
-					$this->db->where('id', $id);
-					$this->db->update(db_prefix() . 'rec_interview', $processed_data);
-				} else {
-					$this->db->insert(db_prefix() . 'rec_interview', $processed_data);
-				}
-
-
+			if ($first) {
+				$this->db->where('id', (int) $id);
+				$this->db->update(db_prefix() . 'rec_interview', $processed_data);
+				$first = false;
+			} else {
+				$this->db->insert(db_prefix() . 'rec_interview', $processed_data);
 			}
 		}
 

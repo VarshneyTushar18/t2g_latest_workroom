@@ -3117,6 +3117,24 @@ class Staff_model extends App_Model
         return $this->db->affected_rows();
     }
 
+    /**
+     * Remove PEDMA evaluation row for staff + month (Y-m).
+     */
+    public function delete_tblstaff_performance($staffid, $dateYm)
+    {
+        $staffid = (int) $staffid;
+        $dateYm  = trim((string) $dateYm);
+        if ($staffid < 1 || !preg_match('/^\d{4}-\d{2}$/', $dateYm)) {
+            return 0;
+        }
+
+        $this->db->where('staffid', $staffid);
+        $this->db->where("DATE_FORMAT(date_created, '%Y-%m')=", $dateYm);
+        $this->db->delete('tblstaff_performance');
+
+        return $this->db->affected_rows();
+    }
+
     public function get_kra_based_on_department() {
         $this->load->model('departments_model');
         $departmentsId = $this->departments_model->get_staff_departments('', true);
@@ -3249,6 +3267,69 @@ class Staff_model extends App_Model
         }
     
         return $kraResult;
+    }
+
+    /**
+     * Same Default / Custom KRA lists as PEDMA evaluation (department-scoped).
+     *
+     * @return array{default_kra: array, custom_kra: array}
+     */
+    public function get_pedma_kra_catalog_for_department($departmentId)
+    {
+        $departmentId = (int) $departmentId;
+        if ($departmentId > 0 && function_exists('pedma_department_id_allowed') && !pedma_department_id_allowed($departmentId)) {
+            return [
+                'default_kra' => [],
+                'custom_kra'  => [],
+            ];
+        }
+
+        $defaultKra = $this->get_default_kra_based_on_department($departmentId);
+        $customKra  = $this->get_custom_kra_based_on_department($departmentId);
+
+        return [
+            'default_kra' => $this->enrich_pedma_kra_list($defaultKra),
+            'custom_kra'  => $this->enrich_pedma_kra_list($customKra),
+        ];
+    }
+
+    /**
+     * Attach KPI rows and department label for Manage KRA UI.
+     *
+     * @param array<int, object> $kraList
+     * @return array<int, object>
+     */
+    public function enrich_pedma_kra_list($kraList)
+    {
+        if (empty($kraList)) {
+            return [];
+        }
+
+        foreach ($kraList as &$kra) {
+            $this->db->select('kpi.*');
+            $this->db->from('tblstaff_performance_kpi kpi');
+            $this->db->where('kpi.kra_id', (int) $kra->id);
+            $kpiResult = $this->db->get()->result();
+
+            $kra->kpi_data = !empty($kpiResult) ? $kpiResult : null;
+
+            $deptName = null;
+            if (!empty($kra->departmentid)) {
+                $this->db->select('name');
+                $this->db->from('tbldepartments');
+                $this->db->where('departmentid', (int) $kra->departmentid);
+                $depResult = $this->db->get()->row();
+                $deptName = !empty($depResult) ? $depResult->name : null;
+            }
+            $kra->departmentName = $deptName ?: '—';
+
+            if (function_exists('pedma_normalize_kra_record')) {
+                pedma_normalize_kra_record($kra);
+            }
+        }
+        unset($kra);
+
+        return $kraList;
     }
     
     public function get_kra_based_on_id($id){

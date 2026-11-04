@@ -63,6 +63,9 @@
                     <div class="form-group col-md-6 !tw-p-0">
                     <?php
                     $selected_department_id = !empty($kra[0]->departmentid) ? $kra[0]->departmentid : '';
+                    if ($selected_department_id === '' && !empty($prefill_department_id)) {
+                        $selected_department_id = (int) $prefill_department_id;
+                    }
                     echo render_select('departments', $departments, array('departmentid', 'name'), 'Select Department', $selected_department_id);
                     ?>
                     </div>

@@ -260,7 +260,7 @@
           <input type="hidden" id="id" name="id" value="">
           <button type="
           " class="btn btn-default" data-dismiss="modal"><?php echo _l('close'); ?></button>
-          <button id="sm_btn" type="submit" class="btn btn-info" onclick="this.disabled=true; this.form.submit();"><?php echo _l('submit'); ?></button>
+          <button id="sm_btn" type="submit" class="btn btn-info"><?php echo _l('submit'); ?></button>
         </div>
       </div><!-- /.modal-content -->
       <?php echo form_close(); ?>

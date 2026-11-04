@@ -158,6 +158,7 @@ $pedmaCanEditOverallHr = pedma_can_edit_overall_section('hr');
             <button type="button" class="btn btn-primary" id="pedmaPublishBtn">Publish</button>
             <button type="button" class="btn btn-warning" id="pedmaDraftBtn">Save draft</button>
             <button type="button" class="btn btn-primary" id="pedmaUpdateBtn" style="display:none;">Update</button>
+            <button type="button" class="btn btn-danger" id="pedmaDeleteBtn" style="display:none;">Delete</button>
         </div>
     </div>
     <?php echo form_close(); ?>

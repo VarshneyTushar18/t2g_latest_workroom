@@ -33,7 +33,13 @@ class Dashboard extends AdminController
         $data['projects_status_stats'] = json_encode($this->dashboard_model->projects_status_stats());
         $data['leads_status_stats']    = json_encode($this->dashboard_model->leads_status_stats());
         $data['google_ids_calendars']  = $this->misc_model->get_google_calendar_ids();
-        $data['bodyclass']             = 'dashboard invoices-total-manual hrms-ui';
+        $bodyclass = 'dashboard invoices-total-manual hrms-ui';
+        $this->load->helper('apex_workhub');
+        $data['use_apex_associate_dashboard'] = t2g_apex_associate_dashboard_user();
+        if ($data['use_apex_associate_dashboard']) {
+            $bodyclass .= ' associate-dashboard apex-workhub';
+        }
+        $data['bodyclass'] = $bodyclass;
         $this->load->model('announcements_model');
         $data['staff_announcements']             = $this->announcements_model->get();
         $data['total_undismissed_announcements'] = $this->announcements_model->get_total_undismissed_announcements();
@@ -62,7 +68,6 @@ class Dashboard extends AdminController
         $data['user_dashboard_visibility'] = json_encode($data['user_dashboard_visibility']);
 
         $data = hooks()->apply_filters('before_dashboard_render', $data);
-        //print_r($data);die;
         $this->load->view('admin/dashboard/dashboard', $data);
     }
 

@@ -1109,3 +1109,235 @@ function get_all_feedback_of_candidate($id)
     
     return $feedbacks;
 }
+
+/**
+ * Load PhpSpreadsheet autoloader (local vendor tree or Composer).
+ */
+function recruitment_load_phpspreadsheet_autoload()
+{
+    static $loaded = false;
+    if ($loaded) {
+        return true;
+    }
+
+    $paths = [
+        FCPATH . 'application/vendor_phpspreadsheet/autoload.php',
+        FCPATH . 'vendor/autoload.php',
+        APPPATH . 'vendor/autoload.php',
+    ];
+
+    foreach ($paths as $path) {
+        if (!is_file($path)) {
+            continue;
+        }
+        require_once $path;
+        if (class_exists('PhpOffice\\PhpSpreadsheet\\IOFactory')) {
+            $loaded = true;
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Resolve Google service-account JSON for recruitment CV uploads.
+ */
+function recruitment_google_service_account_json_path()
+{
+    $candidates = [
+        FCPATH . 'google-client/hr-recruit-cv-429106-f3626e643c56.json',
+        FCPATH . 'google-client/service-account.json',
+    ];
+
+    $CI = &get_instance();
+    if ($CI && method_exists($CI, 'config')) {
+        $configPath = APPPATH . 'config/google_drive.php';
+        if (is_file($configPath)) {
+            $CI->load->config('google_drive', true, true);
+            $fromConfig = $CI->config->item('service_account_credentials_json');
+            if (is_string($fromConfig) && $fromConfig !== '') {
+                array_unshift($candidates, $fromConfig);
+            }
+        }
+    }
+
+    foreach ($candidates as $path) {
+        if (!is_string($path) || $path === '') {
+            continue;
+        }
+        if (!is_file($path) && is_file(FCPATH . ltrim(str_replace('\\', '/', $path), '/'))) {
+            $path = FCPATH . ltrim(str_replace('\\', '/', $path), '/');
+        }
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Google Drive API client for recruitment (null when not configured).
+ *
+ * @return Google_Service_Drive|null
+ */
+/**
+ * Save an uploaded CV locally when Google Drive is unavailable.
+ *
+ * @param string $inputName File input name (e.g. cv_link)
+ * @param int|null $index   Index for array file inputs
+ * @return array{file_id?:string,web_view_link?:string,file_name?:string,cv_link?:string}
+ */
+function recruitment_store_cv_upload_local($inputName = 'cv_link', $index = null)
+{
+    $hasFile = false;
+    $tmpName = '';
+    $origName = '';
+
+    if ($index === null) {
+        $hasFile = isset($_FILES[$inputName]['tmp_name']) && $_FILES[$inputName]['tmp_name'] !== ''
+            && ($_FILES[$inputName]['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+        if ($hasFile) {
+            $tmpName  = $_FILES[$inputName]['tmp_name'];
+            $origName = $_FILES[$inputName]['name'];
+        }
+    } else {
+        $hasFile = isset($_FILES[$inputName]['tmp_name'][$index]) && $_FILES[$inputName]['tmp_name'][$index] !== ''
+            && ($_FILES[$inputName]['error'][$index] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+        if ($hasFile) {
+            $tmpName  = $_FILES[$inputName]['tmp_name'][$index];
+            $origName = $_FILES[$inputName]['name'][$index];
+        }
+    }
+
+    if (!$hasFile) {
+        return [];
+    }
+
+    $dir = RECRUITMENT_MODULE_UPLOAD_FOLDER . 'candidate/cv/' . date('Y-m-d') . '/';
+    _maybe_create_upload_path($dir);
+    $filename = unique_filename($dir, $origName);
+    $dest     = $dir . $filename;
+
+    if (!@move_uploaded_file($tmpName, $dest) && !@copy($tmpName, $dest)) {
+        return [];
+    }
+
+    return [
+        'file_id'       => '',
+        'web_view_link' => '',
+        'file_name'     => $filename,
+        'cv_link'       => $filename,
+    ];
+}
+
+/**
+ * Merge CV upload metadata into candidate POST data (never throws on false upload).
+ *
+ * @param array<string, mixed> $data
+ * @param array<string, mixed>|false|null $uploaded
+ * @return array<string, mixed>
+ */
+function recruitment_merge_cv_upload_data($data, $uploaded)
+{
+    if (is_array($uploaded) && $uploaded !== []) {
+        return array_merge($data, $uploaded);
+    }
+
+    return $data;
+}
+
+/**
+ * Sorted round indices from interview schedule POST (interview_day[0], [1], …).
+ *
+ * @param array<string, mixed> $data
+ * @return int[]
+ */
+function recruitment_interview_schedule_round_indices($data)
+{
+    if (empty($data['interview_day']) || !is_array($data['interview_day'])) {
+        return [];
+    }
+
+    $indices = array_keys($data['interview_day']);
+    sort($indices, SORT_NUMERIC);
+
+    return array_map('intval', $indices);
+}
+
+/**
+ * @param mixed $value POST interviewer field (array or comma string)
+ */
+function recruitment_interviewer_ids_to_csv($value)
+{
+    if (is_array($value)) {
+        $ids = array_filter(array_map('strval', $value), static function ($id) {
+            return $id !== '' && $id !== '0';
+        });
+
+        return implode(',', $ids);
+    }
+
+    return is_string($value) ? trim($value) : '';
+}
+
+/**
+ * @param mixed $value
+ * @return int[]
+ */
+function recruitment_interviewer_ids_to_array($value)
+{
+    if (is_array($value)) {
+        return array_values(array_filter(array_map('intval', $value)));
+    }
+
+    if (is_string($value) && trim($value) !== '') {
+        return array_values(array_filter(array_map('intval', explode(',', $value))));
+    }
+
+    return [];
+}
+
+function recruitment_init_google_drive_service()
+{
+    static $service = null;
+    static $resolved = false;
+    if ($resolved) {
+        return $service;
+    }
+    $resolved = true;
+
+    if (!class_exists('Google_Client', false) && !class_exists('Google\\Client', false)) {
+        if (is_file(APPPATH . 'vendor/autoload.php')) {
+            require_once APPPATH . 'vendor/autoload.php';
+        }
+    }
+
+    if (!class_exists('Google_Client') && !class_exists('Google\\Client')) {
+        log_message('error', 'Recruitment: Google API client library not available.');
+
+        return null;
+    }
+
+    $authConfig = recruitment_google_service_account_json_path();
+    if ($authConfig === '') {
+        log_message('error', 'Recruitment: Google service account JSON not found; CV Drive upload disabled.');
+
+        return null;
+    }
+
+    try {
+        $client = class_exists('Google_Client') ? new Google_Client() : new \Google\Client();
+        $client->setAuthConfig($authConfig);
+        $client->addScope(Google_Service_Drive::DRIVE);
+
+        $service = new Google_Service_Drive($client);
+    } catch (Throwable $e) {
+        log_message('error', 'Recruitment Google Drive init failed: ' . $e->getMessage());
+        $service = null;
+    }
+
+    return $service;
+}

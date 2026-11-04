@@ -391,6 +391,71 @@ function fix_user_data_widget_tabs() {
         var my = ds ? ds.slice(0, 7) : monthKey(calView);
         window.location.href = admin_url + 'timesheets/my_attendance?month=' + encodeURIComponent(my);
     });
+    function updateApexAttendanceKpi() {
+        var pctEl = document.getElementById('apexKpiAttendancePct');
+        var metaEl = document.getElementById('apexKpiAttendanceMeta');
+        if (!pctEl) {
+            return;
+        }
+        var keys = Object.keys(dayMap || {});
+        if (!keys.length) {
+            return;
+        }
+        var present = 0;
+        var counted = 0;
+        keys.forEach(function(key) {
+            var d = dayMap[key];
+            if (!d) {
+                return;
+            }
+            if (d.code === 'WO' || d.code === 'H' || d.status === 'off' || d.status === 'holiday') {
+                return;
+            }
+            counted++;
+            var tone = dayHealthTone(d);
+            if (tone === 'ok' || tone === 'half') {
+                present += tone === 'ok' ? 1 : 0.5;
+            }
+        });
+        if (counted > 0) {
+            var pct = Math.round((present / counted) * 100);
+            pctEl.textContent = pct + '%';
+            if (metaEl) {
+                metaEl.textContent = Math.round(present) + ' of ' + counted + ' working days';
+            }
+        }
+    }
+
+    var origRenderAttendanceCalendar = renderAttendanceCalendar;
+    renderAttendanceCalendar = function() {
+        origRenderAttendanceCalendar();
+        updateApexAttendanceKpi();
+    };
+
     loadAttendanceCalendar();
 })();
 </script>
+<?php if (is_staff_member()) { ?>
+<script>
+(function() {
+    var leaveEl = document.getElementById('apexKpiLeaveDays');
+    if (!leaveEl || !leaveEl.getAttribute('data-needs-fetch')) {
+        return;
+    }
+    $.getJSON(admin_url + 'timesheets/get_leave_balance_cards/<?php echo (int) get_staff_user_id(); ?>', {
+        year: new Date().getFullYear(),
+        month: new Date().getMonth() + 1
+    }).done(function(res) {
+        var sum = 0;
+        (res.cards || []).forEach(function(card) {
+            if (card.slug === 'loss-of-pay') {
+                return;
+            }
+            sum += parseFloat(card.balance) || 0;
+        });
+        leaveEl.innerHTML = Math.round(sum * 10) / 10 + ' <span class="apex-kpi-unit">Days</span>';
+        leaveEl.removeAttribute('data-needs-fetch');
+    });
+})();
+</script>
+<?php } ?>

@@ -588,24 +588,24 @@ $pedmaEvalTableColspan = 2 + ($pedmaShowEvalManagerCol ? 1 : 0) + ($pedmaShowEva
                                 </svg> Performance Evaluation and Discussion Management (PEDMA)</h4>
                             <hr>
                         </div>
-                        <div class="col-md-3 p-0" style="margin-left: auto;">
+                        <!-- <div class="col-md-3 p-0" style="margin-left: auto;">
                             <div class="text-end" style="margin-bottom: 8px;">
                                 <span id="pedmaExportMeta" class="pedma-export-meta-top" style="display:inline-block; margin-right:8px; font-size:12px; color:#64748b; vertical-align:middle;"></span>
                                 <button type="button" id="pedmaExportBtn" class="btn btn-primary btn-sm">
                                     <i class="fa fa-download"></i> Export CSV
                                 </button>
-                            </div>
+                            </div> 
                             <div class="bg-primary text-white px-4 py-2 rounded pedma-score-card" style="padding:10px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                                <!-- <div class="pedma-days-wrap" style="text-align:left;">
+                                <div class="pedma-days-wrap" style="text-align:left;">
                                     <div style="font-size:11px; opacity:0.9; text-transform:uppercase; letter-spacing:0.3px;">Days of data</div>
                                     <h4 id="pedma_days_of_data" style="margin:4px 0 0; font-size:20px;"></h4>
-                                </div> -->
+                                </div>
                                 <div style="text-align:right;">
                                     <span>OVERALL PERFORMANCE SCORE</span>
                                     <h4 id="avg_score" style="margin:4px 0 0;"></h4>
                                 </div>
                             </div>
-                        </div>
+                        </div> -->
                     </div>
                     <div class="row" style="margin-bottom: 16px;">
                         <div class="col-md-3 p-0">

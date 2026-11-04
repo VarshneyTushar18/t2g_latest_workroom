@@ -5,7 +5,27 @@ var round_number = 1;
   "use strict";
   initDataTable('.table-table_interview', admin_url + 'recruitment/table_interview');
   appValidateForm($('#interview_schedule-form'), {
-    rec_campaign: 'required', is_name: 'required', 'interview_day[0]': 'required', 'from_time[0]': 'required', 'to_time[0]': 'required', campaign: 'required', position: 'required', 'interviewer[0]': 'required'
+    campaign: 'required',
+    candidate: 'required',
+    position: 'required',
+  }, function (form) {
+    var roundsOk = true;
+    $('.list_interviews #interviews-item').each(function () {
+      var $row = $(this);
+      var day = $.trim($row.find('input[name^="interview_day"]').val() || '');
+      var fromTime = $.trim($row.find('input[name^="from_time"]').val() || '');
+      var toTime = $.trim($row.find('input[name^="to_time"]').val() || '');
+      var interviewers = $row.find('select[name^="interviewer"]').val();
+      if (!day || !fromTime || !toTime || !interviewers || interviewers.length === 0) {
+        roundsOk = false;
+      }
+    });
+    if (!roundsOk) {
+      alert_float('warning', 'Please set interview date, from/to time, and at least one interviewer for each round.');
+      return false;
+    }
+    $('#sm_btn').prop('disabled', true);
+    return true;
   });
 
   init_recruitment_interview_schedules();
@@ -49,7 +69,7 @@ var round_number = 1;
   });
 
 
-  addMoreInterviewsInputKey = $('.list_interviews input[name*="interview_day"]').length;
+  addMoreInterviewsInputKey = $('.list_interviews #interviews-item').length;
   // let addMoreInterviewsInputKey = parseInt($('#interview_heading').text().match(/\d+/)[0]);
   // console.log(headingText); // Output: "Round 2"
   // var round_number = parseInt($('.list_interviews').find('#interview_heading').text().match(/\d+/)[0]);
@@ -103,13 +123,16 @@ var round_number = 1;
     newattachment.find('button[name="add"]').removeClass('new_interviews').addClass('remove_interviews').removeClass('btn-success').addClass('btn-danger');
 
 
-    newattachment.find('input[id="round[0]"]').attr('id', 'round[' + addMoreInterviewsInputKey + ']').val(round_number + 1);
-    newattachment.find('input[name="round[0]"]').attr('name', 'round[' + addMoreInterviewsInputKey + ']').val(round_number + 1);
+    var nextRoundIndex = addMoreInterviewsInputKey;
+    var nextRoundNumber = round_number + 1;
 
-    newattachment.find('#interview_heading').html('Round ' + (round_number + 1));
+    newattachment.find('input[id="round[0]"]').attr('id', 'round[' + nextRoundIndex + ']').val(nextRoundNumber);
+    newattachment.find('input[name="round[0]"]').attr('name', 'round[' + nextRoundIndex + ']').val(nextRoundNumber);
+
+    newattachment.find('#interview_heading').html('Round ' + nextRoundNumber);
 
     addMoreInterviewsInputKey++;
-    round_number++;
+    round_number = nextRoundNumber;
 
   });
 

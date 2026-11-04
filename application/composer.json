@@ -26,6 +26,6 @@
         "guzzlehttp/guzzle": "^7.4",
         "twilio/sdk": "^6.32",
         "illuminate/collections": "^8.77",
-        "google/apiclient": "2.0"
+        "google/apiclient": "^2.18"
     }
 }

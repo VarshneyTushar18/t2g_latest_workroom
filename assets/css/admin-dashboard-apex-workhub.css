@@ -1,0 +1,187 @@
+/**
+ * Apex WorkHub dashboard shell inside Perfex admin (#wrapper).
+ */
+body.associate-dashboard.apex-workhub .screen-options-btn,
+body.associate-dashboard.apex-workhub .screen-options-area {
+  display: none !important;
+}
+
+body.associate-dashboard.apex-workhub #wrapper > .content {
+  padding: 0 !important;
+  background: #f1f5f9 !important;
+}
+
+body.associate-dashboard.apex-workhub .admin-dashboard-hrms-content.apex-dashboard-body {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+body.associate-dashboard.apex-workhub .apex-dashboard-row {
+  margin: 0;
+}
+
+body.associate-dashboard.apex-workhub .apex-workhub-root {
+  width: 100%;
+  min-height: calc(100vh - 62px);
+}
+
+body.associate-dashboard.apex-workhub .apex-workhub-root .donut-ring {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+body.associate-dashboard.apex-workhub #apex-workhub-root header {
+  position: sticky;
+  top: 0;
+  margin-top: 80px;
+  z-index: 15;
+}
+
+body.associate-dashboard.apex-workhub .apex-workhub-thought-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #4338ca;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  body.associate-dashboard.apex-workhub #apex-workhub-root header[data-purpose="top-navigation-bar"] {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  body.associate-dashboard.apex-workhub .apex-workhub-thought {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    max-width: 100%;
+  }
+}
+
+/* Keep Perfex sidebar/header above workhub inner sticky header where needed */
+body.associate-dashboard.apex-workhub #menu,
+body.associate-dashboard.apex-workhub #header {
+  z-index: 110;
+  pointer-events: auto;
+}
+
+/*
+ * Tailwind CDN defines `.collapse { visibility: collapse }`, which breaks MetisMenu
+ * submenus (they also use class "collapse"). Restore Bootstrap/MetisMenu behavior.
+ */
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-second-level.collapse,
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-third-level.collapse,
+body.associate-dashboard.apex-workhub #setup-menu-wrapper .nav-second-level.collapse {
+  visibility: visible !important;
+}
+
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-second-level.collapse:not(.in):not(.collapsing),
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-third-level.collapse:not(.in):not(.collapsing),
+body.associate-dashboard.apex-workhub #setup-menu-wrapper .nav-second-level.collapse:not(.in):not(.collapsing) {
+  display: none !important;
+}
+
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-second-level.collapse.in,
+body.associate-dashboard.apex-workhub #menu #side-menu .nav-third-level.collapse.in,
+body.associate-dashboard.apex-workhub #setup-menu-wrapper .nav-second-level.collapse.in {
+  display: block !important;
+  visibility: visible !important;
+  height: auto !important;
+}
+
+body.associate-dashboard.apex-workhub #menu #side-menu .collapse.collapsing,
+body.associate-dashboard.apex-workhub #setup-menu-wrapper .collapse.collapsing {
+  display: block !important;
+  visibility: visible !important;
+}
+
+body.associate-dashboard.apex-workhub #apex-workhub-root {
+  position: relative;
+  z-index: 1;
+}
+
+/* HRMS attendance calendar in middle overview row */
+body.associate-dashboard.apex-workhub .apex-hrms-cal-dashboard.dashboard-hrms-panel {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+}
+
+body.associate-dashboard.apex-workhub .apex-hrms-cal-dashboard .dashboard-hrms-cal-wrap {
+  max-width: none;
+}
+
+/* HRMS attendance calendar (compact, inside WorkHub row) */
+body.associate-dashboard.apex-workhub .apex-hrms-cal-compact.dashboard-hrms-cal-wrap {
+  max-width: none;
+}
+
+body.associate-dashboard.apex-workhub .apex-hrms-cal-compact .hrms-cal-day {
+  min-height: 28px;
+}
+
+body.associate-dashboard.apex-workhub .apex-hrms-cal-legend-mini {
+  margin-top: 6px;
+  font-size: 9px;
+  gap: 6px;
+}
+
+body.associate-dashboard.apex-workhub [data-purpose="timesheet-logged-time-row"] {
+  margin-top: 0;
+}
+
+body.associate-dashboard.apex-workhub [data-purpose="hrms-records-row"] {
+  margin-top: 0;
+}
+
+body.associate-dashboard.apex-workhub #apexKraChart {
+  max-height: 260px;
+}
+
+body.associate-dashboard.apex-workhub .apex-bulletin-slide {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.45s ease, visibility 0.45s ease;
+  z-index: 1;
+}
+
+body.associate-dashboard.apex-workhub .apex-bulletin-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  z-index: 2;
+}
+
+body.associate-dashboard.apex-workhub .apex-bulletin-blackout {
+  opacity: 0;
+  z-index: 5;
+  transition: opacity 0.35s ease;
+}
+
+body.associate-dashboard.apex-workhub .apex-bulletin-blackout.is-visible {
+  opacity: 1;
+}
+
+body.associate-dashboard.apex-workhub #apex-bulletin-dots span.is-active {
+  background-color: #6366f1;
+  transform: scale(1.15);
+}
+
+/* Birthday / anniversary spotlight (legacy HRMS widget in middle row) */
+body.associate-dashboard.apex-workhub .apex-spotlight-card .dashboard-birthday-spotlight {
+  min-height: 320px;
+}
+
+body.associate-dashboard.apex-workhub .apex-spotlight-card .dashboard-birthday-stack {
+  min-height: 260px;
+}
+
+body.associate-dashboard.apex-workhub .apex-spotlight-card .dashboard-birthday-greeting {
+  flex: 1 1 42%;
+  min-width: 200px;
+}

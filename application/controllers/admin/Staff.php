@@ -886,7 +886,25 @@ class Staff extends AdminController
             access_denied('pedma');
         }
 
-        $data['kra'] = $this->staff_model->get_kra_based_on_department();
+        $this->load->model('departments_model');
+        $data['departments'] = pedma_departments_for_viewer();
+        $departmentId = (int) $this->input->get('department');
+        if ($departmentId <= 0 && !empty($data['departments'])) {
+            $first = $data['departments'][0];
+            $departmentId = (int) (is_array($first) ? ($first['departmentid'] ?? 0) : ($first->departmentid ?? 0));
+        }
+        if ($departmentId > 0 && !pedma_department_id_allowed($departmentId)) {
+            $departmentId = 0;
+        }
+
+        $catalog = $departmentId > 0
+            ? $this->staff_model->get_pedma_kra_catalog_for_department($departmentId)
+            : ['default_kra' => [], 'custom_kra' => []];
+
+        $data['selected_department_id'] = $departmentId;
+        $data['default_kra'] = $catalog['default_kra'];
+        $data['custom_kra'] = $catalog['custom_kra'];
+        $data['can_edit_pedma_kra'] = can_edit_pedma_kra();
 
         $this->load->view('admin/staff/pedma_admin_kra', $data);
     }
@@ -902,7 +920,7 @@ class Staff extends AdminController
         }
 
         if ($this->input->method() === 'post') {
-            if ($id === '' && !can_create_pedma_kra()) {
+            if (!can_edit_pedma_kra()) {
                 access_denied('pedma');
             }
 
@@ -950,21 +968,27 @@ class Staff extends AdminController
                     $kpiid = $this->staff_model->insert_into_tblstaff_performance_kpi($data);
                 }
 
+                $deptRedirect = (int) $this->input->post('departments');
+                $kraListUrl = admin_url('staff/pedma_admin_kra' . ($deptRedirect > 0 ? '?department=' . $deptRedirect : ''));
+
                 if($kpiid && $id == ''){
                     set_alert('success', 'KRA Added Successfully.');
-                    redirect(admin_url('staff/pedma_admin_kra'));
+                    redirect($kraListUrl);
                 }else{
                     set_alert('success', 'KRA Updated Successfully.');
-                    redirect(admin_url('staff/pedma_admin_kra'));
+                    redirect($kraListUrl);
                 }
             }else if($kraid != 0){
 
+                $deptRedirect = (int) $this->input->post('departments');
+                $kraListUrl = admin_url('staff/pedma_admin_kra' . ($deptRedirect > 0 ? '?department=' . $deptRedirect : ''));
+
                 if($id != ''){
                     set_alert('success', 'KRA Updated Successfully.');
-                    redirect(admin_url('staff/pedma_admin_kra'));
+                    redirect($kraListUrl);
                 }else{
                     set_alert('success', 'KRA Added Successfully.');
-                    redirect(admin_url('staff/pedma_admin_kra'));
+                    redirect($kraListUrl);
                 }
             }else{
                 set_alert('warning', 'Something went wrong.');
@@ -976,12 +1000,18 @@ class Staff extends AdminController
 
         $data['departments'] = $this->departments_model->get_staff_departments();
 
-        if($id != ''){
+        $data['can_edit_pedma_kra'] = can_edit_pedma_kra();
+        $data['prefill_department_id'] = (int) $this->input->get('department');
+
+        if ($id != '') {
+            if (!can_edit_pedma_kra()) {
+                access_denied('pedma');
+            }
             $data['kra'] = $this->staff_model->get_kra_based_on_id($id);
             $data['kpi'] = $this->staff_model->get_kpi_based_on_kraid($id);
 
             $this->load->view('admin/staff/pedma_admin_kra_action', $data);
-        }else{
+        } else {
             $this->load->view('admin/staff/pedma_admin_kra_action', $data);
         }
     }
@@ -1454,6 +1484,51 @@ class Staff extends AdminController
         $data[0][0]['job_name'] = get_job_position_by_staffid($staffId);
 
         echo json_encode($data);
+    }
+
+    public function delete_staff_performance()
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        if (!can_open_pedma_evaluation()) {
+            echo json_encode(['success' => false, 'message' => _l('access_denied')]);
+            return;
+        }
+
+        $staffid = (int) $this->input->post('staffid');
+        $monthYm = trim((string) $this->input->post('performance_month'));
+
+        if ($staffid < 1 || !preg_match('/^\d{4}-\d{2}$/', $monthYm)) {
+            echo json_encode(['success' => false, 'message' => 'Invalid employee or month.']);
+            return;
+        }
+
+        if (!pedma_staff_id_in_viewer_scope($staffid)) {
+            echo json_encode(['success' => false, 'message' => _l('access_denied')]);
+            return;
+        }
+
+        $existing = $this->staff_model->check_if_review_added($staffid, $monthYm);
+        if (empty($existing)) {
+            echo json_encode(['success' => false, 'message' => 'No PEDMA record found for this month.']);
+            return;
+        }
+
+        $deleted = $this->staff_model->delete_tblstaff_performance($staffid, $monthYm);
+        if ($deleted < 1) {
+            echo json_encode(['success' => false, 'message' => 'Could not delete PEDMA record.']);
+            return;
+        }
+
+        $staff_name = get_staff_full_name($staffid);
+        log_activity('PEDMA evaluation deleted [Staff: ' . $staff_name . ', Month: ' . $monthYm . ']');
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'PEDMA record deleted successfully.',
+        ]);
     }
 
     public function staff_performance()

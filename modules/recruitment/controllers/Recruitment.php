@@ -4,25 +4,20 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /**
  * Recruitment Controller
  */
-use PhpOffice\PhpSpreadsheet\IOFactory;
-
-require_once 'google-client/vendor/autoload.php';
-
-
 class recruitment extends AdminController
 {
-	private $client;
-	private $service;
 	public function __construct()
 	{
 		parent::__construct();
-		// $this->load->library('GoogleDriveHelper');
-
 		$this->load->model('recruitment_model');
-		$this->client = new Google_Client();
-		$this->client->setAuthConfig('google-client/hr-recruit-cv-429106-f3626e643c56.json');
-		$this->client->addScope(Google_Service_Drive::DRIVE);
-		$this->service = new Google_Service_Drive($this->client);
+	}
+
+	/**
+	 * @return Google_Service_Drive|null
+	 */
+	private function getGoogleDriveService()
+	{
+		return recruitment_init_google_drive_service();
 	}
 
 	/**
@@ -630,6 +625,9 @@ class recruitment extends AdminController
 	 */
 	public function add_update_candidate($id = '')
 	{
+		if (!has_permission('recruitment', '', 'create') && !is_admin()) {
+			access_denied('recruitment');
+		}
 
 		$data = $this->input->post();
 		if ($data) {
@@ -637,27 +635,22 @@ class recruitment extends AdminController
 			if ($id == '') {
 
 				$uploaded = $this->upload_file_to_gdrive();
-
-				$data = array_merge($data, $uploaded);
+				$data = recruitment_merge_cv_upload_data($data, $uploaded);
 
 				// print_r($data);
 				// die;
 				// $data['file_id'] = $this->upload_cv_google_drive();
 				$ids = $this->recruitment_model->add_candidate($data);
 				if ($ids) {
-					// handle_rec_candidate_file($ids);
-					// handle_rec_candidate_avar_file($ids);
-
-					$success = true;
 					$message = _l('added_successfully', _l('candidate_profile'));
 					set_alert('success', $message);
+				} else {
+					set_alert('warning', _l('problem_adding', _l('candidate_profile')));
 				}
 				redirect(admin_url('recruitment/candidate_profile'));
 			} else {
 				$uploaded = $this->upload_file_to_gdrive();
-				$uploaded = [];
-
-				$data = array_merge($data, $uploaded);
+				$data = recruitment_merge_cv_upload_data($data, $uploaded);
 
 				$success = $this->recruitment_model->update_cadidate($data, $id);
 				if ($success == true) {
@@ -837,20 +830,25 @@ class recruitment extends AdminController
 			// die;
 
 			if (empty($data['id'])) {
-				$this->db->select('id');
-				$this->db->from('tblrec_interview');
-				$this->db->where('candidate', $data['candidate']);
-				$result = $this->db->get();
-
-				if($result->num_rows() > 0){
-					set_alert('warning', _l('Interview already scheduled', _l('interview_schedule')));
-					redirect(admin_url('recruitment/interview_schedule'));
+				$roundIndices = recruitment_interview_schedule_round_indices($data);
+				foreach ($roundIndices as $idx) {
+					$roundNum = (int) ($data['round'][$idx] ?? ($idx + 1));
+					$this->db->where('candidate', (int) $data['candidate']);
+					$this->db->where('round', $roundNum);
+					if ($this->db->count_all_results(db_prefix() . 'rec_interview') > 0) {
+						set_alert('warning', 'Interview round ' . $roundNum . ' is already scheduled for this candidate.');
+						redirect(admin_url('recruitment/interview_schedule'));
+					}
 				}
 
 				$id = $this->recruitment_model->add_interview_schedules($data);
-				$this->recruitment_model->send_interview_email($data);
-				$this->recruitment_model->send_interview_email_to_user($data);
 				if ($id) {
+					try {
+						$this->recruitment_model->send_interview_email($data);
+						$this->recruitment_model->send_interview_email_to_user($data);
+					} catch (Throwable $e) {
+						log_message('error', 'Interview schedule email failed: ' . $e->getMessage());
+					}
 					$message = _l('added_successfully', _l('interview_schedule'));
 					set_alert('success', $message);
 				}
@@ -868,8 +866,12 @@ class recruitment extends AdminController
 
 				if ($success) {
 					$message = _l('updated_successfully', _l('interview_schedule'));
-					$this->recruitment_model->send_interview_email($data);
-					$this->recruitment_model->send_interview_email_to_user($data);
+					try {
+						$this->recruitment_model->send_interview_email($data);
+						$this->recruitment_model->send_interview_email_to_user($data);
+					} catch (Throwable $e) {
+						log_message('error', 'Interview schedule email failed: ' . $e->getMessage());
+					}
 					set_alert('success', $message);
 				}
 				redirect(admin_url('recruitment/interview_schedule'));
@@ -3040,11 +3042,11 @@ class recruitment extends AdminController
 
 	public function upload_cv_google_drive()
 	{
-		$client = new Google_Client();
-		$client->setAuthConfig($this->config->item('service_account_credentials_json'));
-		$client->addScope(Google_Service_Drive::DRIVE_FILE);
-
-		$service = new Google_Service_Drive($client);
+		$service = $this->getGoogleDriveService();
+		if (!$service) {
+			return false;
+		}
+		$this->load->config('google_drive');
 
 		$file = $_FILES['cv_link'];
 
@@ -3074,19 +3076,19 @@ class recruitment extends AdminController
 	public function upload_file_to_gdrive()
 	{
 		if (isset($_FILES['cv_link']['name']) && !empty($_FILES['cv_link']['tmp_name'])) {
-			// Load the Google Drive service
-			// $service = new Google_Service_Drive($this->client);
-
-			// Create a new folder
+			$service = $this->getGoogleDriveService();
+			if (!$service) {
+				return recruitment_store_cv_upload_local('cv_link');
+			}
 
 			$folderNname = Date('Y-m-d');
-			$folderId = $this->getFolderId($folderNname);
+			$folderId = $this->getFolderId($folderNname, $service);
 			// Upload the file
 			$file = new Google_Service_Drive_DriveFile();
 			$file->setName($_FILES['cv_link']['name']);
 			$file->setParents([$folderId]);
 
-			$result = $this->service->files->create($file, [
+			$result = $service->files->create($file, [
 				'data' => file_get_contents($_FILES['cv_link']['tmp_name']),
 				'mimeType' => $_FILES['cv_link']['type'],
 				'uploadType' => 'multipart',
@@ -3098,11 +3100,8 @@ class recruitment extends AdminController
 				'role' => 'reader',
 			]);
 
-			$this->service->permissions->create($result->id, $permission);
+			$service->permissions->create($result->id, $permission);
 
-			// echo '<pre>';
-			// print_r($file);
-			// die;
 			$data = [
 				'file_id' => $result->id,
 				'web_view_link' => $result->webViewLink,
@@ -3123,19 +3122,19 @@ class recruitment extends AdminController
 	public function upload_file_to_gdrive_for_bulk($i)
 	{
 		if (isset($_FILES['cv_link']['name'][$i]) && !empty($_FILES['cv_link']['tmp_name'][$i])) {
-			// Load the Google Drive service
-			// $service = new Google_Service_Drive($this->client);
-
-			// Create a new folder
+			$service = $this->getGoogleDriveService();
+			if (!$service) {
+				return recruitment_store_cv_upload_local('cv_link', (int) $i);
+			}
 
 			$folderNname = Date('Y-m-d');
-			$folderId = $this->getFolderId($folderNname);
+			$folderId = $this->getFolderId($folderNname, $service);
 			// Upload the file
 			$file = new Google_Service_Drive_DriveFile();
 			$file->setName($_FILES['cv_link']['name'][$i]);
 			$file->setParents([$folderId]);
 
-			$result = $this->service->files->create($file, [
+			$result = $service->files->create($file, [
 				'data' => file_get_contents($_FILES['cv_link']['tmp_name'][$i]),
 				'mimeType' => $_FILES['cv_link']['type'][$i],
 				'uploadType' => 'multipart',
@@ -3147,7 +3146,7 @@ class recruitment extends AdminController
 				'role' => 'reader',
 			]);
 
-			$this->service->permissions->create($result->id, $permission);
+			$service->permissions->create($result->id, $permission);
 
 			// echo '<pre>';
 			// print_r($file);
@@ -3171,6 +3170,10 @@ class recruitment extends AdminController
 
 	public function create_gdrive_folder()
 	{
+		$service = $this->getGoogleDriveService();
+		if (!$service) {
+			return false;
+		}
 
 		$name = Date('Y-m-d');
 		$folderMetadata = new Google_Service_Drive_DriveFile([
@@ -3178,15 +3181,22 @@ class recruitment extends AdminController
 			'mimeType' => 'application/vnd.google-apps.folder',
 			'parents' => ['1X8igwsOqOPkPP9fgORKicpCIhYqmBbUZ']
 		]);
-		$folder = $this->service->files->create($folderMetadata, [
+		$folder = $service->files->create($folderMetadata, [
 			'fields' => 'id'
 		]);
 
 		return $folder->id;
 	}
 
-	public function getFolderId($folderName)
+	public function getFolderId($folderName, $service = null)
 	{
+		if (!$service) {
+			$service = $this->getGoogleDriveService();
+		}
+		if (!$service) {
+			return false;
+		}
+
 		$parentFolderId = '1X8igwsOqOPkPP9fgORKicpCIhYqmBbUZ';
 		// Query to check if the folder exists
 		$query = sprintf(
@@ -3194,7 +3204,7 @@ class recruitment extends AdminController
 			$folderName,
 			$parentFolderId
 		);
-		$response = $this->service->files->listFiles([
+		$response = $service->files->listFiles([
 			'q' => $query,
 			'spaces' => 'drive',
 			'fields' => 'files(id, name)'
@@ -3211,7 +3221,7 @@ class recruitment extends AdminController
 			'mimeType' => 'application/vnd.google-apps.folder',
 			'parents' => [$parentFolderId]
 		]);
-		$folder = $this->service->files->create($folderMetadata, [
+		$folder = $service->files->create($folderMetadata, [
 			'fields' => 'id'
 		]);
 
@@ -3269,8 +3279,11 @@ class recruitment extends AdminController
 	
 	
 	public function save_candidate_bulk_data() {
-		require 'vendor/autoload.php'; // Ensure autoload is included
-	
+		if (!recruitment_load_phpspreadsheet_autoload()) {
+			set_alert('danger', 'Excel import library is not available on this server.');
+			redirect(admin_url('recruitment/candidate_profile'));
+		}
+
 		// Allowed fields in the Excel sheet
 		$allowed_fields = [
 			"Recruitment Campaign", "Candidate Code", "First Name", "Last Name", 
@@ -3316,7 +3329,7 @@ class recruitment extends AdminController
 	
 		// Load the Excel file
 		try {
-			$spreadsheet = IOFactory::load($file);
+			$spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file);
 			$sheet = $spreadsheet->getActiveSheet();
 			$data = $sheet->toArray();
 
@@ -3371,34 +3384,43 @@ class recruitment extends AdminController
 	}
 
 	public function add_candidate_in_bulk(){
-		$data = $this->input->post();
-		
-		$formattedData = [];
+		if (!has_permission('recruitment', '', 'create') && !is_admin()) {
+			access_denied('recruitment');
+		}
 
+		$data = $this->input->post();
+		if (empty($data) || !is_array(reset($data))) {
+			set_alert('warning', 'No candidate data submitted.');
+			redirect(admin_url('recruitment/candidatesaddmore'));
+		}
+
+		$formattedData = [];
 		$entriesCount = count(reset($data));
 
 		for ($i = 0; $i < $entriesCount; $i++) {
 			$entry = [];
 			foreach ($data as $key => $values) {
-				$entry[$key] = $values[$i];
+				$entry[$key] = is_array($values) ? ($values[$i] ?? '') : $values;
 			}
 			$formattedData[] = $entry;
 		}
 
-		for($i = 0; $i < count($formattedData); $i++){
+		$added = 0;
+		for ($i = 0; $i < count($formattedData); $i++) {
 			$uploaded = $this->upload_file_to_gdrive_for_bulk($i);
-
-			$candidate_data = array_merge($formattedData[$i], $uploaded);
-
-			$ids = $this->recruitment_model->add_candidate($candidate_data);
+			$candidate_data = recruitment_merge_cv_upload_data($formattedData[$i], $uploaded);
+			$id = $this->recruitment_model->add_candidate($candidate_data);
+			if ($id) {
+				$added++;
+			}
 		}
-		
-		if ($ids) {
 
-			$success = true;
-			$message = _l('added_successfully', _l('candidate_profile'));
-			set_alert('success', $message);
+		if ($added > 0) {
+			set_alert('success', _l('added_successfully', _l('candidate_profile')) . ' (' . $added . ')');
+			redirect(admin_url('recruitment/candidate_profile'));
 		}
+
+		set_alert('warning', _l('problem_adding', _l('candidate_profile')));
 		redirect(admin_url('recruitment/candidatesaddmore'));
 	}
 
