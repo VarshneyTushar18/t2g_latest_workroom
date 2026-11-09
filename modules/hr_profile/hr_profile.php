@@ -513,8 +513,21 @@ function hr_contract_register_other_merge_fields($for)
 	return $for;
 }
 
+function hr_profile_license_environment_bypassed()
+{
+	if (function_exists('app_workroom_skip_greentech_module_license') && app_workroom_skip_greentech_module_license()) {
+		return true;
+	}
+	$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : (isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : '');
+
+	return strpos($host, '127.0.0.1') !== false || strpos($host, 'localhost') !== false;
+}
+
 function hr_profile_appint()
 {
+	if (hr_profile_license_environment_bypassed()) {
+		return;
+	}
 	$CI = &get_instance();
 	require_once 'libraries/gtsslib.php';
 	$hr_profile_api = new HRProfileLic();
@@ -529,6 +542,9 @@ function hr_profile_appint()
 function hr_profile_preactivate($module_name)
 {
 	if ($module_name['system_name'] == HR_PROFILE_MODULE_NAME) {
+		if (hr_profile_license_environment_bypassed()) {
+			return;
+		}
 		require_once 'libraries/gtsslib.php';
 		$hr_profile_api = new HRProfileLic();
 		$hr_profile_gtssres = $hr_profile_api->verify_license();
@@ -547,6 +563,9 @@ function hr_profile_preactivate($module_name)
 function hr_profile_predeactivate($module_name)
 {
 	if ($module_name['system_name'] == HR_PROFILE_MODULE_NAME) {
+		if (hr_profile_license_environment_bypassed()) {
+			return;
+		}
 		require_once 'libraries/gtsslib.php';
 		$hr_profile_api = new HRProfileLic();
 		$hr_profile_api->deactivate_license();

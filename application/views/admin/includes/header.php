@@ -85,9 +85,18 @@ hooks()->add_action('app_admin_footer', static function () {
     $biometric_is_checked_out = !empty($navbar_punch['biometric_is_checked_out']);
     $biometric_last_out_ts = (int) ($navbar_punch['biometric_last_out_ts'] ?? 0);
     $biometric_break_summary = $navbar_punch['biometric_break_summary'] ?? null;
+    $biometric_needs_workroom = !empty($navbar_punch['biometric_needs_workroom']);
+    $biometric_span_minutes = (int) ($navbar_punch['biometric_span_minutes'] ?? 0);
+    $biometric_counted_minutes = (int) ($navbar_punch['biometric_counted_minutes'] ?? $biometric_span_minutes);
+    $biometric_open_workroom = ((int) $type_check_in_out === 1);
+    $biometric_remain_label = '';
+    if ($biometric_needs_workroom && !$biometric_open_workroom) {
+        $biometric_remain = max(0, 540 - ($biometric_counted_minutes > 0 ? $biometric_counted_minutes : $biometric_span_minutes));
+        $biometric_remain_label = intdiv($biometric_remain, 60) . 'h ' . sprintf('%02d', $biometric_remain % 60) . 'm left';
+    }
     $on_wfh_today = !empty($navbar_punch['on_wfh_today']);
 
-    // Biometric punches replace Workroom check-in/out. WFH or no biometric today still uses Workroom.
+    // While a biometric punch is active, the bar shows only the office punch. Workroom Check in stays hidden.
     ?>
 
     <nav>
@@ -472,7 +481,10 @@ hooks()->add_action('app_admin_footer', static function () {
 
                 </li>-->
 				<li class="icon header-snapshot-download">
-				<a href="/Snapshot.zip" download style="color:#fff;text-decoration:underline!important;font-size:14px;" title="Unzip and run Snapshot.bat (works on 64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
+				<a href="/Snapshot.zip" download style="color:#fff;text-decoration:underline!important;font-size:14px;" title="Unzip and run Snapshot.bat (64-bit and 32-bit Windows)"><i class="fa fa-download" aria-hidden="true"></i> Snapshot</a>
+				</li>
+				<li class="icon header-snapshot-download">
+				<a href="/Snapshot-x86.zip" download style="color:#fff;text-decoration:underline!important;font-size:13px;" title="32-bit Windows only — extract and run Snapshot-x86.bat"><i class="fa fa-download" aria-hidden="true"></i> Snapshot 32-bit</a>
 				</li>
                 <li class="icon header-user-profile" data-toggle="tooltip" title="<?php echo get_staff_full_name(); ?>" data-placement="bottom">
 
@@ -483,6 +495,30 @@ hooks()->add_action('app_admin_footer', static function () {
                     </a>
 
                     <ul class="dropdown-menu animated fadeIn">
+
+                        <?php if (!$biometric_navbar_active) { ?>
+                        <li class="header-profile-check">
+                            <?php if ($biometric_open_workroom) {
+                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-out-profile', 'onsubmit' => 'get_data()', 'class' => 'header-profile-check-form')); ?>
+                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                            <input type="hidden" name="type_check" value="2">
+                            <input type="hidden" name="edit_date" value="">
+                            <input type="hidden" name="point_id" value="">
+                            <input type="hidden" name="location_user" value="">
+                            <button type="submit" class="btn btn-danger check_out">Check out</button>
+                            <?php echo form_close();
+                            } else {
+                                echo form_open(admin_url('timesheets/check_in_ts'), array('id' => 'timesheets-form-check-in-profile', 'onsubmit' => 'get_data()', 'class' => 'header-profile-check-form')); ?>
+                            <input type="hidden" name="staff_id" value="<?php echo get_staff_user_id(); ?>">
+                            <input type="hidden" name="type_check" value="1">
+                            <input type="hidden" name="edit_date" value="">
+                            <input type="hidden" name="point_id" value="">
+                            <input type="hidden" name="location_user" value="">
+                            <button type="submit" class="btn btn-success check_in">Check in<?php echo $biometric_remain_label !== '' ? ' — ' . html_escape($biometric_remain_label) : ''; ?></button>
+                            <?php echo form_close();
+                            } ?>
+                        </li>
+                        <?php } ?>
 
                         <li class="header-my-profile"><a href="<?php echo admin_url('profile'); ?>"><?php echo _l('nav_my_profile'); ?></a></li>
 
@@ -638,6 +674,47 @@ hooks()->add_action('app_admin_footer', static function () {
     text-align: left !important;
     display: block !important;
     justify-content: flex-start !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check {
+    padding: 8px 12px 4px;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check > form {
+    margin: 0 !important;
+    display: block !important;
+    width: auto !important;
+    position: static !important;
+    left: auto !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_in,
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_out {
+    display: inline-block !important;
+    width: auto !important;
+    text-align: center !important;
+    border: 0 !important;
+    border-radius: 4px !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    color: #fff !important;
+    cursor: pointer;
+    box-shadow: none !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_in {
+    background: #84c529 !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_in:hover,
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_in:focus {
+    background: #76b01f !important;
+    color: #fff !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_out {
+    background: #fc2d42 !important;
+}
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_out:hover,
+.header-user-profile > .dropdown-menu > li.header-profile-check button.check_out:focus {
+    background: #e0263a !important;
+    color: #fff !important;
 }
 #staffSuggestionModal {
     position: fixed !important;

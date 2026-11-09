@@ -10,10 +10,29 @@
     border: 1px solid #99f6e4;
     border-radius: 8px;
   }
+  #additional_timesheets table.table-table_additional_timesheets th:first-child,
+  #additional_timesheets table.table-table_additional_timesheets td:first-child {
+    width: 48px !important;
+    min-width: 48px;
+    max-width: 56px;
+    vertical-align: middle;
+  }
+  #additional_timesheets table.table-table_additional_timesheets .checkbox {
+    min-height: 22px;
+    padding-left: 22px;
+    margin: 0;
+  }
+  #additional_timesheets table.table-table_additional_timesheets .checkbox label {
+    cursor: pointer;
+  }
+  #additional_timesheets table.table-table_additional_timesheets .mass_select_all_wrap {
+    margin: 0;
+  }
 </style>
 
 <p class="t2g-reg-hint">
   Employees submit corrections from <strong>HRMS → My Attendance</strong>. Managers and HR review here — approve or reject pending requests.
+  <strong>Bulk approve:</strong> set <em>Filter by status → Pending</em>, tick rows (or the header box), then <em>Approve selected</em>. Approved/Rejected rows cannot be selected.
 </p>
 
 <?php
@@ -21,7 +40,7 @@
       && timesheets_can_final_approve_attendance();
   $checkbox_head = '';
   if ($can_bulk_approve) {
-      $checkbox_head = '<span class="hide"> - </span><div class="checkbox mass_select_all_wrap"><input type="checkbox" id="mass_select_all_reg" data-to-table="table_additional_timesheets"><label></label></div>';
+      $checkbox_head = '<span class="hide"> - </span><div class="checkbox mass_select_all_wrap"><input type="checkbox" id="mass_select_all_reg" data-to-table="table_additional_timesheets"><label for="mass_select_all_reg"></label></div>';
   }
 ?>
 <?php if ($can_bulk_approve) { ?>

@@ -9544,6 +9544,45 @@ public function add_requisition_ajax($data)
 	}
 
 	/**
+	 * Final-approve one pending leave application (HR / Super HR / Admin).
+	 *
+	 * @param int $request_id
+	 * @param int $approver_id
+	 * @return array{success:bool,message:string}
+	 */
+	public function approve_pending_leave_request($request_id, $approver_id = 0)
+	{
+		$request_id = (int) $request_id;
+		$approver_id = (int) ($approver_id ?: get_staff_user_id());
+		if ($request_id <= 0) {
+			return ['success' => false, 'message' => 'Invalid request.'];
+		}
+
+		$req = $this->db->where('id', $request_id)->get(db_prefix() . 'timesheets_requisition_leave')->row();
+		if (!$req) {
+			return ['success' => false, 'message' => 'Request not found.'];
+		}
+		if ((int) $req->status !== 0) {
+			return ['success' => false, 'message' => 'Not pending.'];
+		}
+
+		$applicant_id = (int) ($req->staff_id ?? 0);
+		if (!timesheets_can_final_approve_leave($approver_id, $applicant_id)) {
+			return ['success' => false, 'message' => 'Not allowed to approve this leave.'];
+		}
+
+		$rel_type = timesheets_requisition_leave_rel_type($req->type_of_leave ?? 0, $req->type_of_leave_text ?? '');
+		$this->update_approve_request($request_id, $rel_type, 1);
+		try {
+			$this->notify_leave_decision_to_employee($request_id, true, '', $approver_id);
+		} catch (Throwable $e) {
+			log_activity('Leave bulk approve notify failed #' . $request_id . ': ' . $e->getMessage());
+		}
+
+		return ['success' => true, 'message' => 'Approved'];
+	}
+
+	/**
 	 * Email employee + HOD when regularization is finally approved or rejected.
 	 *
 	 * @param int  $request_id

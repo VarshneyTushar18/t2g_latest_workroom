@@ -719,7 +719,34 @@ class Staff extends AdminController
             ];
         }
 
+        $this->sync_leave_summary_taken_from_cards($data);
+
         $this->load->view('admin/staff/leave_balance', $data);
+    }
+
+    /**
+     * Top "Leaves Taken" should match earned leave used against balance (approved + pending).
+     *
+     * @param array<string,mixed> $data
+     */
+    protected function sync_leave_summary_taken_from_cards(array &$data)
+    {
+        if (empty($data['summary']) || empty($data['leave_balance_cards'])) {
+            return;
+        }
+        // All Months keeps YTD leave_taken from the report; single-month view uses live cards.
+        if ((int) ($data['summary']['month'] ?? -1) === 0) {
+            return;
+        }
+        foreach ($data['leave_balance_cards'] as $card) {
+            if (($card['slug'] ?? '') !== 'earned-leave') {
+                continue;
+            }
+            $consumed = (float) ($card['consumed'] ?? 0);
+            $pending = (float) ($card['pending'] ?? 0);
+            $data['summary']['leave_taken'] = round(max($consumed, $pending), 2);
+            break;
+        }
     }
 
     /**

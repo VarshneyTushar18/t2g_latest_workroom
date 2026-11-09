@@ -1317,6 +1317,54 @@ function timesheets_can_final_approve_leave($staff_id = '', $applicant_staff_id 
 }
 
 /**
+ * Approval-chain rel_type for a leave requisition row.
+ *
+ * @param int|string $type_of_leave
+ * @param string     $type_of_leave_text
+ * @return string
+ */
+/**
+ * Normalize leave "applied on" date for UI (avoids 1970 when datecreated is missing/invalid).
+ *
+ * @param string|null $datecreated
+ * @param string|null $start_time fallback when datecreated empty
+ * @param bool        $as_html     when true, return muted em dash span for empty
+ * @return string
+ */
+function timesheets_format_leave_applied_date($datecreated, $start_time = null, $as_html = true)
+{
+	$raw = trim((string) $datecreated);
+	if ($raw === '' || strpos($raw, '0000-00-00') === 0) {
+		$raw = trim((string) $start_time);
+	}
+	$ts = $raw !== '' ? strtotime($raw) : false;
+	if (!$ts || $ts < 86400) {
+		return $as_html ? '<span class="text-muted">—</span>' : '—';
+	}
+
+	return _d(date('Y-m-d', $ts));
+}
+
+function timesheets_requisition_leave_rel_type($type_of_leave, $type_of_leave_text = '')
+{
+	$type_of_leave = (int) $type_of_leave;
+	switch ($type_of_leave) {
+		case 8:
+			return 'Leave';
+		case 2:
+			return 'maternity_leave';
+		case 4:
+			return 'private_work_without_pay';
+		case 1:
+			return 'sick_leave';
+		default:
+			$t = trim((string) $type_of_leave_text);
+
+			return $t !== '' ? $t : 'Leave';
+	}
+}
+
+/**
  * HOD / Manager may forward leave to Super HR (or reject), but cannot final-approve.
  *
  * @param int $applicant_staff_id
@@ -1995,6 +2043,10 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	$biometric_checkin_label = '';
 	$biometric_is_checked_out = false;
 	$biometric_last_out_ts = 0;
+	$biometric_first_ts = 0;
+	$biometric_span_minutes = 0;
+	$biometric_counted_minutes = 0;
+	$biometric_needs_workroom = false;
 	$biometric_break_summary = null;
 	$on_wfh_today = function_exists('timesheets_staff_uses_workroom_attendance')
 		&& timesheets_staff_uses_workroom_attendance($staff_id, date('Y-m-d'));
@@ -2022,7 +2074,22 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 					$biometric_checkin_label = date('H:i:s', (int) $bio_summary['first_ts']);
 				}
 				$biometric_is_checked_out = $bio_summary['is_checked_out'];
-				$biometric_last_out_ts = $bio_summary['last_ts'];
+				$biometric_last_out_ts = (int) $bio_summary['last_ts'];
+				$biometric_first_ts = (int) ($bio_summary['first_ts'] ?? 0);
+				if ($biometric_is_checked_out && $biometric_first_ts > 0 && $biometric_last_out_ts > $biometric_first_ts) {
+					$biometric_span_minutes = intdiv($biometric_last_out_ts - $biometric_first_ts, 60);
+					$topup_minutes = 0;
+					if (!empty($data_check_in_out[0]['date']) && (int) ($data_check_in_out[0]['type_check'] ?? 0) === 2 && !empty($data_check_in_out[1]['date'])) {
+						$wr_in = strtotime($data_check_in_out[1]['date']);
+						$wr_out = strtotime($data_check_in_out[0]['date']);
+						if ($wr_in !== false && $wr_out !== false && $wr_in >= $biometric_last_out_ts && $wr_out > $wr_in) {
+							$topup_minutes = intdiv($wr_out - $wr_in, 60);
+						}
+					}
+					$required_span = timesheets_required_span_minutes();
+					$biometric_counted_minutes = $biometric_span_minutes + $topup_minutes;
+					$biometric_needs_workroom = $biometric_counted_minutes < $required_span;
+				}
 				if (method_exists($CI->biometric_model, 'get_biometric_break_summary')) {
 					$biometric_break_summary = $CI->biometric_model->get_biometric_break_summary($biometric_row);
 				}
@@ -2031,6 +2098,7 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 	} catch (Throwable $e) {
 		$biometric_navbar_active = false;
 		$biometric_checkin_label = '';
+		$biometric_needs_workroom = false;
 		$biometric_break_summary = null;
 	}
 
@@ -2043,6 +2111,9 @@ function timesheets_admin_navbar_punch_context($cooldown_hours = 13)
 		'biometric_checkin_label' => $biometric_checkin_label,
 		'biometric_is_checked_out' => $biometric_is_checked_out,
 		'biometric_last_out_ts' => $biometric_last_out_ts,
+		'biometric_span_minutes' => $biometric_span_minutes,
+		'biometric_counted_minutes' => $biometric_counted_minutes,
+		'biometric_needs_workroom' => $biometric_needs_workroom,
 		'biometric_break_summary' => $biometric_break_summary,
 		'on_wfh_today' => $on_wfh_today,
 		'workroom_open_checkin' => $workroom_open_checkin,

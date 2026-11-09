@@ -126,8 +126,18 @@ if (!function_exists('format_leave_balance_number')) {
       $granted_label = format_leave_balance_number($card['granted']);
       $balance_label = format_leave_balance_number($card['balance']);
       $consumed_label = format_leave_balance_number($card['consumed']);
-      $show_foot = ((float) $card['granted'] > 0) || ((float) $card['consumed'] > 0);
+      $pending_val = (float) ($card['pending'] ?? 0);
+      $taken_display = (float) $card['consumed'];
+      if (($card['slug'] ?? '') === 'earned-leave') {
+        $taken_display = max($taken_display, $pending_val);
+      }
+      $taken_label = format_leave_balance_number($taken_display);
+      $show_foot = ((float) $card['granted'] > 0) || ((float) $card['consumed'] > 0) || $pending_val > 0;
       $is_lop = ($card['slug'] === 'loss-of-pay');
+      $progress_pct = (int) ($card['progress'] ?? 0);
+      if (($card['slug'] ?? '') === 'earned-leave' && (float) $card['granted'] > 0) {
+        $progress_pct = min(100, (int) round(($taken_display / (float) $card['granted']) * 100));
+      }
     ?>
       <div class="leave-balance-card" data-slug="<?php echo html_escape($card['slug']); ?>">
         <div class="leave-balance-card-head">
@@ -148,13 +158,15 @@ if (!function_exists('format_leave_balance_number')) {
           <?php if ($is_lop && (float) $card['granted'] <= 0 && (float) $card['consumed'] > 0) { ?>
           <div class="leave-balance-card-consumed"><?php echo $consumed_label; ?> day(s) taken (no grant — balance goes negative)</div>
           <?php } else { ?>
-          <div class="leave-balance-card-consumed"><?php echo $consumed_label; ?> of <?php echo $granted_label; ?> taken → remain <?php echo $balance_label; ?><?php
-            if (($card['slug'] ?? '') === 'earned-leave' && (float) ($card['pending'] ?? 0) > 0) {
-              echo ' · ' . format_leave_balance_number($card['pending']) . ' pending (not available until approved/cancelled)';
+          <div class="leave-balance-card-consumed"><?php echo $taken_label; ?> of <?php echo $granted_label; ?> taken → remain <?php echo $balance_label; ?><?php
+            if (($card['slug'] ?? '') === 'earned-leave' && $pending_val > 0 && $taken_display > (float) $card['consumed']) {
+              echo ' · includes ' . format_leave_balance_number($pending_val) . ' pending (returned if rejected)';
+            } elseif (($card['slug'] ?? '') === 'earned-leave' && $pending_val > 0) {
+              echo ' · pending approval (returned if rejected)';
             }
           ?></div>
           <?php } ?>
-          <div class="leave-balance-card-progress"><span style="width: <?php echo (int) $card['progress']; ?>%;"></span></div>
+          <div class="leave-balance-card-progress"><span style="width: <?php echo $progress_pct; ?>%;"></span></div>
         </div>
         <?php } ?>
       </div>

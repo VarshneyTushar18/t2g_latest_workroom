@@ -16,9 +16,9 @@ function app_init_admin_sidebar_menu_items()
 
     // Keep employee HRMS reachable even when the vendor timesheets module
     // deactivates itself after a transient license-verification failure.
-    // The underlying controllers remain available; permissions inside each
-    // destination continue to protect manager/HR-only functions.
-    if (is_staff_logged_in()) {
+    // When the module is active, timesheets.php registers the same tree — skip to avoid duplicates.
+    $timesheets_module_active = isset($CI->app_modules) && $CI->app_modules->is_active('timesheets');
+    if (is_staff_logged_in() && !$timesheets_module_active) {
         $CI->app_menu->add_sidebar_menu_item('timesheets', [
             'name' => 'HRMS',
             'href' => admin_url('timesheets/hrms_home'),

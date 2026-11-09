@@ -26,6 +26,13 @@
      //hide first column
      var hidden_columns = [0];
      $(table_registration_leave).DataTable().columns(hidden_columns).visible(false, false);
+     if ($.fn.DataTable.isDataTable(table_registration_leave)) {
+       table_registration_leave.on('draw.dt', function() {
+         t2gSyncLeaveSelectAllHeader();
+         t2gUpdateLeaveBulkBar();
+       });
+       t2gSyncLeaveSelectAllHeader();
+     }
      $.each(requisitionServerParams, function() {
       $('#status_filter').on('change', function() {
         table_registration_leave.DataTable().ajax.reload()
@@ -59,36 +66,84 @@
       "department_ats": "[name='department_ats[]']",
     };
 
-    // Latest submitted regularization first (request id desc, not attendance date).
-    initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [1], [11], addtimesheetServerParams, [1, 'desc']);
-    if ($.fn.DataTable.isDataTable(table_additional_timesheets)) {
-      table_additional_timesheets.DataTable().columns([1]).visible(false, false);
+    // Regularization table: init only when its tab is visible (init while hidden breaks checkbox hit areas).
+    var regApprovalsTableInited = false;
+    var regFilterHandlersBound = false;
+
+    function t2gAdjustRegApprovalsTable() {
+      if (!table_additional_timesheets.length || !$.fn.DataTable.isDataTable(table_additional_timesheets)) {
+        return;
+      }
+      var dt = table_additional_timesheets.DataTable();
+      dt.columns.adjust();
+      var resp = dt.responsive;
+      if (resp && typeof resp.recalc === 'function') {
+        resp.recalc();
+      }
     }
-    $.each(addtimesheetServerParams, function() {
-      $('#status_filter_ats').on('change', function() {
-        table_additional_timesheets.DataTable().ajax.reload()
-        .columns.adjust()
-        .responsive.recalc();
-      });
 
-      $('#rel_type_filter_ats').on('change', function() {
-        table_additional_timesheets.DataTable().ajax.reload()
-        .columns.adjust()
-        .responsive.recalc();
-      });
+    function t2gInitRegApprovalsTable() {
+      if (regApprovalsTableInited) {
+        t2gAdjustRegApprovalsTable();
+        return;
+      }
+      if (!table_additional_timesheets.length) {
+        return;
+      }
+      regApprovalsTableInited = true;
 
-      $('#chose_ats').on('change', function() {
-        table_additional_timesheets.DataTable().ajax.reload()
-        .columns.adjust()
-        .responsive.recalc();
-      });
+      // Col 0 = bulk checkbox (not sortable); col 1 = hidden id; default sort by id desc.
+      initDataTable(table_additional_timesheets, admin_url + 'timesheets/table_additional_timesheets', [0, 1], [0, 11], addtimesheetServerParams, [1, 'desc']);
+      if ($.fn.DataTable.isDataTable(table_additional_timesheets)) {
+        var dtAts = table_additional_timesheets.DataTable();
+        try {
+          dtAts.columns().every(function () {
+            if (this.index() === 0) {
+              this.orderData([1, 0]);
+            }
+          });
+        } catch (e2) { /* older DataTables: ignore */ }
 
-      $('#department_ats').on('change', function() {
-        table_additional_timesheets.DataTable().ajax.reload()
-        .columns.adjust()
-        .responsive.recalc();
-      });
+        table_additional_timesheets.DataTable().columns([1]).visible(false, false);
+        table_additional_timesheets.on('draw.dt', function() {
+          t2gSyncRegSelectAllHeader();
+          t2gUpdateRegBulkBar();
+        });
+        t2gSyncRegSelectAllHeader();
+        setTimeout(t2gAdjustRegApprovalsTable, 80);
+      }
+
+      if (!regFilterHandlersBound) {
+        regFilterHandlersBound = true;
+        $('#status_filter_ats').on('change', function() {
+          if (!$.fn.DataTable.isDataTable(table_additional_timesheets)) { return; }
+          table_additional_timesheets.DataTable().ajax.reload().columns.adjust();
+          t2gAdjustRegApprovalsTable();
+        });
+        $('#rel_type_filter_ats').on('change', function() {
+          if (!$.fn.DataTable.isDataTable(table_additional_timesheets)) { return; }
+          table_additional_timesheets.DataTable().ajax.reload().columns.adjust();
+          t2gAdjustRegApprovalsTable();
+        });
+        $('#chose_ats').on('change', function() {
+          if (!$.fn.DataTable.isDataTable(table_additional_timesheets)) { return; }
+          table_additional_timesheets.DataTable().ajax.reload().columns.adjust();
+          t2gAdjustRegApprovalsTable();
+        });
+        $('#department_ats').on('change', function() {
+          if (!$.fn.DataTable.isDataTable(table_additional_timesheets)) { return; }
+          table_additional_timesheets.DataTable().ajax.reload().columns.adjust();
+          t2gAdjustRegApprovalsTable();
+        });
+      }
+    }
+
+    $('a[data-toggle="tab"][href="#additional_timesheets"]').on('shown.bs.tab', function() {
+      t2gInitRegApprovalsTable();
     });
+    if ($('#additional_timesheets').hasClass('active')) {
+      t2gInitRegApprovalsTable();
+    }
 
 
     $('select[name="type_of_leave"]').on('change', function() {
@@ -1112,8 +1167,266 @@
 
 
 
+  function t2gLeaveTableEl() {
+    return $('table.table-table_registration_leave');
+  }
+
+  function t2gLeaveChecksOnPage() {
+    var $checks = $();
+    var $table = t2gLeaveTableEl();
+    if ($table.length && $.fn.DataTable.isDataTable($table)) {
+      $table.DataTable().rows({ page: 'current', search: 'applied' }).every(function() {
+        var node = this.node();
+        if (!node || $(node).hasClass('child')) {
+          return;
+        }
+        var $cb = $(node).find('input.leave-approve-check');
+        if ($cb.length) {
+          $checks = $checks.add($cb);
+        }
+      });
+      return $checks;
+    }
+    return $checks;
+  }
+
+  function t2gSyncLeaveSelectAllHeader() {
+    var $header = $('#mass_select_all_leave');
+    if (!$header.length) {
+      return;
+    }
+    var $checks = t2gLeaveChecksOnPage();
+    if (!$checks.length) {
+      $header.prop('checked', false);
+      return;
+    }
+    var checked = $checks.filter(':checked').length;
+    $header.prop('checked', $checks.length > 0 && checked === $checks.length);
+  }
+
+  function t2gSetLeaveChecksOnPage(checked) {
+    var matched = 0;
+    var $table = t2gLeaveTableEl();
+    if ($table.length && $.fn.DataTable.isDataTable($table)) {
+      $table.DataTable().rows({ page: 'current', search: 'applied' }).every(function() {
+        var node = this.node();
+        if (!node || $(node).hasClass('child')) {
+          return;
+        }
+        var $input = $(node).find('input.leave-approve-check');
+        if ($input.length) {
+          $input.prop('checked', checked);
+          matched++;
+        }
+      });
+    }
+    if (matched === 0) {
+      $('#mass_select_all_leave').prop('checked', false);
+      alert_float('info', 'No pending leave on this page that you can approve. Filter by status: Pending.');
+    }
+  }
+
+  function t2gCollectSelectedLeaveIds() {
+    var ids = [];
+    $('.leave-approve-check:checked').each(function() {
+      var id = parseInt($(this).val(), 10);
+      if (id > 0) {
+        ids.push(id);
+      }
+    });
+    return ids;
+  }
+
+  function t2gUpdateLeaveBulkBar() {
+    if (!$('#t2g_leave_bulk_bar').length) {
+      return;
+    }
+    var count = t2gCollectSelectedLeaveIds().length;
+    $('#t2g_leave_bulk_count').text(count);
+    if (count > 0) {
+      $('#t2g_leave_bulk_bar').show();
+    } else {
+      $('#t2g_leave_bulk_bar').hide();
+      $('#mass_select_all_leave').prop('checked', false);
+    }
+  }
+
+  $('body').on('click', '#registration_on_leave .leave-approve-check, #registration_on_leave #mass_select_all_leave, #registration_on_leave .mass_select_all_wrap label', function(e) {
+    e.stopPropagation();
+  });
+
+  $('body').on('change', '.leave-approve-check', function() {
+    t2gUpdateLeaveBulkBar();
+    var $checks = t2gLeaveChecksOnPage();
+    var total = $checks.length;
+    var checked = $checks.filter(':checked').length;
+    $('#mass_select_all_leave').prop('checked', total > 0 && total === checked);
+  });
+
+  $('body').on('change', '#mass_select_all_leave', function() {
+    t2gSetLeaveChecksOnPage($(this).prop('checked'));
+    t2gUpdateLeaveBulkBar();
+    t2gSyncLeaveSelectAllHeader();
+  });
+
+  $('#t2g_bulk_clear_leave_btn').on('click', function() {
+    $('.leave-approve-check, #mass_select_all_leave').prop('checked', false);
+    t2gUpdateLeaveBulkBar();
+  });
+
+  $('#t2g_bulk_approve_leave_btn').on('click', function() {
+    var ids = t2gCollectSelectedLeaveIds();
+    if (!ids.length) {
+      alert_float('warning', 'Select at least one pending leave on this page.');
+      return;
+    }
+    if (!confirm('Approve ' + ids.length + ' selected leave request(s)?')) {
+      return;
+    }
+    var payload = { ids: ids };
+    if (typeof csrfData !== 'undefined' && csrfData.token_name) {
+      payload[csrfData.token_name] = csrfData.hash;
+    }
+    $("body").append('<div class="dt-loader"></div>');
+    $.post(admin_url + 'timesheets/bulk_approve_leave', payload).done(function(response) {
+      $("body").find('.dt-loader').remove();
+      if (typeof response === 'string') {
+        try { response = JSON.parse(response); } catch (e) { response = {}; }
+      }
+      var approved = parseInt(response.approved, 10) || 0;
+      var failed = parseInt(response.failed, 10) || 0;
+      if (approved > 0) {
+        var msg = response.message || ('Approved ' + approved + ' leave request(s).');
+        if (failed > 0 && response.errors && response.errors.length) {
+          msg += ' ' + response.errors.slice(0, 3).join(' ');
+        }
+        alert_float(failed > 0 ? 'warning' : 'success', msg);
+        $('.leave-approve-check, #mass_select_all_leave').prop('checked', false);
+        t2gUpdateLeaveBulkBar();
+        if (typeof table_registration_leave !== 'undefined' && table_registration_leave.length && $.fn.DataTable.isDataTable(table_registration_leave)) {
+          table_registration_leave.DataTable().ajax.reload(null, false);
+        }
+        return;
+      }
+      var errMsg = response.message || 'Could not approve selected leave requests.';
+      if (response.errors && response.errors.length) {
+        errMsg += ' ' + response.errors.slice(0, 3).join(' ');
+      }
+      alert_float('warning', errMsg);
+    }).fail(function(xhr) {
+      $("body").find('.dt-loader').remove();
+      if (xhr && xhr.status === 419) {
+        alert_float('danger', 'Session expired. Refresh the page and try again.');
+        return;
+      }
+      alert_float('danger', 'Bulk approve failed. Please try again.');
+    });
+  });
+
+  function t2gRegTableEl() {
+    return $('table.table-table_additional_timesheets');
+  }
+
+  function t2gRegTableSelector() {
+    return '.table-table_additional_timesheets';
+  }
+
+  /** Cell that contains the bulk-approve checkbox (not always td:eq(0) when Responsive inserts child/detail rows). */
+  function t2gRegCheckboxCell($tr) {
+    var $cell = $tr.find('td').filter(function () {
+      return $(this).find('input.reg-approve-check').length > 0;
+    }).first();
+    return $cell.length ? $cell : $tr.find('td').eq(0);
+  }
+
+  function t2gRegChecksOnPage() {
+    var $checks = $();
+    var $table = t2gRegTableEl();
+    if ($table.length && $.fn.DataTable.isDataTable($table)) {
+      $table.DataTable().rows({ page: 'current', search: 'applied' }).every(function() {
+        var node = this.node();
+        if (!node || $(node).hasClass('child')) {
+          return;
+        }
+        var $cb = $(node).find('input.reg-approve-check');
+        if ($cb.length) {
+          $checks = $checks.add($cb);
+        }
+      });
+      return $checks;
+    }
+    $(t2gRegTableSelector() + ' tbody tr').each(function() {
+      if ($(this).hasClass('child')) {
+        return;
+      }
+      var $cb = t2gRegCheckboxCell($(this)).find('input.reg-approve-check');
+      if ($cb.length) {
+        $checks = $checks.add($cb);
+      }
+    });
+    return $checks;
+  }
+
+  function t2gSyncRegSelectAllHeader() {
+    var $header = $('#mass_select_all_reg');
+    if (!$header.length) {
+      return;
+    }
+    var $checks = t2gRegChecksOnPage();
+    if (!$checks.length) {
+      $header.prop('checked', false);
+      return;
+    }
+    var checked = $checks.filter(':checked').length;
+    $header.prop('checked', $checks.length > 0 && checked === $checks.length);
+  }
+
+  function t2gSetRegChecksOnPage(checked) {
+    var matched = 0;
+    var $table = t2gRegTableEl();
+    if ($table.length && $.fn.DataTable.isDataTable($table)) {
+      $table.DataTable().rows({ page: 'current', search: 'applied' }).every(function() {
+        var node = this.node();
+        if (!node || $(node).hasClass('child')) {
+          return;
+        }
+        var $input = $(node).find('input.reg-approve-check');
+        if ($input.length) {
+          $input.prop('checked', checked);
+          matched++;
+        }
+      });
+    } else {
+      $(t2gRegTableSelector() + ' tbody tr').each(function() {
+        if ($(this).hasClass('child')) {
+          return;
+        }
+        var $input = t2gRegCheckboxCell($(this)).find('input.reg-approve-check');
+        if ($input.length) {
+          $input.prop('checked', checked);
+          matched++;
+        }
+      });
+    }
+    if (matched === 0) {
+      $('#mass_select_all_reg').prop('checked', false);
+      alert_float('info', 'No pending requests on this page. Filter by status: Pending.');
+    }
+  }
+
+  function t2gCollectSelectedRegIds() {
+    var ids = [];
+    $('.reg-approve-check:checked').each(function() {
+      var id = parseInt($(this).val(), 10);
+      if (id > 0) {
+        ids.push(id);
+      }
+    });
+    return ids;
+  }
+
   function t2gUpdateRegBulkBar() {
-    var count = $('.reg-approve-check:checked').length;
+    var count = t2gCollectSelectedRegIds().length;
     $('#t2g_bulk_count').text(count);
     if (count > 0) {
       $('#t2g_reg_bulk_bar').show();
@@ -1123,17 +1436,22 @@
     }
   }
 
+  $('body').on('click', '#additional_timesheets .reg-approve-check, #additional_timesheets #mass_select_all_reg, #additional_timesheets .mass_select_all_wrap label', function(e) {
+    e.stopPropagation();
+  });
+
   $('body').on('change', '.reg-approve-check', function() {
     t2gUpdateRegBulkBar();
-    var total = $('.reg-approve-check').length;
-    var checked = $('.reg-approve-check:checked').length;
+    var $checks = t2gRegChecksOnPage();
+    var total = $checks.length;
+    var checked = $checks.filter(':checked').length;
     $('#mass_select_all_reg').prop('checked', total > 0 && total === checked);
   });
 
   $('body').on('change', '#mass_select_all_reg', function() {
-    var checked = $(this).prop('checked');
-    $('.reg-approve-check').prop('checked', checked);
+    t2gSetRegChecksOnPage($(this).prop('checked'));
     t2gUpdateRegBulkBar();
+    t2gSyncRegSelectAllHeader();
   });
 
   $('#t2g_bulk_clear_btn').on('click', function() {
@@ -1142,25 +1460,32 @@
   });
 
   $('#t2g_bulk_approve_btn').on('click', function() {
-    var ids = [];
-    $('.reg-approve-check:checked').each(function() {
-      ids.push(parseInt($(this).val(), 10));
-    });
+    var ids = t2gCollectSelectedRegIds();
     if (!ids.length) {
-      alert_float('warning', 'Select at least one pending request.');
+      alert_float('warning', 'Select at least one pending request on this page.');
       return;
     }
     if (!confirm('Approve ' + ids.length + ' selected regularization request(s)?')) {
       return;
     }
+    var payload = { ids: ids };
+    if (typeof csrfData !== 'undefined' && csrfData.token_name) {
+      payload[csrfData.token_name] = csrfData.hash;
+    }
     $("body").append('<div class="dt-loader"></div>');
-    $.post(admin_url + 'timesheets/bulk_approve_regularisation', { ids: ids }).done(function(response) {
+    $.post(admin_url + 'timesheets/bulk_approve_regularisation', payload).done(function(response) {
       $("body").find('.dt-loader').remove();
       if (typeof response === 'string') {
         try { response = JSON.parse(response); } catch (e) { response = {}; }
       }
-      if (response.success === true || response.success === 'true' || (response.approved && response.approved > 0)) {
-        alert_float('success', response.message || ('Approved ' + response.approved + ' request(s).'));
+      var approved = parseInt(response.approved, 10) || 0;
+      var failed = parseInt(response.failed, 10) || 0;
+      if (approved > 0) {
+        var msg = response.message || ('Approved ' + approved + ' request(s).');
+        if (failed > 0 && response.errors && response.errors.length) {
+          msg += ' ' + response.errors.slice(0, 3).join(' ');
+        }
+        alert_float(failed > 0 ? 'warning' : 'success', msg);
         $('.reg-approve-check, #mass_select_all_reg').prop('checked', false);
         t2gUpdateRegBulkBar();
         if (typeof table_additional_timesheets !== 'undefined' && table_additional_timesheets.length && $.fn.DataTable.isDataTable(table_additional_timesheets)) {
@@ -1168,9 +1493,17 @@
         }
         return;
       }
-      alert_float('warning', response.message || 'Could not approve selected requests.');
-    }).fail(function() {
+      var errMsg = response.message || 'Could not approve selected requests.';
+      if (response.errors && response.errors.length) {
+        errMsg += ' ' + response.errors.slice(0, 3).join(' ');
+      }
+      alert_float('warning', errMsg);
+    }).fail(function(xhr) {
       $("body").find('.dt-loader').remove();
+      if (xhr && xhr.status === 419) {
+        alert_float('danger', 'Session expired. Refresh the page and try again.');
+        return;
+      }
       alert_float('danger', 'Bulk approve failed. Please try again.');
     });
   });
@@ -1244,6 +1577,8 @@
         alert_float('success', response.message);
         if (rel_type === 'additional_timesheets' && typeof table_additional_timesheets !== 'undefined' && table_additional_timesheets.length && $.fn.DataTable.isDataTable(table_additional_timesheets)) {
           table_additional_timesheets.DataTable().ajax.reload(null, false);
+        } else if (typeof table_registration_leave !== 'undefined' && table_registration_leave.length && $.fn.DataTable.isDataTable(table_registration_leave)) {
+          table_registration_leave.DataTable().ajax.reload(null, false);
         } else {
           window.location.reload();
         }

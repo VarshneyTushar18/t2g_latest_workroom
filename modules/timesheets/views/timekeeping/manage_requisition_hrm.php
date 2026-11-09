@@ -197,6 +197,15 @@ $valid_cur_date = date('Y-m-d');
 
      <br>
 
+<?php if (function_exists('timesheets_can_final_approve_leave') && timesheets_can_final_approve_leave()) { ?>
+<div class="t2g-leave-bulk-bar mbot15" id="t2g_leave_bulk_bar" style="display:none;">
+  <button type="button" class="btn btn-success btn-sm" id="t2g_bulk_approve_leave_btn">
+    <i class="fa fa-check"></i> Approve selected (<span id="t2g_leave_bulk_count">0</span>)
+  </button>
+  <button type="button" class="btn btn-default btn-sm" id="t2g_bulk_clear_leave_btn">Clear selection</button>
+</div>
+<?php } ?>
+
      <div class="modal bulk_actions fade" id="table_registration_leave_bulk_actions" tabindex="-1" role="dialog">
 
       <div class="modal-dialog" role="document">
@@ -257,7 +266,7 @@ $table_data = array(
 
  _l('id'),
 
- '<span class="hide"> - </span><div class="checkbox mass_select_all_wrap"><input type="checkbox" id="mass_select_all" data-to-table="table_registration_leave"><label></label></div>',
+ '<span class="hide"> - </span><div class="checkbox mass_select_all_wrap"><input type="checkbox" id="mass_select_all_leave" data-to-table="table_registration_leave"><label for="mass_select_all_leave"></label></div>',
 _l('ID'),
 _l('EmpID'),
 

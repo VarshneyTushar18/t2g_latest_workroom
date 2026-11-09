@@ -124,11 +124,7 @@ $check = $this->input->get('check'); ?>
 					 <tr>
                       <td><?php echo _l('project_datecreated'); ?></td>
                       <td><?php 
-                      $datecreated = $request_leave->datecreated;
-                      if($datecreated == ''){
-                        $datecreated = $request_leave->start_time;
-                      }
-                      echo _d($datecreated); ?></td>
+                      echo timesheets_format_leave_applied_date($request_leave->datecreated ?? '', $request_leave->start_time ?? '', false); ?></td>
                 
                   <!-- handover recipients -->
                   <?php if($rel_type == 'Leave'){  ?>
