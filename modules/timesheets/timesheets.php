@@ -798,10 +798,19 @@ function auto_notification_of_approval_expiration() {
 	return;
 }
 
-function timesheets_appint(){
-    // Local PHP built-in server often fails license IP checks and auto-deactivates the module.
+function timesheets_license_environment_bypassed()
+{
+    if (function_exists('app_workroom_skip_greentech_module_license') && app_workroom_skip_greentech_module_license()) {
+        return true;
+    }
     $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : (isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : '');
-    if (strpos($host, '127.0.0.1') !== false || strpos($host, 'localhost') !== false) {
+
+    return strpos($host, '127.0.0.1') !== false || strpos($host, 'localhost') !== false;
+}
+
+function timesheets_appint(){
+    // Local / staging: skip vendor verify so the module is not auto-deactivated.
+    if (timesheets_license_environment_bypassed()) {
         return;
     }
     $CI = & get_instance();    
@@ -815,7 +824,10 @@ function timesheets_appint(){
     }    
 }
 function timesheets_preactivate($module_name){
-    if ($module_name['system_name'] == TIMESHEETS_MODULE_NAME) {             
+    if ($module_name['system_name'] == TIMESHEETS_MODULE_NAME) {
+        if (timesheets_license_environment_bypassed()) {
+            return;
+        }
         require_once 'libraries/gtsslib.php';
         $timesheets_api = new TimesheetLic();
         $timesheets_gtssres = $timesheets_api->verify_license();          
@@ -841,6 +853,9 @@ function timesheets_preactivate($module_name){
 }
 function timesheets_predeactivate($module_name){
     if ($module_name['system_name'] == TIMESHEETS_MODULE_NAME) {
+        if (timesheets_license_environment_bypassed()) {
+            return;
+        }
         require_once 'libraries/gtsslib.php';
         $timesheets_api = new TimesheetLic();
         $timesheets_api->deactivate_license();
@@ -848,6 +863,9 @@ function timesheets_predeactivate($module_name){
 }
 function timesheets_uninstall($module_name){
     if ($module_name['system_name'] == TIMESHEETS_MODULE_NAME) {
+        if (timesheets_license_environment_bypassed()) {
+            return;
+        }
         require_once 'libraries/gtsslib.php';
         $timesheets_api = new TimesheetLic();
         $timesheets_api->deactivate_license();

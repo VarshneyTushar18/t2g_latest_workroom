@@ -99,9 +99,18 @@ $output = $result['output'];
 $rResult = $result['rResult'];
 foreach ($rResult as $aRow) {
 	$row = [];
-	$row[] = $aRow[db_prefix() . 'timesheets_requisition_leave.id'];
+	$leave_id = (int) $aRow[db_prefix() . 'timesheets_requisition_leave.id'];
+	$row[] = $leave_id;
 
-	$row[] = '<div class="checkbox"><input type="checkbox" value="' . $aRow[db_prefix() . 'timesheets_requisition_leave.id'] . '"><label></label></div>';
+	$leave_applicant_id = (int) ($aRow['leave_staff_id'] ?? $aRow[db_prefix() . 'timesheets_requisition_leave.staff_id'] ?? 0);
+	$rel_type = timesheets_requisition_leave_rel_type($aRow['type_of_leave'] ?? 0, $aRow['type_of_leave_text'] ?? '');
+	$can_bulk_approve = (int) $aRow['status'] === 0 && timesheets_can_final_approve_leave($user_id, $leave_applicant_id);
+	if ($can_bulk_approve) {
+		$cb_id = 'leave_approve_' . $leave_id;
+		$row[] = '<div class="checkbox"><input type="checkbox" id="' . $cb_id . '" class="leave-approve-check" value="' . $leave_id . '" data-rel-type="' . html_escape($rel_type) . '"><label for="' . $cb_id . '"></label></div>';
+	} else {
+		$row[] = '<span class="text-muted">—</span>';
+	}
 	$row[] = $aRow[db_prefix() . 'timesheets_requisition_leave.id'];
 	$row[] = $aRow['staff_identifi'];
 	$row[] = $aRow['firstname'];
@@ -191,7 +200,9 @@ $row[] = '<p>' . $aRow['type_of_leave_text'] . '</p>';
 		$row[] = '<span class="label label-danger  mr-1 mb-1 mt-1">' . _l('Absent') . '</span>';
 	}
 
-	$row[] = _d(date('Y-m-d', strtotime($aRow[db_prefix() . 'timesheets_requisition_leave.datecreated'])));
+	$applied_created = $aRow['datecreated'] ?? $aRow[db_prefix() . 'timesheets_requisition_leave.datecreated'] ?? '';
+	$applied_start = $aRow[db_prefix() . 'timesheets_requisition_leave.start_time'] ?? '';
+	$row[] = timesheets_format_leave_applied_date($applied_created, $applied_start, true);
 
 	$leave_applicant_id = (int) ($aRow['leave_staff_id'] ?? $aRow[db_prefix() . 'timesheets_requisition_leave.staff_id'] ?? 0);
 	$action_option = '<div class="row">';

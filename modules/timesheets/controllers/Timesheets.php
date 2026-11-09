@@ -2676,7 +2676,7 @@ class timesheets extends AdminController
 
 
 
-			$this->timesheets_model->edit_timesheets($additional_timesheet);
+			$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 
 			try {
 				$this->timesheets_model->notify_regularisation_decision(
@@ -3957,7 +3957,7 @@ class timesheets extends AdminController
 				}
 
 				$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], 1);
-				$this->timesheets_model->edit_timesheets($additional_timesheet);
+				$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 				try {
 					$this->timesheets_model->notify_regularisation_decision(
 						(int) $data['rel_id'],
@@ -4054,7 +4054,7 @@ class timesheets extends AdminController
 								->get(db_prefix() . 'timesheets_additional_timesheet')
 								->row();
 							if ($additional_timesheet) {
-								$this->timesheets_model->edit_timesheets($additional_timesheet);
+								$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 							}
 						} elseif (($data['rel_type'] ?? '') !== 'additional_timesheets') {
 							$note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
@@ -4194,7 +4194,66 @@ class timesheets extends AdminController
 		}
 
 		echo json_encode([
-			'success' => $approved > 0 && $failed === 0,
+			'success' => $approved > 0,
+			'approved' => $approved,
+			'failed' => $failed,
+			'message' => $message,
+			'errors' => $errors,
+		]);
+		die();
+	}
+
+	/**
+	 * Bulk approve pending leave applications (final approvers only).
+	 */
+	public function bulk_approve_leave()
+	{
+		if (!$this->input->is_ajax_request()) {
+			show_404();
+		}
+
+		if (!timesheets_can_final_approve_leave()) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Only Super HR / HR / Admin / Super Admin can bulk-approve leave.',
+			]);
+			die();
+		}
+
+		$ids = $this->input->post('ids');
+		if (!is_array($ids)) {
+			$ids = preg_split('/\s*,\s*/', trim((string) $ids), -1, PREG_SPLIT_NO_EMPTY);
+		}
+		$ids = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+		if (empty($ids)) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Select at least one pending leave on this page.',
+			]);
+			die();
+		}
+
+		$approved = 0;
+		$failed = 0;
+		$errors = [];
+
+		foreach ($ids as $id) {
+			$result = $this->timesheets_model->approve_pending_leave_request($id, (int) get_staff_user_id());
+			if (!empty($result['success'])) {
+				$approved++;
+				continue;
+			}
+			$failed++;
+			$errors[] = '#' . $id . ': ' . ($result['message'] ?? 'Failed');
+		}
+
+		$message = $approved . ' leave request(s) approved';
+		if ($failed > 0) {
+			$message .= ', ' . $failed . ' failed';
+		}
+
+		echo json_encode([
+			'success' => $approved > 0,
 			'approved' => $approved,
 			'failed' => $failed,
 			'message' => $message,

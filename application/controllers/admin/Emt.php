@@ -1182,12 +1182,12 @@ class Emt extends AdminController
 
 	private function formatSnapshotLoginTime($isoTime, $fileName)
 	{
-		$ts = strtotime((string) $isoTime);
-		if ($ts) {
-			return date('g:i A', $ts);
+		$formatted = $this->Emt_model->formatSnapshotIstTime($isoTime);
+		if ($formatted !== '') {
+			return $formatted;
 		}
-		if (preg_match('/(\d{1,2})[:\-](\d{2})/', (string) $fileName, $m)) {
-			return date('g:i A', strtotime($m[1] . ':' . $m[2]));
+		if (preg_match('/_(\d{2})(\d{2})(\d{2})/', (string) $fileName, $m)) {
+			return $m[1] . ':' . $m[2];
 		}
 
 		return '';

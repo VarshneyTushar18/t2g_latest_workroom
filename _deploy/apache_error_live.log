@@ -1,0 +1,2 @@
+[Sat Oct 24 00:00:04.571382 2026] [mpm_prefork:notice] [pid 515496] AH00163: Apache/2.4.58 (Ubuntu) OpenSSL/3.0.13 configured -- resuming normal operations
+[Sat Oct 24 00:00:04.571424 2026] [core:notice] [pid 515496] AH00094: Command line: '/usr/sbin/apache2'

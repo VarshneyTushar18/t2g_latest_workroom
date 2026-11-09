@@ -170,7 +170,7 @@ function get_data(){
  "use strict";
  var route_point = $('#route_point').val();
  $('input[name="point_id"]').val(route_point);
- $('#timesheets-form-check-in .check_in').attr('disabled', 'disabled');
+ $('#timesheets-form-check-in .check_in, #timesheets-form-check-in-profile .check_in').attr('disabled', 'disabled');
 //  $('#timesheets-form-check-out .check_out').attr('disabled', 'disabled');
 }
 

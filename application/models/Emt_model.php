@@ -457,6 +457,32 @@ public function get()
     }
 
     /**
+     * Snapshot rows are stored with the server clock, which is UTC.
+     * Show them as India time, 24-hour (09:53), not 4:23 AM.
+     */
+    public function formatSnapshotIstTime($value)
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        $value = trim((string) $value);
+        try {
+            if (is_numeric($value)) {
+                $dt = new DateTime('@' . (int) $value);
+            } elseif (preg_match('/(?:Z|[+\-]\d{2}:?\d{2})$/i', $value)) {
+                $dt = new DateTime($value);
+            } else {
+                $dt = new DateTime($value, new DateTimeZone('UTC'));
+            }
+            $dt->setTimezone(new DateTimeZone('Asia/Kolkata'));
+
+            return $dt->format('H:i');
+        } catch (Exception $e) {
+            return '';
+        }
+    }
+
+    /**
      * Allow snapshots shortly before biometric/workroom check-in (early desk login).
      */
     private function snapshotReportCheckinAlignGraceSeconds()
@@ -708,8 +734,8 @@ public function get()
                 'report_date_ymd'      => $reportDateYmd,
                 'first_checkin'        => $this->formatSnapshotReportTime($firstCheckinRaw),
                 'first_checkin_raw'    => is_numeric($firstCheckinRaw) ? date('Y-m-d H:i:s', (int) $firstCheckinRaw) : (string) $firstCheckinRaw,
-                'snapshot_login'       => $this->formatSnapshotReportTime($snapLogin),
-                'snapshot_logout'      => $this->formatSnapshotReportTime($snapLogout),
+                'snapshot_login'       => $this->formatSnapshotIstTime($snapLogin),
+                'snapshot_logout'      => $this->formatSnapshotIstTime($snapLogout),
                 'snapshot_login_raw'   => $snapLogin,
                 'snapshot_logout_raw'  => $snapLogout,
                 'snapshot_logged_in'   => $snapshotLoggedIn,
@@ -780,12 +806,12 @@ public function get()
             }
             if ($login !== '') {
                 $row['snapshot_login_raw'] = $login;
-                $row['snapshot_login'] = $this->formatSnapshotReportTime($login);
+                $row['snapshot_login'] = $this->formatSnapshotIstTime($login);
                 $row['snapshot_logged_in'] = true;
             }
             if ($logout !== '') {
                 $row['snapshot_logout_raw'] = $logout;
-                $row['snapshot_logout'] = $this->formatSnapshotReportTime($logout);
+                $row['snapshot_logout'] = $this->formatSnapshotIstTime($logout);
                 $row['snapshot_logged_in'] = true;
             }
             if ($row['snapshot_login_raw'] !== '' && $row['snapshot_logout_raw'] === '') {
@@ -1184,7 +1210,7 @@ public function get()
             $staffIds[] = (int) $row->staffid;
             $loginTime = '';
             if (!empty($row->login_time)) {
-                $loginTime = date('g:i A', strtotime($row->login_time));
+                $loginTime = $this->formatSnapshotIstTime($row->login_time);
             }
             $out[] = [
                 'staffid'            => (int) $row->staffid,
@@ -1215,7 +1241,7 @@ public function get()
                 }
                 if ($item['login_time'] === '' && !empty($dbExtra[$sid]['login_time'])) {
                     $item['login_time_raw'] = $dbExtra[$sid]['login_time'];
-                    $item['login_time'] = date('g:i A', strtotime($dbExtra[$sid]['login_time']));
+                    $item['login_time'] = $this->formatSnapshotIstTime($dbExtra[$sid]['login_time']);
                 }
                 if ($item['screenshot_file_id'] === '' && !empty($dbExtra[$sid]['screenshot_file_id'])) {
                     $item['screenshot_file_id'] = $dbExtra[$sid]['screenshot_file_id'];

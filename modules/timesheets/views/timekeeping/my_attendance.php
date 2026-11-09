@@ -404,8 +404,11 @@
     if (day.status === 'half_day' || code === 'HD') {
       return 'half';
     }
-    if (hrs + 0.001 >= presentMin || day.status === 'ok' || code === 'P') {
-      return hrs + 0.001 >= presentMin ? 'ok' : (hrs + 0.001 >= halfMin ? 'half' : (hrs > 0 ? 'bad' : 'neutral'));
+    if (day.status === 'ok' || code === 'P') {
+      return 'ok';
+    }
+    if (hrs + 0.001 >= presentMin) {
+      return 'ok';
     }
     if (day.status === 'short_hours') {
       return hrs + 0.001 >= halfMin ? 'half' : 'bad';
@@ -505,7 +508,7 @@
       html += '<span class="t2g-att-cal-num">' + d + '</span>';
       if (day && day.code) html += dayCodeHtml(day);
       /* Full punch log lives in the right panel — keep calendar cells compact (date + code only). */
-      if (day && day.attendance_source === 'biometric' && !day.full_bridge_punches) {
+      if (day && (day.attendance_source === 'biometric' || day.attendance_source === 'biometric+workroom')) {
         if ((day.check_in || day.first_in) && (day.check_out || day.last_out)) {
           var calIn = day.check_in || day.first_in;
           var calOut = day.check_out || day.last_out;

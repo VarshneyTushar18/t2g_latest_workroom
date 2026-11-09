@@ -1032,9 +1032,23 @@ class Biometric_model extends App_Model
 
             $allow_rollover = $this->biometric_row_allows_midnight_rollover($row, $parsed_punches);
             if (!empty($filters['staff']) && function_exists('is_night_shift')) {
-                $allow_rollover = is_night_shift((int) $filters['staff'])
-                    ? true
-                    : false;
+                if (is_night_shift((int) $filters['staff'])) {
+                    $allow_rollover = true;
+                } else {
+                    // Day-shift staff stay on the sheet date (00:30 stays a noon typo, not the next day).
+                    // A shift that starts in the evening still crosses midnight, even if the
+                    // department is not named Night. Otherwise 03:36 is crushed back onto the same evening
+                    // and the calendar shows a short day.
+                    $first_hour = null;
+                    foreach ($parsed_punches as $pr) {
+                        $h = $this->punch_time_hour((string) ($pr['time'] ?? ''));
+                        if ($h >= 0) {
+                            $first_hour = $h;
+                            break;
+                        }
+                    }
+                    $allow_rollover = ($first_hour !== null && $first_hour >= 15);
+                }
             }
             $resolved_punches = $this->attach_punch_timestamps(
                 $att_dt->format('Y-m-d'),
