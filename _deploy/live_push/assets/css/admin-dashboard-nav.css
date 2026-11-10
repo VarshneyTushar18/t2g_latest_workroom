@@ -1,0 +1,317 @@
+/**
+ * Workroom admin header — single horizontal row, vertically centered.
+ */
+
+body.admin #header .navbar-nav > li {
+  float: none !important;
+}
+
+body.admin #header nav .navbar-nav > li > a {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  height: 62px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+body.admin #header nav .navbar-nav > li#headerActionButtons {
+  display: flex !important;
+  align-items: center !important;
+  align-self: center !important;
+}
+
+body.admin #header #timesheets-form-check-in,
+body.admin #header #timesheets-form-check-out {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  vertical-align: middle;
+}
+
+body #header {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center !important;
+  height: 62px !important;
+  min-height: 62px !important;
+  max-height: 62px !important;
+  box-sizing: border-box;
+}
+
+/* Orange theme ::before adds a 10px blurred band above the bar (reads as white gap). */
+body.admin #header::before {
+  display: none !important;
+  content: none !important;
+  height: 0 !important;
+}
+
+body.admin #header {
+  background: var(--primary-color, #141e46) !important;
+  border-bottom: none !important;
+  overflow: hidden;
+}
+
+#header > .hide-menu {
+  float: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  height: 62px;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  line-height: 1;
+}
+
+#header > nav {
+  flex: 1 1 auto;
+  min-width: 0;
+  float: none !important;
+  height: 62px !important;
+  max-height: 62px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+#header > nav > div.t2g-header-bar {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center !important;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  width: 100%;
+  height: 62px !important;
+  min-height: 62px !important;
+  max-height: 62px !important;
+  padding: 0 8px 0 0;
+  box-sizing: border-box;
+  gap: 8px;
+}
+
+#header .t2g-header-left-cluster {
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 62px;
+}
+
+#header .navbar-nav.header-primary-nav {
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center !important;
+  gap: 12px;
+  margin: 0 !important;
+  padding: 0 !important;
+  float: none !important;
+  height: 62px;
+}
+
+#header .navbar-nav.header-primary-nav > li {
+  float: none !important;
+  display: flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 62px;
+}
+
+#header .navbar-nav.header-primary-nav > li > a {
+  color: #fff !important;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 62px;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+}
+
+#header #headerActionButtons.header-action-buttons {
+  display: inline-flex !important;
+  flex-wrap: nowrap;
+  align-items: center !important;
+  align-self: center !important;
+  gap: 8px;
+  list-style: none;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 62px;
+  position: static !important;
+}
+
+#header #headerActionButtons .header-action-form {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: static !important;
+  vertical-align: middle;
+}
+
+#header #headerActionButtons .btn.check_in,
+#header #headerActionButtons .btn.check_out,
+#header #headerActionButtons .btn {
+  margin: 0 !important;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+/* Keep right utilities inside the header bar (override theme fixed top-right). */
+body.admin #header .navbar-nav.navbar-right,
+body.admin #header .navbar-nav.navbar-right.right-elements,
+#header .navbar-nav.navbar-right,
+#header .navbar-nav.navbar-right.right-elements {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  transform: none !important;
+  float: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center !important;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 2px;
+  height: 62px;
+}
+
+#header .navbar-nav.navbar-right > li {
+  float: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center;
+  margin: 0 !important;
+  position: relative;
+  height: 62px;
+}
+
+#header .navbar-nav.navbar-right > li > a {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  color: #fff !important;
+}
+
+#header .navbar-nav.navbar-right .staff-profile-image-small {
+  width: 32px !important;
+  height: 32px !important;
+  margin: 0 !important;
+  vertical-align: middle;
+}
+
+#header .navbar-nav.navbar-right .top-timers > span,
+#header .navbar-nav.navbar-right #top-timers > span {
+  margin-top: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center;
+}
+
+#header .navbar-nav.navbar-right #top-timers svg,
+#header .navbar-nav.navbar-right .header-notifications svg {
+  color: #fff !important;
+}
+
+/* Started-timer count: middle of right edge of clock (not top-right). */
+#header #top-timers.icon-started-timers-parent,
+#header a#top-timers.top-timers {
+  position: relative !important;
+}
+
+#header #top-timers .icon-started-timers,
+#header a#top-timers .icon-started-timers {
+  top: 50% !important;
+  margin-top: 0 !important;
+  transform: translateY(-50%) !important;
+  right: -6px !important;
+  left: auto !important;
+}
+
+[dir="rtl"] #header a#top-timers .icon-started-timers {
+  right: auto !important;
+  left: -6px !important;
+}
+
+#header .header-source-tag {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
+#header .header-biometric-pill,
+#header .header-workroom-pill,
+#header .header-biometric-break-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  color: #fff !important;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  height: 26px;
+  margin: 0 !important;
+}
+
+#header .header-biometric-pill {
+  background-color: #0a1140 !important;
+}
+
+#header .header-biometric-break-pill {
+  background-color: #b45309 !important;
+}
+
+#header .header-workroom-pill {
+  background-color: #ca8a04 !important;
+}
+
+@media screen and (min-width: 992px) {
+  #header .mobile-menu {
+    display: none !important;
+  }
+}
+
+@media screen and (max-width: 991px) {
+  body #header,
+  #header > nav,
+  #header > nav > div.t2g-header-bar {
+    height: auto !important;
+    min-height: 56px !important;
+    max-height: none !important;
+  }
+
+  #header .navbar-nav.header-primary-nav,
+  #header .navbar-nav.header-primary-nav > li,
+  #header #headerActionButtons.header-action-buttons {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  #header .navbar-nav.navbar-right {
+    flex-wrap: wrap;
+    height: auto;
+  }
+}

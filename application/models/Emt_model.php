@@ -503,6 +503,125 @@ public function get()
     }
 
     /**
+     * Snapshot rows are stored with the server clock, which is UTC.
+     * Show them as India time, 24-hour (09:53), not 4:23 AM.
+     */
+    public function formatSnapshotIstTime($value)
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        $value = trim((string) $value);
+        try {
+            if (is_numeric($value)) {
+                $dt = new DateTime('@' . (int) $value);
+            } elseif (preg_match('/(?:Z|[+\-]\d{2}:?\d{2})$/i', $value)) {
+                $dt = new DateTime($value);
+            } else {
+                $dt = new DateTime($value, new DateTimeZone('UTC'));
+            }
+            $dt->setTimezone(new DateTimeZone('Asia/Kolkata'));
+
+            return $dt->format('H:i');
+        } catch (Exception $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Allow snapshots shortly before biometric/workroom check-in (early desk login).
+     */
+    private function snapshotReportCheckinAlignGraceSeconds()
+    {
+        return 30 * 60;
+    }
+
+    /**
+     * @param int|string $firstCheckinRaw unix timestamp or datetime string
+     */
+    private function snapshotReportAlignMinUnix($firstCheckinRaw)
+    {
+        if ($firstCheckinRaw === null || $firstCheckinRaw === '') {
+            return 0;
+        }
+        $ts = is_numeric($firstCheckinRaw) ? (int) $firstCheckinRaw : strtotime((string) $firstCheckinRaw);
+        if (!$ts) {
+            return 0;
+        }
+
+        return max(0, $ts - $this->snapshotReportCheckinAlignGraceSeconds());
+    }
+
+    /**
+     * First/last drive row on a day at or after the attendance-aligned floor.
+     *
+     * @return array{login:string, logout:string}
+     */
+    private function snapshotDriveLoginLogoutForStaffAfter($staffId, $dayStart, $dayEnd, $minUnix, $dayFolderId = '')
+    {
+        $staffId = (int) $staffId;
+        $minUnix = (int) $minUnix;
+        if ($staffId < 1 || $minUnix < 1 || !$this->db->table_exists(db_prefix() . 'staff_drive_data')) {
+            return ['login' => '', 'logout' => ''];
+        }
+
+        unset($dayFolderId);
+        $floorTs = max(strtotime((string) $dayStart) ?: 0, $minUnix);
+        $floorDt = date('Y-m-d H:i:s', $floorTs);
+        $driveTable = db_prefix() . 'staff_drive_data';
+
+        $row = $this->db->query(
+            'SELECT MIN(date_time) AS snapshot_login, MAX(date_time) AS snapshot_logout
+             FROM ' . $driveTable . '
+             WHERE staff_id = ? AND date_time >= ? AND date_time <= ?',
+            [$staffId, $floorDt, $dayEnd]
+        )->row();
+
+        $login = (string) ($row->snapshot_login ?? '');
+        $logout = (string) ($row->snapshot_logout ?? '');
+        if ($login !== '' && strtotime($login) < $minUnix) {
+            $login = '';
+        }
+        if ($logout !== '' && strtotime($logout) < $minUnix) {
+            $logout = '';
+        }
+        if ($login === '' && $logout === '') {
+            return ['login' => '', 'logout' => ''];
+        }
+        if ($logout === '' && $login !== '') {
+            $logout = $login;
+        }
+
+        return ['login' => $login, 'logout' => $logout];
+    }
+
+    /**
+     * Drop pre-check-in snapshot noise when attendance check-in is known.
+     *
+     * @param array{login:string,logout:string} $times
+     * @return array{login:string,logout:string}
+     */
+    private function snapshotAlignDriveTimesToCheckin(array $times, $firstCheckinRaw, $staffId, $dayStart, $dayEnd, $dayFolderId = '')
+    {
+        $alignMin = $this->snapshotReportAlignMinUnix($firstCheckinRaw);
+        if ($alignMin < 1) {
+            return $times;
+        }
+
+        $login = trim((string) ($times['login'] ?? ''));
+        if ($login === '') {
+            return $times;
+        }
+
+        $loginTs = strtotime($login);
+        if ($loginTs && $loginTs >= $alignMin) {
+            return $times;
+        }
+
+        return $this->snapshotDriveLoginLogoutForStaffAfter($staffId, $dayStart, $dayEnd, $alignMin, $dayFolderId);
+    }
+
+    /**
      * Min/max snapshot activity for staff on one day (DB), including rows tied to date folders.
      *
      * @param int[] $staffIds
@@ -639,6 +758,18 @@ public function get()
 
             $snapLogin = $snapshotTimes[$staffId]['login'] ?? '';
             $snapLogout = $snapshotTimes[$staffId]['logout'] ?? '';
+            if ($firstCheckinRaw !== '') {
+                $aligned = $this->snapshotAlignDriveTimesToCheckin(
+                    ['login' => $snapLogin, 'logout' => $snapLogout],
+                    $firstCheckinRaw,
+                    $staffId,
+                    $dayStart,
+                    $dayEnd,
+                    (string) ($dayFolderByStaffId[$staffId] ?? '')
+                );
+                $snapLogin = $aligned['login'];
+                $snapLogout = $aligned['logout'];
+            }
             $hasDayFolder = !empty($dayFolderByStaffId[$staffId]);
             $snapshotLoggedIn = ($snapLogin !== '' || $snapLogout !== '' || $hasDayFolder);
 
@@ -646,10 +777,11 @@ public function get()
                 'staffid'              => $staffId,
                 'name'                 => trim($row->firstname . ' ' . $row->lastname),
                 'department_name'      => (string) ($row->department_name ?: '—'),
+                'report_date_ymd'      => $reportDateYmd,
                 'first_checkin'        => $this->formatSnapshotReportTime($firstCheckinRaw),
                 'first_checkin_raw'    => is_numeric($firstCheckinRaw) ? date('Y-m-d H:i:s', (int) $firstCheckinRaw) : (string) $firstCheckinRaw,
-                'snapshot_login'       => $this->formatSnapshotReportTime($snapLogin),
-                'snapshot_logout'      => $this->formatSnapshotReportTime($snapLogout),
+                'snapshot_login'       => $this->formatSnapshotIstTime($snapLogin),
+                'snapshot_logout'      => $this->formatSnapshotIstTime($snapLogout),
                 'snapshot_login_raw'   => $snapLogin,
                 'snapshot_logout_raw'  => $snapLogout,
                 'snapshot_logged_in'   => $snapshotLoggedIn,
@@ -698,14 +830,34 @@ public function get()
             }
             $login = trim((string) ($timesByStaff[$sid]['login'] ?? ''));
             $logout = trim((string) ($timesByStaff[$sid]['logout'] ?? ''));
+            $checkinRaw = $row['first_checkin_raw'] ?? '';
+            if ($checkinRaw !== '') {
+                $reportYmd = (string) ($row['report_date_ymd'] ?? '');
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $reportYmd)) {
+                    $reportYmd = is_numeric($checkinRaw)
+                        ? date('Y-m-d', (int) $checkinRaw)
+                        : substr((string) $checkinRaw, 0, 10);
+                }
+                [$dayStart, $dayEnd] = $this->snapshotDatetimeBoundsForYmd($reportYmd);
+                $aligned = $this->snapshotAlignDriveTimesToCheckin(
+                    ['login' => $login, 'logout' => $logout],
+                    $checkinRaw,
+                    $sid,
+                    $dayStart,
+                    $dayEnd,
+                    (string) ($row['snapshot_day_folder'] ?? '')
+                );
+                $login = $aligned['login'];
+                $logout = $aligned['logout'];
+            }
             if ($login !== '') {
                 $row['snapshot_login_raw'] = $login;
-                $row['snapshot_login'] = $this->formatSnapshotReportTime($login);
+                $row['snapshot_login'] = $this->formatSnapshotIstTime($login);
                 $row['snapshot_logged_in'] = true;
             }
             if ($logout !== '') {
                 $row['snapshot_logout_raw'] = $logout;
-                $row['snapshot_logout'] = $this->formatSnapshotReportTime($logout);
+                $row['snapshot_logout'] = $this->formatSnapshotIstTime($logout);
                 $row['snapshot_logged_in'] = true;
             }
             if ($row['snapshot_login_raw'] !== '' && $row['snapshot_logout_raw'] === '') {
@@ -1104,7 +1256,7 @@ public function get()
             $staffIds[] = (int) $row->staffid;
             $loginTime = '';
             if (!empty($row->login_time)) {
-                $loginTime = date('g:i A', strtotime($row->login_time));
+                $loginTime = $this->formatSnapshotIstTime($row->login_time);
             }
             $out[] = [
                 'staffid'            => (int) $row->staffid,
@@ -1135,7 +1287,7 @@ public function get()
                 }
                 if ($item['login_time'] === '' && !empty($dbExtra[$sid]['login_time'])) {
                     $item['login_time_raw'] = $dbExtra[$sid]['login_time'];
-                    $item['login_time'] = date('g:i A', strtotime($dbExtra[$sid]['login_time']));
+                    $item['login_time'] = $this->formatSnapshotIstTime($dbExtra[$sid]['login_time']);
                 }
                 if ($item['screenshot_file_id'] === '' && !empty($dbExtra[$sid]['screenshot_file_id'])) {
                     $item['screenshot_file_id'] = $dbExtra[$sid]['screenshot_file_id'];

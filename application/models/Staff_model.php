@@ -2226,7 +2226,7 @@ class Staff_model extends App_Model
             }
         }
 
-        // Preload approved EL taken from snapshot/DOJ month through previous month.
+        // Preload pending and approved EL taken from snapshot/DOJ month through previous month.
         $range_start = sprintf('%04d-%02d-01', $cursor_y, $cursor_m);
         $prev = $this->previous_calendar_month($month, $year);
         $range_end = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $prev['year'], $prev['month'])));
@@ -2238,7 +2238,7 @@ class Staff_model extends App_Model
                         COALESCE(SUM(number_of_leaving_day), 0) AS taken
                  FROM tbltimesheets_requisition_leave
                  WHERE staff_id = ?
-                   AND status = 1
+                   AND status IN (0, 1)
                    AND type_of_leave IN ($el_keys)
                    AND start_time >= ?
                    AND start_time < ?
@@ -2387,7 +2387,7 @@ class Staff_model extends App_Model
         $day = cal_days_in_month(CAL_GREGORIAN,$month,$year);
         $lastDayOfTheMonth = "$year-$monthFormatted-$day";
 		 $firstDayOfTheMonth = "$year-$monthFormatted-01";
-		 $sql = "SELECT number_of_leaving_day FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND end_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status=1";
+		 $sql = "SELECT number_of_leaving_day FROM tbltimesheets_requisition_leave WHERE staff_id = $staffid AND  start_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND end_time BETWEEN '$firstDayOfTheMonth' AND '$lastDayOfTheMonth' AND status IN (0,1)";
         
         $query = $this->db->query($sql);
 	
@@ -2522,7 +2522,7 @@ class Staff_model extends App_Model
             $leave_balance[(int) $r['staff_id']] = $r['leave_balance'];
         }
 
-        // Approved earned-leave days only (LOP / other types must not reduce EL balance).
+        // Pending and approved earned-leave days (LOP / other types must not reduce EL balance).
         // Use half-open datetime range so full last day is included.
         $range_start = $firstDay;
         $range_end_exclusive = date('Y-m-d H:i:s', strtotime($lastDay . ' +1 day'));
@@ -2532,7 +2532,7 @@ class Staff_model extends App_Model
             FROM tbltimesheets_requisition_leave
             WHERE staff_id IN ($id_list)
               AND start_time >= ? AND start_time < ?
-              AND status = 1
+              AND status IN (0, 1)
               AND type_of_leave IN ($el_keys)
             GROUP BY staff_id",
             [$range_start, $range_end_exclusive]

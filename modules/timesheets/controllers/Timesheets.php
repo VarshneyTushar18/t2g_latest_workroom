@@ -20,6 +20,21 @@ class timesheets extends AdminController
 
 		parent::__construct();
 
+		// Module routes remain reachable when the vendor license check has
+		// deactivated its bootstrap. Load the runtime dependencies explicitly
+		// so employee HRMS pages do not fail with undefined helpers/constants.
+		if (!defined('TIMESHEETS_MODULE_NAME')) {
+			define('TIMESHEETS_MODULE_NAME', 'timesheets');
+			define('TIMESHEETS_MODULE_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads'));
+			define('TIMESHEETS_CONTRACT_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/contracts/'));
+			define('TIMESHEETS_JOB_POSIITON_ATTACHMENTS_UPLOAD_FOLDER', module_dir_path(TIMESHEETS_MODULE_NAME, 'uploads/job_position/'));
+			define('TIMESHEETS_PATH', 'modules/timesheets/uploads/');
+			define('TIMESHEETS_PAYSLIPS', 'modules/timesheets/uploads/payslips/');
+			define('TIMESHEETS_PATH_EXPORT_FILE', 'modules/timesheets/uploads/attendance/');
+		}
+		$this->load->helper('timesheets/timesheets');
+		$this->lang->load('timesheets/timesheets', 'english');
+
 		$this->load->model('timesheets_model');
 
 		$this->load->model('departments_model');
@@ -53,13 +68,7 @@ class timesheets extends AdminController
 	 */
 	public function hrms_home()
 	{
-		if (!(
-			has_permission('attendance_management', '', 'view_own') ||
-			has_permission('attendance_management', '', 'view') ||
-			has_permission('leave_management', '', 'view_own') ||
-			has_permission('leave_management', '', 'view') ||
-			is_admin()
-		)) {
+		if (!is_staff_logged_in()) {
 			access_denied('timesheets');
 		}
 
@@ -1727,16 +1736,18 @@ class timesheets extends AdminController
 			$earned_balance = (float) ($earned_synced['balance'] ?? 0);
 			$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
 			$earned_pending = (float) ($earned_synced['pending'] ?? 0);
+			// Apply against full earned balance; pending is informational (avoids stale/double blocks).
+		$earned_usable = $earned_balance;
 			if (($requested_synced['slug'] ?? '') === 'earned-leave') {
-				if ($earned_available <= 0 || $days_for_balance > ($earned_available + 0.001)) {
+				if ($earned_usable <= 0 || $days_for_balance > ($earned_usable + 0.001)) {
 					$data['type_of_leave'] = 'loss-of-pay';
 					$leave_type = 'loss-of-pay';
-					if ($earned_available <= 0) {
+					if ($earned_usable <= 0) {
 						set_alert('warning', 'No earned leave available (after pending requests). Application saved as Loss of Pay.');
 					} else {
 						set_alert(
 							'warning',
-							'Earned leave available: ' . $earned_available . ' day(s)'
+							'Earned leave balance: ' . $earned_usable . ' day(s)'
 							. ($earned_pending > 0 ? ' (pending: ' . $earned_pending . ')' : '')
 							. ', but request is ' . $days_for_balance . ' day(s). Application saved as Loss of Pay.'
 						);
@@ -1758,9 +1769,9 @@ class timesheets extends AdminController
 				: $synced['carry_forward'];
 			// Legacy column — audit only; logic uses get_synced_leave_balance (available).
 			if ($leave_type === 'loss-of-pay') {
-				$data['leave_balance'] = round($earned_available, 2);
+				$data['leave_balance'] = round($earned_usable, 2);
 			} else {
-				$data['leave_balance'] = round($earned_available - $days_for_balance, 2);
+				$data['leave_balance'] = round($earned_usable - $days_for_balance, 2);
 			}
 
 			if (isset($data['according_to_the_plan'])) {
@@ -2665,7 +2676,7 @@ class timesheets extends AdminController
 
 
 
-			$this->timesheets_model->edit_timesheets($additional_timesheet);
+			$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 
 			try {
 				$this->timesheets_model->notify_regularisation_decision(
@@ -3946,7 +3957,7 @@ class timesheets extends AdminController
 				}
 
 				$this->timesheets_model->update_approve_request($data['rel_id'], $data['rel_type'], 1);
-				$this->timesheets_model->edit_timesheets($additional_timesheet);
+				$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 				try {
 					$this->timesheets_model->notify_regularisation_decision(
 						(int) $data['rel_id'],
@@ -4043,7 +4054,7 @@ class timesheets extends AdminController
 								->get(db_prefix() . 'timesheets_additional_timesheet')
 								->row();
 							if ($additional_timesheet) {
-								$this->timesheets_model->edit_timesheets($additional_timesheet);
+								$this->timesheets_model->edit_timesheets($additional_timesheet, (int) $additional_timesheet->creator);
 							}
 						} elseif (($data['rel_type'] ?? '') !== 'additional_timesheets') {
 							$note = trim((string) ($data['note'] ?? $data['reason'] ?? ''));
@@ -4183,7 +4194,66 @@ class timesheets extends AdminController
 		}
 
 		echo json_encode([
-			'success' => $approved > 0 && $failed === 0,
+			'success' => $approved > 0,
+			'approved' => $approved,
+			'failed' => $failed,
+			'message' => $message,
+			'errors' => $errors,
+		]);
+		die();
+	}
+
+	/**
+	 * Bulk approve pending leave applications (final approvers only).
+	 */
+	public function bulk_approve_leave()
+	{
+		if (!$this->input->is_ajax_request()) {
+			show_404();
+		}
+
+		if (!timesheets_can_final_approve_leave()) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Only Super HR / HR / Admin / Super Admin can bulk-approve leave.',
+			]);
+			die();
+		}
+
+		$ids = $this->input->post('ids');
+		if (!is_array($ids)) {
+			$ids = preg_split('/\s*,\s*/', trim((string) $ids), -1, PREG_SPLIT_NO_EMPTY);
+		}
+		$ids = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+		if (empty($ids)) {
+			echo json_encode([
+				'success' => false,
+				'message' => 'Select at least one pending leave on this page.',
+			]);
+			die();
+		}
+
+		$approved = 0;
+		$failed = 0;
+		$errors = [];
+
+		foreach ($ids as $id) {
+			$result = $this->timesheets_model->approve_pending_leave_request($id, (int) get_staff_user_id());
+			if (!empty($result['success'])) {
+				$approved++;
+				continue;
+			}
+			$failed++;
+			$errors[] = '#' . $id . ': ' . ($result['message'] ?? 'Failed');
+		}
+
+		$message = $approved . ' leave request(s) approved';
+		if ($failed > 0) {
+			$message .= ', ' . $failed . ' failed';
+		}
+
+		echo json_encode([
+			'success' => $approved > 0,
 			'approved' => $approved,
 			'failed' => $failed,
 			'message' => $message,
@@ -12765,6 +12835,8 @@ class timesheets extends AdminController
 		$earned_balance = (float) ($earned_synced['balance'] ?? 0);
 		$earned_available = (float) ($earned_synced['available'] ?? $earned_balance);
 		$earned_pending = (float) ($earned_synced['pending'] ?? 0);
+		// Apply against full earned balance; pending is informational (avoids stale/double blocks).
+		$earned_usable = $earned_balance;
 
 		$month_label = date('F Y', mktime(0, 0, 0, $month, 1, $year));
 		$type_label = $type_of_leave !== '' ? htmlspecialchars((string) $type_of_leave) : htmlspecialchars($synced['slug']);
@@ -12776,9 +12848,11 @@ class timesheets extends AdminController
 		if ($earned_pending > 0) {
 			$html .= '<div><strong>Pending earned leave:</strong> ' . $earned_pending . '</div>';
 		}
-		$html .= '<div class="' . ($earned_available <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
-		$html .= '<strong>Available earned leave: ' . $earned_available . '</strong></div>';
-		$html .= '<div class="text-muted" style="font-size:12px;">Balance (approved only): ' . $earned_balance . '</div>';
+		$html .= '<div class="' . ($earned_usable <= 0 ? 'text-danger' : 'text-success') . '" style="margin-top:6px;font-size:15px;">';
+		$html .= '<strong>Earned leave balance: ' . $earned_balance . '</strong></div>';
+		if ($earned_pending > 0.001 && $earned_available + 0.001 < $earned_balance) {
+			$html .= '<div class="text-muted" style="font-size:12px;">' . $earned_pending . ' day(s) awaiting approval (you can still apply up to balance ' . $earned_balance . ')</div>';
+		}
 
 		if ($number_day_off > 0 || $days_off > 0) {
 			$html .= '<hr style="margin:8px 0;">';
@@ -12786,14 +12860,14 @@ class timesheets extends AdminController
 			$html .= '<div class="' . ($number_day_off == 0 ? 'text-danger' : '') . '">' . _l('number_of_leave_days_allowed') . ': ' . $number_day_off . '</div>';
 		}
 
-		// For earned leave apply: usable days = available (balance minus pending EL).
-		$allowed = $earned_available > 0 ? $earned_available : 0;
+		// Usable = full balance when nothing pending; otherwise balance minus pending EL.
+		$allowed = $earned_usable > 0 ? $earned_usable : 0;
 		if ($synced['slug'] === 'loss-of-pay') {
 			$allowed = 999; // LOP is not limited by EL balance
 		}
 
 		$html .= '<input type="hidden" name="number_day_off" value="' . $allowed . '">';
-		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_available . '">';
+		$html .= '<input type="hidden" name="apply_leave_balance" value="' . $earned_balance . '">';
 
 		$valid_cur_date = $this->timesheets_model->get_next_shift_date($id, date('Y-m-d'));
 
@@ -12802,14 +12876,15 @@ class timesheets extends AdminController
 			'valid_date' => _d($valid_cur_date),
 			'balance' => $earned_balance,
 			'available' => $earned_available,
+			'usable' => $earned_usable,
 			'pending' => $earned_pending,
-			'earned_balance' => $earned_available,
+			'earned_balance' => $earned_balance,
 			'type_balance' => $balance,
 			'carry_forward' => (float) $earned_synced['carry_forward'],
 			'leave_taken' => (float) $earned_synced['consumed'],
 			'earned_leave' => (float) ($earned_synced['monthly_earn'] ?? $earned_synced['granted']),
 			'number_day_off' => $allowed,
-			'can_use_earned_leave' => $earned_available > 0,
+			'can_use_earned_leave' => $earned_usable > 0,
 			'month' => $month_label,
 			'type' => $type_label,
 			'slug' => $synced['slug'],
@@ -14453,14 +14528,8 @@ class timesheets extends AdminController
 			if ($code === '' || $code === 'O') {
 				continue;
 			}
-			$wfh_allotted = !empty($day['wfh_allotted']) || (($day['attendance_source'] ?? '') === 'wfh');
 			if ($status === 'regularised' || $status === 'ok' || $status === 'pending') {
-				$code = $wfh_allotted ? 'WFH' : 'P';
-			} elseif ($code === 'WFH' || $wfh_allotted) {
-				// Allotted WFH day (Manage WFH module) — keep label on team calendar.
-				if ($code === 'P' || $code === '') {
-					$code = 'WFH';
-				}
+				$code = 'P';
 			} elseif ($status === 'absent' || $status === 'punch_missing' || $status === 'rejected') {
 				$code = 'AB';
 			} elseif ($status === 'short_hours' && $code === 'P') {
@@ -14550,12 +14619,15 @@ class timesheets extends AdminController
 		}
 
 		// Workroom check-in / check-out punches for the month
+		$cio_range_from = date('Y-m-d', strtotime($from . ' -1 day'));
+		$cio_range_to = date('Y-m-d', strtotime($to . ' +1 day'));
 		$check_in_out = $this->db->query(
 			'SELECT date, type_check FROM ' . db_prefix() . 'check_in_out
 			 WHERE staff_id = ' . $staffid . '
-			   AND DATE(date) BETWEEN ' . $this->db->escape($from) . ' AND ' . $this->db->escape($to) . '
+			   AND DATE(date) BETWEEN ' . $this->db->escape($cio_range_from) . ' AND ' . $this->db->escape($cio_range_to) . '
 			 ORDER BY date ASC'
 		)->result_array();
+		$check_in_out = $this->timesheets_model->normalize_workroom_cio_rows_for_display($check_in_out);
 
 		// Biometric swipes from imported report (API hook later)
 		$bio_swipes = [];
@@ -14588,7 +14660,10 @@ class timesheets extends AdminController
 
 		$cio_rows = [];
 		foreach ($check_in_out as $cio) {
-			$cio_date = date('Y-m-d', strtotime($cio['date']));
+			$cio_date = (string) ($cio['attendance_date'] ?? date('Y-m-d', strtotime($cio['date'])));
+			if ($cio_date < $from || $cio_date > $to) {
+				continue;
+			}
 			if (!empty($bio_punch_dates[$cio_date]) && empty($wfh_dates[$cio_date])) {
 				continue;
 			}

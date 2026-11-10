@@ -58,154 +58,36 @@ class Holiday_model extends App_Model
         return $dates;
     }
 
-    /**
-     * Departments for Manage WFH (all company depts for HR/Admin; scoped for others).
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    public function get_wfh_manage_departments()
-    {
-        $this->load->model('departments_model');
-        $this->load->helper('timesheets/timesheets');
-
-        $allowed = function_exists('holiday_wfh_manage_allowed_department_ids')
-            ? holiday_wfh_manage_allowed_department_ids()
-            : array_column($this->departments_model->get_staff_departments(), 'departmentid');
-
-        $all = $this->departments_model->get();
-        if ($allowed === null) {
-            $depts = is_array($all) ? $all : [];
-        } else {
-            $allowed = array_map('intval', $allowed);
-            $depts = array_values(array_filter($all, function ($d) use ($allowed) {
-                return in_array((int) ($d['departmentid'] ?? 0), $allowed, true);
-            }));
-        }
-
-        usort($depts, function ($a, $b) {
-            return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
-        });
-
-        $wfh_key = function_exists('holiday_wfh_employment_department_key')
-            ? holiday_wfh_employment_department_key()
-            : 'wfh_employment';
-
-        array_unshift($depts, [
-            'departmentid' => $wfh_key,
-            'name' => 'All WFH employment (category)',
-        ]);
-
-        return $depts;
-    }
-
-    /**
-     * Active staff for Manage WFH / Saturday screens by department (or WFH employment group).
-     *
-     * @param int|string $id departmentid or wfh_employment
-     * @return array<int, array<string, mixed>>
-     */
+    // custom function to get staff with their department id
     public function get_staff_based_on_department($id = '')
     {
-        $this->load->helper('timesheets/timesheets');
-        $wfh_key = function_exists('holiday_wfh_employment_department_key')
-            ? holiday_wfh_employment_department_key()
-            : 'wfh_employment';
-
-        if ((string) $id === (string) $wfh_key) {
-            return $this->get_wfh_employment_category_staff();
+        $this->load->model('departments_model');
+        if ($id) {
+            $query = 'select * from tblstaff inner join tblstaff_departments on tblstaff.staffid = tblstaff_departments.staffid where tblstaff.active = 1 and tblstaff_departments.departmentid = ' . $id;
+        } else {
+            $query = 'select * from tblstaff inner join tblstaff_departments on tblstaff.staffid = tblstaff_departments.staffid where tblstaff.active = 1;';
         }
+        $all_staff_data = $this->db->query($query)->result();
+        $departments = $this->departments_model->get_staff_departments();
 
-        if ($id === '' || $id === null) {
-            return [];
-        }
+        $staff_with_same_department = [];
+        $start = false;
 
-        $dept_id = (int) $id;
-        if ($dept_id <= 0) {
-            return [];
-        }
-
-        $allowed = function_exists('holiday_wfh_manage_allowed_department_ids')
-            ? holiday_wfh_manage_allowed_department_ids()
-            : array_column($this->departments_model->get_staff_departments(), 'departmentid');
-        if ($allowed !== null && !in_array($dept_id, array_map('intval', $allowed), true)) {
-            return [];
-        }
-
-        $prefix = db_prefix();
-        $rows = $this->db->query(
-            "SELECT DISTINCT s.staffid, s.firstname, s.lastname, s.staff_identifi, sd.departmentid
-             FROM {$prefix}staff s
-             INNER JOIN {$prefix}staff_departments sd ON sd.staffid = s.staffid
-             WHERE s.active = 1 AND sd.departmentid = ?
-             ORDER BY s.firstname ASC, s.lastname ASC",
-            [$dept_id]
-        )->result_array();
-
-        return $rows;
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    public function get_wfh_employment_category_staff()
-    {
-        $prefix = db_prefix();
-        if (!$this->db->field_exists('employment_category', $prefix . 'staff_info')) {
-            return [];
-        }
-
-        $allowed = function_exists('holiday_wfh_manage_allowed_department_ids')
-            ? holiday_wfh_manage_allowed_department_ids()
-            : null;
-
-        $sql = "SELECT DISTINCT s.staffid, s.firstname, s.lastname, s.staff_identifi,
-                       COALESCE(sd.departmentid, 0) AS departmentid
-                FROM {$prefix}staff s
-                INNER JOIN {$prefix}staff_info i ON i.staffid = s.staffid
-                LEFT JOIN {$prefix}staff_departments sd ON sd.staffid = s.staffid
-                WHERE s.active = 1 AND LOWER(TRIM(COALESCE(i.employment_category, ''))) = 'wfh'";
-
-        $params = [];
-        if ($allowed !== null && $allowed !== []) {
-            $in = implode(',', array_map('intval', $allowed));
-            $sql .= " AND sd.departmentid IN ({$in})";
-        }
-
-        $sql .= ' ORDER BY s.firstname ASC, s.lastname ASC';
-
-        $rows = $this->db->query($sql, $params)->result_array();
-        $seen = [];
-        $out = [];
-        foreach ($rows as $row) {
-            $sid = (int) ($row['staffid'] ?? 0);
-            if ($sid <= 0 || isset($seen[$sid])) {
-                continue;
+        foreach ($all_staff_data as $staff_data) {
+            for ($j = 0; $j < count($staff_with_same_department); $j++) {
+                if ($staff_data->staffid == $staff_with_same_department[$j]['staffid']) {
+                    $start = true;
+                }
             }
-            $seen[$sid] = true;
-            $out[] = $row;
+            for ($i = 0; $i < count($departments); $i++) {
+                if (($staff_data->departmentid == $departments[$i]['departmentid']) && $start == false) {
+                    $staff_with_same_department[] = (array) $staff_data;
+                }
+            }
+            $start = false;
         }
 
-        return $out;
-    }
-
-    /**
-     * Primary department for WFH allotment row (first assigned dept).
-     */
-    public function resolve_staff_primary_department_id($staff_id)
-    {
-        $staff_id = (int) $staff_id;
-        if ($staff_id <= 0) {
-            return 0;
-        }
-        $row = $this->db->select('departmentid')
-            ->from(db_prefix() . 'staff_departments')
-            ->where('staffid', $staff_id)
-            ->order_by('departmentid', 'ASC')
-            ->limit(1)
-            ->get()
-            ->row();
-
-        return $row ? (int) $row->departmentid : 0;
+        return $staff_with_same_department;
     }
 
     // this will change column name of staffid to staff_id

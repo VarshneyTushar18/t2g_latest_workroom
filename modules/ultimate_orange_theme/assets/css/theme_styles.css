@@ -196,11 +196,11 @@ padding: 10px 20px;
   body.hide-sidebar #header {
       width: 100%;
   }
-  .navbar-nav.navbar-right {
+  body.admin #header .navbar-nav.navbar-right {
       margin-right: 26px;
-      position: fixed;
-      top: -1px;
-      right: 0;
+      position: static !important;
+      top: auto !important;
+      right: auto !important;
   }
   body.hide-sidebar #header {
       position: fixed;
@@ -2150,11 +2150,11 @@ background: #fff;
     padding-right: 0;
 }
 
-.navbar-nav.navbar-right {
-    margin-right: 40px;
-    position: fixed;
-    top: 10px;
-    right: 30px;
+body.admin #header .navbar-nav.navbar-right {
+    margin-right: 8px;
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
 }
 
 

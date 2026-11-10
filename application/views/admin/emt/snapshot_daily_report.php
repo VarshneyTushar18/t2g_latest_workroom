@@ -201,25 +201,41 @@
     $('#snapshot_report_login').on('changed.bs.select', reloadReport);
 
     var $reportTable = $('#snapshot-daily-report-table');
-    if ($reportTable.length && $reportTable.find('tbody tr td[colspan]').length === 0 && $.fn.DataTable) {
-        $reportTable.DataTable({
-            paging: true,
-            pageLength: 25,
-            searching: true,
-            order: [[0, 'asc']],
-            columnDefs: [
-                { targets: [2, 3, 4], type: 'string' }
-            ],
-            language: {
-                emptyTable: 'No employees found for this filter.'
-            },
-            initComplete: function () {
-                var $t = $(this.api().table().node());
-                $t.removeClass('dt-table-loading');
-                $t.parents('.table-loading').removeClass('table-loading');
-                snapshotUiLoader.hide();
-            }
-        });
+    var hasDataRows = $reportTable.length && $reportTable.find('tbody tr td[colspan]').length === 0;
+
+    function finishReportPageLoad() {
+        if (window.snapshotUiLoader && snapshotUiLoader.forceHide) {
+            snapshotUiLoader.forceHide();
+        } else if (window.snapshotUiLoader) {
+            snapshotUiLoader.hide();
+        }
+    }
+
+    if (hasDataRows && $.fn.DataTable) {
+        try {
+            $reportTable.DataTable({
+                paging: true,
+                pageLength: 25,
+                searching: true,
+                order: [[0, 'asc']],
+                columnDefs: [
+                    { targets: [2, 3, 4], type: 'string' }
+                ],
+                language: {
+                    emptyTable: 'No employees found for this filter.'
+                },
+                initComplete: function () {
+                    var $t = $(this.api().table().node());
+                    $t.removeClass('dt-table-loading');
+                    $t.parents('.table-loading').removeClass('table-loading');
+                    finishReportPageLoad();
+                }
+            });
+        } catch (err) {
+            finishReportPageLoad();
+        }
+    } else {
+        finishReportPageLoad();
     }
 
     snapshotUiLoader.bindNavigation('a.btn-default[href*="getEmployeeId"]');

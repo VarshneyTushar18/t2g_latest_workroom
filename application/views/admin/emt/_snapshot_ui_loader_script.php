@@ -16,6 +16,12 @@
                 $('.snapshot-ui-loading-target.is-loading').removeClass('is-loading');
             }
         },
+        /** Clear overlay even if show() ran more than hide() (stuck Loading). */
+        forceHide: function () {
+            this._pending = 0;
+            $('#snapshot-ui-loader').removeClass('is-active').attr({ 'aria-hidden': 'true', 'aria-busy': 'false' });
+            $('.snapshot-ui-loading-target.is-loading').removeClass('is-loading');
+        },
         setLoadingTarget: function ($el, loading) {
             if (!$el || !$el.length) {
                 return;
@@ -52,9 +58,16 @@
         // and a load-only handler would leave the overlay stuck forever.
         if (document.readyState === 'complete') {
             snapshotUiFinishInitialLoad();
+        } else {
+            // Hide when DOM + page scripts run — do not wait for window.load (slow/hung images keep spinner forever).
+            setTimeout(function () {
+                snapshotUiLoader.forceHide();
+            }, 400);
         }
     });
-    $(window).on('load', snapshotUiFinishInitialLoad);
+    $(window).on('load', function () {
+        snapshotUiLoader.forceHide();
+    });
 
     // Last resort so a hung asset or orphaned show() cannot block the dashboard.
     setTimeout(function () {

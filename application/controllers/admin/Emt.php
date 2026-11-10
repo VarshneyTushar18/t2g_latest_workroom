@@ -1001,6 +1001,28 @@ class Emt extends AdminController
 				return strcmp($a['created_time'], $b['created_time']);
 			});
 
+			$alignMin = 0;
+			$checkinRaw = trim((string) ($row['first_checkin_raw'] ?? ''));
+			if ($checkinRaw !== '') {
+				$checkinTs = is_numeric($checkinRaw) ? (int) $checkinRaw : strtotime($checkinRaw);
+				if ($checkinTs) {
+					$alignMin = max(0, $checkinTs - (30 * 60));
+				}
+			}
+			if ($alignMin > 0) {
+				$images = array_values(array_filter($images, function ($img) use ($alignMin, $reportDateYmd) {
+					$ts = strtotime((string) ($img['created_time'] ?? ''));
+					if (!$ts) {
+						$ts = $this->snapshotTimeFromImageFileName($img['name'] ?? '', $reportDateYmd);
+					}
+
+					return $ts && $ts >= $alignMin;
+				}));
+				if (empty($images)) {
+					continue;
+				}
+			}
+
 			$firstTs = strtotime($images[0]['created_time']);
 			$lastTs = strtotime($images[count($images) - 1]['created_time']);
 			if (!$firstTs) {
@@ -1160,12 +1182,12 @@ class Emt extends AdminController
 
 	private function formatSnapshotLoginTime($isoTime, $fileName)
 	{
-		$ts = strtotime((string) $isoTime);
-		if ($ts) {
-			return date('g:i A', $ts);
+		$formatted = $this->Emt_model->formatSnapshotIstTime($isoTime);
+		if ($formatted !== '') {
+			return $formatted;
 		}
-		if (preg_match('/(\d{1,2})[:\-](\d{2})/', (string) $fileName, $m)) {
-			return date('g:i A', strtotime($m[1] . ':' . $m[2]));
+		if (preg_match('/_(\d{2})(\d{2})(\d{2})/', (string) $fileName, $m)) {
+			return $m[1] . ':' . $m[2];
 		}
 
 		return '';

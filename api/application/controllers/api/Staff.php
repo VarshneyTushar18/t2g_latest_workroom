@@ -34,37 +34,30 @@ public function index_post(){
        return;
    }
 
-   if (empty($staff)) {
+   if (empty($staff) || empty($staff[0])) {
        $this->response(array(
            "check-in" => false,
            "success" => 1,
-           "message" => "Please check in on T2G Workroom or biometric device first."
+           "message" => "Password is correct. Punch IN on the biometric machine, then log in to Snapshot."
        ), REST_Controller::HTTP_OK);
        return;
    }
 
-   if (!empty($staff[1]['type_check'])) {
+   $type_check = (int) ($staff[0]['type_check'] ?? 0);
+   if ($type_check !== 1) {
        $this->response(array(
            "check-in" => false,
            "success" => 1,
-           "message" => "Checkout Successfully"
+           "message" => "Password is correct. Punch IN on the biometric machine, then log in to Snapshot."
        ), REST_Controller::HTTP_OK);
-       return;
-   }
-
-   if (!empty($staff[0]['type_check']) && !empty($staff[1]['type_check'])) {
-       $this->response(array(
-           "check-in" => false,
-           "success" => 0,
-           "message" => "Wrong Details"
-       ), REST_Controller::HTTP_NOT_FOUND);
        return;
    }
 
    $this->response(array(
        "check-in" => true,
        "success" => 1,
-       "message" => "Login Successfully"
+       "message" => "Login Successfully",
+       "staffid" => $staff[0]['staff_id'] ?? null
    ), REST_Controller::HTTP_OK);
                 
     

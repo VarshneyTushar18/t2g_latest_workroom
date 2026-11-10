@@ -100,9 +100,10 @@ foreach ($rResult as $aRow) {
     $creator_id = (int) ($aRow['creator_id'] ?? $aRow['creator'] ?? 0);
     $can_bulk_approve = (int) $aRow['status'] === 0 && timesheets_can_final_approve_attendance($user_id);
     if ($can_bulk_approve) {
-        $row[] = '<div class="checkbox"><input type="checkbox" class="reg-approve-check" value="' . $row_id . '"><label></label></div>';
+        $cb_id = 'reg_approve_' . $row_id;
+        $row[] = '<div class="checkbox"><input type="checkbox" id="' . $cb_id . '" class="reg-approve-check" value="' . $row_id . '"><label for="' . $cb_id . '"></label></div>';
     } else {
-        $row[] = '';
+        $row[] = '<span class="text-muted">—</span>';
     }
 
     $row[] = $row_id;
