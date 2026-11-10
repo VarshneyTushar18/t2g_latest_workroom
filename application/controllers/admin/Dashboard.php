@@ -35,9 +35,13 @@ class Dashboard extends AdminController
         $data['google_ids_calendars']  = $this->misc_model->get_google_calendar_ids();
         $bodyclass = 'dashboard invoices-total-manual hrms-ui';
         $this->load->helper('apex_workhub');
-        $data['use_apex_associate_dashboard'] = t2g_apex_associate_dashboard_user();
+        $data['use_apex_associate_dashboard'] = t2g_apex_workhub_dashboard_user();
+        $data['use_apex_manager_dashboard']     = t2g_apex_workhub_manager_user();
         if ($data['use_apex_associate_dashboard']) {
             $bodyclass .= ' associate-dashboard apex-workhub';
+            if ($data['use_apex_manager_dashboard']) {
+                $bodyclass .= ' apex-workhub-manager';
+            }
         }
         $data['bodyclass'] = $bodyclass;
         $this->load->model('announcements_model');
@@ -93,5 +97,35 @@ class Dashboard extends AdminController
     {
         $data['tickets_report'] = (new \app\services\TicketsReportByStaff())->filterBy($type);
         $this->load->view('admin/dashboard/widgets/tickets_report_table', $data);
+    }
+
+    /**
+     * Manager WorkHub — team tab data (deferred from home page load).
+     */
+    public function apex_manager_team_data()
+    {
+        if (!is_staff_logged_in()) {
+            show_404();
+        }
+        $this->load->helper('apex_workhub');
+        if (!t2g_apex_workhub_manager_user()) {
+            show_404();
+        }
+        if (!function_exists('t2g_apex_gather_manager_team_dashboard')) {
+            show_404();
+        }
+
+        @set_time_limit(120);
+
+        $payload = t2g_apex_gather_manager_team_dashboard();
+        $payload['deferred'] = false;
+        $html    = t2g_apex_render_manager_team_dashboard($payload);
+
+        $this->output
+            ->set_content_type('application/json', 'utf-8')
+            ->set_output(json_encode([
+                'data' => $payload,
+                'html' => $html,
+            ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?: '{}');
     }
 }

@@ -310,7 +310,7 @@ document.addEventListener('mousemove', e => {
 <?php if (!empty($use_apex_associate_dashboard)) { ?>
 <script>window.__apexStaffId = <?php echo (int) get_staff_user_id(); ?>;</script>
 <script src="<?php echo base_url('assets/plugins/Chart.js/Chart.min.js'); ?>"></script>
-<script src="<?php echo base_url('assets/js/admin-dashboard-apex-workhub.js?v=7'); ?>"></script>
+<script src="<?php echo base_url('assets/js/admin-dashboard-apex-workhub.js?v=15'); ?>"></script>
 <script src="<?php echo base_url('assets/js/admin-dashboard-hrms-calendar.js?v=2'); ?>"></script>
 <?php } ?>
 

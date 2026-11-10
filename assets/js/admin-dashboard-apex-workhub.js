@@ -2,9 +2,67 @@
   'use strict';
 
   var root = document.getElementById('apex-workhub-root');
-  if (!root) {
+  var managerShell = document.querySelector('.apex-manager-dashboard-shell');
+  if (!root && !managerShell) {
     return;
   }
+
+  function initApexSortableTables(scope) {
+    var parent = scope && scope.querySelectorAll ? scope : document;
+    parent.querySelectorAll('table.apex-sortable-table').forEach(function (table) {
+      if (table.dataset.apexSortBound === '1') {
+        return;
+      }
+      table.dataset.apexSortBound = '1';
+      var thead = table.tHead;
+      if (!thead) {
+        return;
+      }
+      Array.prototype.forEach.call(thead.querySelectorAll('th[data-sort-col]'), function (th) {
+        th.classList.add('sorting');
+        th.addEventListener('click', function () {
+          var col = parseInt(th.getAttribute('data-sort-col'), 10);
+          if (isNaN(col)) {
+            return;
+          }
+          var dir = th.getAttribute('data-sort-dir') === 'asc' ? 'desc' : 'asc';
+          thead.querySelectorAll('th[data-sort-col]').forEach(function (head) {
+            head.removeAttribute('data-sort-dir');
+            var icon = head.querySelector('.apex-sort-icon');
+            if (icon) {
+              icon.className = 'fa fa-sort apex-sort-icon text-muted';
+            }
+          });
+          th.setAttribute('data-sort-dir', dir);
+          var activeIcon = th.querySelector('.apex-sort-icon');
+          if (activeIcon) {
+            activeIcon.className =
+              'fa ' + (dir === 'asc' ? 'fa-sort-asc' : 'fa-sort-desc') + ' apex-sort-icon text-muted';
+          }
+          var tbody = table.tBodies[0];
+          if (!tbody) {
+            return;
+          }
+          var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function (row) {
+            return row.cells.length > 1;
+          });
+          rows.sort(function (a, b) {
+            var at = (a.cells[col] && a.cells[col].textContent) || '';
+            var bt = (b.cells[col] && b.cells[col].textContent) || '';
+            at = at.replace(/\s+/g, ' ').trim().toLowerCase();
+            bt = bt.replace(/\s+/g, ' ').trim().toLowerCase();
+            var cmp = at.localeCompare(bt, undefined, { numeric: true, sensitivity: 'base' });
+            return dir === 'asc' ? cmp : -cmp;
+          });
+          rows.forEach(function (row) {
+            tbody.appendChild(row);
+          });
+        });
+      });
+    });
+  }
+
+  initApexSortableTables(document);
 
   function clickHeaderButton(selector) {
     var btn = document.querySelector(selector);
@@ -33,7 +91,7 @@
     });
   }
 
-  var searchInput = root.querySelector('input[placeholder*="Search"]');
+  var searchInput = root ? root.querySelector('input[placeholder*="Search"]') : null;
   if (searchInput) {
     searchInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
@@ -242,6 +300,270 @@
       window.setInterval(function () {
         showBulletinSlide((bulletinIndex + 1) % bulletinSlides.length);
       }, bulletinInterval);
+    }
+  }
+
+  if (managerShell) {
+    var personalPane = document.getElementById('apex-manager-personal-pane');
+    var teamPane = document.getElementById('apex-manager-team-pane');
+    var teamChartsReady = false;
+    var teamPayloadLoading = false;
+
+    function loadManagerTeamPayload(done) {
+      var data = parseTeamData();
+      if (data && !data.deferred) {
+        if (done) {
+          done();
+        }
+        return;
+      }
+      if (teamPayloadLoading) {
+        return;
+      }
+      teamPayloadLoading = true;
+      if (teamPane) {
+        teamPane.setAttribute('aria-busy', 'true');
+      }
+      fetch(admin_url + 'dashboard/apex_manager_team_data', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      })
+        .then(function (res) {
+          return res.json();
+        })
+        .then(function (payload) {
+          if (payload && payload.html && teamPane) {
+            teamPane.innerHTML = payload.html;
+          }
+          var jsonEl = document.getElementById('apex-manager-team-data');
+          if (payload && payload.data) {
+            if (jsonEl) {
+              jsonEl.textContent = JSON.stringify(payload.data);
+            }
+          }
+          teamChartsReady = false;
+          initApexSortableTables(teamPane || document);
+          if (done) {
+            done();
+          }
+        })
+        .catch(function () {
+          if (teamPane) {
+            teamPane.innerHTML =
+              '<div class="p-8 text-center text-rose-600 text-sm">Team dashboard could not load. Please refresh and try again.</div>';
+          }
+        })
+        .finally(function () {
+          teamPayloadLoading = false;
+          if (teamPane) {
+            teamPane.removeAttribute('aria-busy');
+          }
+        });
+    }
+
+    function setManagerView(view) {
+      var isTeam = view === 'team';
+      document.querySelectorAll('.apex-manager-dashboard-shell [data-apex-manager-view]').forEach(function (btn) {
+        var on = btn.getAttribute('data-apex-manager-view') === view;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      if (personalPane) {
+        personalPane.classList.toggle('hidden', isTeam);
+        personalPane.hidden = isTeam;
+      }
+      if (teamPane) {
+        teamPane.classList.toggle('hidden', !isTeam);
+        teamPane.hidden = !isTeam;
+        teamPane.setAttribute('aria-hidden', isTeam ? 'false' : 'true');
+      }
+      if (isTeam) {
+        loadManagerTeamPayload(function () {
+          if (!teamChartsReady) {
+            initManagerTeamCharts();
+            teamChartsReady = true;
+          }
+          bindTeamTableFilters();
+        });
+      }
+    }
+
+    document.querySelectorAll('.apex-manager-dashboard-shell [data-apex-manager-view]').forEach(function (btn) {
+      if (btn.dataset.apexViewBound === '1') {
+        return;
+      }
+      btn.dataset.apexViewBound = '1';
+      btn.addEventListener('click', function () {
+        setManagerView(btn.getAttribute('data-apex-manager-view'));
+      });
+    });
+
+    function parseTeamData() {
+      var el = document.getElementById('apex-manager-team-data');
+      if (!el || !el.textContent) {
+        return null;
+      }
+      try {
+        return JSON.parse(el.textContent);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function initManagerTeamCharts() {
+      var data = parseTeamData();
+      if (!data || typeof Chart === 'undefined') {
+        return;
+      }
+      var trend = data.charts && data.charts.attendance_trend;
+      var trendCanvas = document.getElementById('apexTeamAttendanceTrend');
+      if (trendCanvas && trend) {
+        new Chart(trendCanvas.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: trend.labels || [],
+            datasets: [
+              {
+                label: 'Present',
+                data: trend.present || [],
+                backgroundColor: '#3b82f6',
+              },
+              {
+                label: 'Absent',
+                data: trend.absent || [],
+                backgroundColor: '#f43f5e',
+              },
+              {
+                label: 'On leave',
+                data: trend.leave || [],
+                backgroundColor: '#f59e0b',
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            scales: {
+              xAxes: [{ stacked: false, gridLines: { display: false } }],
+              yAxes: [{ ticks: { beginAtZero: true, precision: 0 } }],
+            },
+            legend: { position: 'bottom', labels: { boxWidth: 10, fontSize: 10 } },
+          },
+        });
+      }
+
+      var leave = data.charts && data.charts.leave_summary;
+      var donut = document.getElementById('apexTeamLeaveDonut');
+      if (donut && leave) {
+        new Chart(donut.getContext('2d'), {
+          type: 'doughnut',
+          data: {
+            labels: ['Approved', 'Pending', 'Rejected'],
+            datasets: [
+              {
+                data: [leave.approved || 0, leave.pending || 0, leave.rejected || 0],
+                backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'],
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            legend: { position: 'bottom', labels: { boxWidth: 10, fontSize: 10 } },
+          },
+        });
+      }
+
+      var pedmaGrades = data.charts && data.charts.pedma_grades;
+      var pedmaCanvas = document.getElementById('apexTeamPedmaGradeDonut');
+      if (pedmaCanvas && pedmaGrades && pedmaGrades.grades) {
+        var g = pedmaGrades.grades;
+        var a = parseInt(g.A, 10) || 0;
+        var b = parseInt(g.B, 10) || 0;
+        var c = parseInt(g.C, 10) || 0;
+        if (a + b + c > 0) {
+          new Chart(pedmaCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+              labels: ['Grade A', 'Grade B', 'Grade C'],
+              datasets: [
+                {
+                  data: [a, b, c],
+                  backgroundColor: ['#10b981', '#3b82f6', '#f59e0b'],
+                  borderWidth: 0,
+                },
+              ],
+            },
+            options: {
+              maintainAspectRatio: false,
+              cutoutPercentage: 68,
+              legend: { display: false },
+              tooltips: {
+                callbacks: {
+                  label: function (item, chart) {
+                    var label = chart.labels[item.index] || '';
+                    var val = chart.datasets[0].data[item.index];
+                    return label + ': ' + val;
+                  },
+                },
+              },
+            },
+          });
+        }
+      }
+    }
+
+    function bindTeamTableFilters() {
+      var deptSelect = document.getElementById('apexTeamFilterDept');
+      var statusSelect = document.getElementById('apexTeamFilterStatus');
+      var searchInput = document.getElementById('apexTeamSearch');
+      var liveTable = document.getElementById('apexTeamLiveTable');
+
+      if (liveTable && deptSelect && deptSelect.dataset.apexDeptPreset !== '1' && deptSelect.options.length < 2) {
+        var depts = {};
+        liveTable.querySelectorAll('.apex-team-live-row').forEach(function (row) {
+          var d = row.getAttribute('data-dept') || '';
+          if (d && d !== '—' && !depts[d]) {
+            depts[d] = true;
+            var opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            deptSelect.appendChild(opt);
+          }
+        });
+      }
+
+      function filterLiveTable() {
+        var table = document.getElementById('apexTeamLiveTable');
+        var dept = document.getElementById('apexTeamFilterDept');
+        var status = document.getElementById('apexTeamFilterStatus');
+        var search = document.getElementById('apexTeamSearch');
+        if (!table) {
+          return;
+        }
+        var deptVal = dept ? dept.value : '';
+        var statusVal = status ? status.value : '';
+        var q = search ? (search.value || '').toLowerCase().trim() : '';
+        table.querySelectorAll('.apex-team-live-row').forEach(function (row) {
+          var ok =
+            (!deptVal || row.getAttribute('data-dept') === deptVal) &&
+            (!statusVal || row.getAttribute('data-status') === statusVal) &&
+            (!q || (row.getAttribute('data-search') || '').indexOf(q) !== -1);
+          row.style.display = ok ? '' : 'none';
+        });
+      }
+
+      if (deptSelect && deptSelect.dataset.apexBound !== '1') {
+        deptSelect.dataset.apexBound = '1';
+        deptSelect.addEventListener('change', filterLiveTable);
+      }
+      if (statusSelect && statusSelect.dataset.apexBound !== '1') {
+        statusSelect.dataset.apexBound = '1';
+        statusSelect.addEventListener('change', filterLiveTable);
+      }
+      if (searchInput && searchInput.dataset.apexBound !== '1') {
+        searchInput.dataset.apexBound = '1';
+        searchInput.addEventListener('input', filterLiveTable);
+      }
     }
   }
 })();

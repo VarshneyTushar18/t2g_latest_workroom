@@ -7,6 +7,24 @@ function t2g_apex_h($s)
     return html_escape((string) $s);
 }
 
+function t2g_apex_table_heading($label)
+{
+    $label = trim((string) $label);
+    if ($label === '' || $label === '#') {
+        return $label;
+    }
+    $lower = mb_strtolower($label, 'UTF-8');
+
+    return mb_strtoupper(mb_substr($lower, 0, 1, 'UTF-8'), 'UTF-8') . mb_substr($lower, 1, null, 'UTF-8');
+}
+
+function t2g_apex_sortable_th($label, $col_index)
+{
+    return '<th data-sort-col="' . (int) $col_index . '" class="sorting">'
+        . html_escape(t2g_apex_table_heading($label))
+        . ' <i class="fa fa-sort apex-sort-icon text-muted" aria-hidden="true"></i></th>';
+}
+
 function t2g_apex_task_progress_from_status($status)
 {
     $s = (int) $status;
@@ -277,22 +295,45 @@ function t2g_apex_render_primary_section($d)
 <button type="button" role="tab" aria-selected="false" data-apex-mywork-tab="projects" class="<?php echo $tab_idle; ?>">My Projects (<?php echo (int) $projects_total; ?>)</button>
 <button type="button" role="tab" aria-selected="false" data-apex-mywork-tab="announcements" class="<?php echo $tab_idle; ?>">Announcements (<?php echo (int) $ann_total; ?>)</button>
 </div>
-<div class="overflow-x-auto" data-apex-mywork-panel="tasks" id="apex-mywork-panel-tasks">
-<table class="w-full text-left text-xs border-collapse">
-<thead><tr class="text-slate-400 font-semibold border-b border-slate-100 uppercase tracking-wider text-[11px]"><th class="pb-3 pl-2 w-8">#</th><th class="pb-3 pr-4">Task</th><th class="pb-3 px-3">Priority</th><th class="pb-3 px-3">Due Date</th><th class="pb-3 px-3">Assignee</th></tr></thead>
-<tbody class="divide-y divide-slate-100 text-slate-700"><?php echo $tasks_tbody; ?></tbody>
+<div class="table-responsive" data-apex-mywork-panel="tasks" id="apex-mywork-panel-tasks">
+<table class="table table-striped table-bordered table-hover apex-sortable-table">
+<thead><tr>
+<?php
+echo t2g_apex_sortable_th('#', 0);
+echo t2g_apex_sortable_th('Task', 1);
+echo t2g_apex_sortable_th('Priority', 2);
+echo t2g_apex_sortable_th('Due date', 3);
+echo t2g_apex_sortable_th('Assignee', 4);
+?>
+</tr></thead>
+<tbody><?php echo $tasks_tbody; ?></tbody>
 </table>
 </div>
-<div class="overflow-x-auto hidden" data-apex-mywork-panel="projects" id="apex-mywork-panel-projects" hidden>
-<table class="w-full text-left text-xs border-collapse">
-<thead><tr class="text-slate-400 font-semibold border-b border-slate-100 uppercase tracking-wider text-[11px]"><th class="pb-3 pl-2 w-8">#</th><th class="pb-3 pr-4">Project</th><th class="pb-3 px-3">Status</th><th class="pb-3 px-3">Progress</th><th class="pb-3 px-3">Deadline</th></tr></thead>
-<tbody class="divide-y divide-slate-100 text-slate-700"><?php echo $projects_tbody; ?></tbody>
+<div class="table-responsive hidden" data-apex-mywork-panel="projects" id="apex-mywork-panel-projects" hidden>
+<table class="table table-striped table-bordered table-hover apex-sortable-table">
+<thead><tr>
+<?php
+echo t2g_apex_sortable_th('#', 0);
+echo t2g_apex_sortable_th('Project', 1);
+echo t2g_apex_sortable_th('Status', 2);
+echo t2g_apex_sortable_th('Progress', 3);
+echo t2g_apex_sortable_th('Deadline', 4);
+?>
+</tr></thead>
+<tbody><?php echo $projects_tbody; ?></tbody>
 </table>
 </div>
-<div class="overflow-x-auto hidden" data-apex-mywork-panel="announcements" id="apex-mywork-panel-announcements" hidden>
-<table class="w-full text-left text-xs border-collapse">
-<thead><tr class="text-slate-400 font-semibold border-b border-slate-100 uppercase tracking-wider text-[11px]"><th class="pb-3 pl-2 w-8">#</th><th class="pb-3 pr-4">Title</th><th class="pb-3 px-3">Summary</th><th class="pb-3 px-3">Posted</th></tr></thead>
-<tbody class="divide-y divide-slate-100 text-slate-700"><?php echo $ann_tbody; ?></tbody>
+<div class="table-responsive hidden" data-apex-mywork-panel="announcements" id="apex-mywork-panel-announcements" hidden>
+<table class="table table-striped table-bordered table-hover apex-sortable-table">
+<thead><tr>
+<?php
+echo t2g_apex_sortable_th('#', 0);
+echo t2g_apex_sortable_th('Title', 1);
+echo t2g_apex_sortable_th('Summary', 2);
+echo t2g_apex_sortable_th('Posted', 3);
+?>
+</tr></thead>
+<tbody><?php echo $ann_tbody; ?></tbody>
 </table>
 </div>
 </div>

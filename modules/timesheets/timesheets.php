@@ -515,10 +515,10 @@ function timesheets_add_head_components() {
 		echo '<link rel="preconnect" href="https://fonts.googleapis.com" />';
 		echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />';
 		echo '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" type="text/css" />';
-		if (!function_exists('t2g_apex_associate_dashboard_user')) {
+		if (!function_exists('t2g_apex_workhub_dashboard_user')) {
 			$CI->load->helper('apex_workhub');
 		}
-		if (t2g_apex_associate_dashboard_user()) {
+		if (t2g_apex_workhub_dashboard_user()) {
 			echo '<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>';
 			echo '<script>
 				tailwind.config = {
