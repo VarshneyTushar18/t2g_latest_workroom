@@ -457,6 +457,52 @@ public function get()
     }
 
     /**
+     * Earliest Workroom check-in / biometric IN for each staff member on one calendar day.
+     *
+     * @param int[] $staffIds
+     * @return array<int, string> staffid => formatted time (g:i A)
+     */
+    private function snapshotFirstCheckinByStaffForDay(array $staffIds, $dayStart, $dayEnd, $reportDateYmd)
+    {
+        $staffIds = array_values(array_unique(array_filter(array_map('intval', $staffIds))));
+        if (empty($staffIds)) {
+            return [];
+        }
+
+        $workroomCheckins = [];
+        $cio = db_prefix() . 'check_in_out';
+        if ($this->db->table_exists($cio)) {
+            $idPh = implode(',', array_fill(0, count($staffIds), '?'));
+            $params = array_merge([$dayStart, $dayEnd], $staffIds);
+            foreach ($this->db->query(
+                'SELECT staff_id, MIN(`date`) AS first_checkin FROM ' . $cio . '
+                 WHERE type_check = 1 AND `date` >= ? AND `date` <= ? AND staff_id IN (' . $idPh . ')
+                 GROUP BY staff_id',
+                $params
+            )->result() as $row) {
+                $workroomCheckins[(int) $row->staff_id] = (string) $row->first_checkin;
+            }
+        }
+
+        $bioFirstByStaff = $this->snapshotBiometricFirstCheckinForDate($reportDateYmd, $staffIds);
+        $out = [];
+        foreach ($staffIds as $staffId) {
+            $firstCandidates = [];
+            if (!empty($workroomCheckins[$staffId])) {
+                $firstCandidates[] = strtotime($workroomCheckins[$staffId]);
+            }
+            if (!empty($bioFirstByStaff[$staffId])) {
+                $firstCandidates[] = (int) $bioFirstByStaff[$staffId];
+            }
+            if (!empty($firstCandidates)) {
+                $out[$staffId] = $this->formatSnapshotReportTime(min($firstCandidates));
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Snapshot rows are stored with the server clock, which is UTC.
      * Show them as India time, 24-hour (09:53), not 4:23 AM.
      */
@@ -1246,6 +1292,16 @@ public function get()
                 if ($item['screenshot_file_id'] === '' && !empty($dbExtra[$sid]['screenshot_file_id'])) {
                     $item['screenshot_file_id'] = $dbExtra[$sid]['screenshot_file_id'];
                 }
+            }
+            unset($item);
+        }
+
+        if (!empty($out)) {
+            $reportDateYmd = substr($todayStart, 0, 10);
+            $firstCheckins = $this->snapshotFirstCheckinByStaffForDay($staffIds, $todayStart, $todayEnd, $reportDateYmd);
+            foreach ($out as &$item) {
+                $sid = (int) $item['staffid'];
+                $item['first_checkin'] = $firstCheckins[$sid] ?? '';
             }
             unset($item);
         }

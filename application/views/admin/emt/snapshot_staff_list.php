@@ -6,7 +6,6 @@
 .snapshot-list-toolbar .bootstrap-select .dropdown-menu {
     z-index: 1060 !important;
 }
-#snapshotPreviewModal img { max-width: 100%; height: auto; }
 </style>
 <div id="wrapper">
     <div class="content">
@@ -39,39 +38,23 @@
                                     <tr>
                                         <th>Name</th>
                                         <th>Department</th>
-                                        <th>Snapshot login time</th>
-                                        <th>Screenshot</th>
+                                        <th>First check-in</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($staff)) { ?>
-                                    <tr><td colspan="4" class="text-muted text-center">No employees found.</td></tr>
+                                    <tr><td colspan="3" class="text-muted text-center">No employees found.</td></tr>
                                     <?php } else {
-                                        foreach ($staff as $row) { ?>
+                                        foreach ($staff as $row) {
+                                            $firstCheckin = isset($row['first_checkin']) ? (string) $row['first_checkin'] : '';
+                                            if ($firstCheckin === '' && !empty($row['login_time'])) {
+                                                $firstCheckin = (string) $row['login_time'];
+                                            }
+                                        ?>
                                     <tr>
                                         <td><?php echo html_escape($row['name']); ?></td>
                                         <td><?php echo html_escape($row['department_name'] ?: '—'); ?></td>
-                                        <td><?php echo $row['login_time'] !== '' ? html_escape($row['login_time']) : '—'; ?></td>
-                                        <td>
-                                            <?php if (!empty($row['screenshot_file_id'])) { ?>
-                                            <!-- <button type="button" class="btn btn-default btn-xs snapshot-view-screenshot"
-                                                data-file-id="<?php echo html_escape($row['screenshot_file_id']); ?>"
-                                                data-name="<?php echo html_escape($row['name']); ?>">View screenshot</button> -->
-                                            <?php } ?>
-                                            <?php if (!empty($staff_folder_map[$row['staffid']])) { ?>
-                                            <?php
-                                            $galleryQuery = http_build_query([
-                                                'folder'   => $staff_folder_map[$row['staffid']],
-                                                'month'    => date('Y-m'),
-                                                'day'      => date('Y-m-d'),
-                                                'autoload' => '1',
-                                            ], '', '&', PHP_QUERY_RFC3986);
-                                            ?>
-                                            <a class="btn btn-primary btn-xs" href="<?php echo html_escape(($monitoring_url ?? admin_url('Emt/monitoring')) . '?' . $galleryQuery); ?>">Monitoring</a>
-                                            <?php } elseif (empty($row['screenshot_file_id'])) { ?>
-                                            —
-                                            <?php } ?>
-                                        </td>
+                                        <td><?php echo $firstCheckin !== '' ? html_escape($firstCheckin) : '—'; ?></td>
                                     </tr>
                                     <?php }
                                     } ?>
@@ -87,20 +70,6 @@
 
 <?php $this->load->view('admin/emt/_snapshot_ui_loader'); ?>
 
-<div class="modal fade" id="snapshotPreviewModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title" id="snapshotPreviewModalTitle">Snapshot</h4>
-            </div>
-            <div class="modal-body text-center">
-                <img id="snapshotPreviewImage" src="" alt="Snapshot preview">
-            </div>
-        </div>
-    </div>
-</div>
-
 <?php init_tail(); ?>
 <?php $this->load->view('admin/emt/_snapshot_ui_loader_script'); ?>
 <script>
@@ -109,7 +78,6 @@
 
     var listBase = <?php echo json_encode($list_base_url ?? admin_url('Emt/getSnapshotStaffList')); ?>;
     var listType = <?php echo json_encode($list_type); ?>;
-    var imageBase = <?php echo json_encode(admin_url('Emt/snapshotImage?id=')); ?>;
 
     var $dept = $('#snapshot_list_department');
     if ($dept.length) {
@@ -128,23 +96,7 @@
         snapshotUiLoader.navigate(url);
     });
 
-    snapshotUiLoader.bindNavigation('.panel-body a.btn[href*="monitoring"], a.btn-default[href*="getEmployeeId"]');
-
-    $(document).on('click', '.snapshot-view-screenshot', function () {
-        var fileId = ($(this).data('file-id') || '').toString();
-        var name = ($(this).data('name') || '').toString();
-        if (!fileId) {
-            return;
-        }
-        snapshotUiLoader.show();
-        $('#snapshotPreviewModalTitle').text(name ? name + ' — snapshot' : 'Snapshot');
-        var $img = $('#snapshotPreviewImage');
-        $img.off('load error').one('load error', function () {
-            snapshotUiLoader.hide();
-        });
-        $img.attr('src', imageBase + encodeURIComponent(fileId));
-        $('#snapshotPreviewModal').modal('show');
-    });
+    snapshotUiLoader.bindNavigation('a.btn-default[href*="getEmployeeId"]');
 })(jQuery);
 </script>
 </body>
