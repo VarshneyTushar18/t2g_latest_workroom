@@ -42,11 +42,27 @@
         }
     };
 
+    function snapshotUiFinishInitialLoad() {
+        snapshotUiLoader.hide();
+    }
+
     $(function () {
         snapshotUiLoader.show();
+        // If init_tail assets finished before this script runs, window "load" already fired
+        // and a load-only handler would leave the overlay stuck forever.
+        if (document.readyState === 'complete') {
+            snapshotUiFinishInitialLoad();
+        }
     });
-    $(window).on('load', function () {
-        snapshotUiLoader.hide();
-    });
+    $(window).on('load', snapshotUiFinishInitialLoad);
+
+    // Last resort so a hung asset or orphaned show() cannot block the dashboard.
+    setTimeout(function () {
+        if ($('#snapshot-ui-loader').hasClass('is-active') && snapshotUiLoader._pending <= 1) {
+            snapshotUiLoader._pending = 0;
+            $('#snapshot-ui-loader').removeClass('is-active').attr({ 'aria-hidden': 'true', 'aria-busy': 'false' });
+            $('.snapshot-ui-loading-target.is-loading').removeClass('is-loading');
+        }
+    }, 12000);
 })(jQuery);
 </script>

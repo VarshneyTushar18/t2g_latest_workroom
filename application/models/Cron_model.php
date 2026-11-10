@@ -9637,25 +9637,25 @@ public function send_break_report_to_staff()
             . (int) $notLoggedInCount . '</td></tr>'
             . '</table>'
             . '<h3 style="margin:0 0 10px;font-size:16px;">Employees not logged-in to Snapshot</h3>'
-            . '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;">'
+            . '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:640px;font-size:13px;table-layout:fixed;">'
             . '<thead style="background:#141e46;color:#fff;"><tr>'
-            . '<th>S.No.</th><th>Name</th><th>Department</th><th>First check-in</th>'
+            . '<th style="width:48px;text-align:center;">S.No.</th>'
+            . '<th style="width:34%;">Name</th>'
+            . '<th style="width:42%;">Department</th>'
             . '</tr></thead><tbody>';
 
         if ($notLoggedInCount === 0) {
-            $html .= '<tr><td colspan="4" style="text-align:center;padding:12px;">Everyone logged in to Snapshot for this date.</td></tr>';
+            $html .= '<tr><td colspan="3" style="text-align:center;padding:12px;">Everyone logged in to Snapshot for this date.</td></tr>';
         } else {
             $sno = 1;
+            $deptCellStyle = 'word-wrap:break-word;overflow-wrap:break-word;word-break:break-word;white-space:normal;max-width:220px;';
             foreach ($notLoggedInRows as $row) {
                 $html .= '<tr>'
                     . '<td style="text-align:center;">' . $sno++ . '</td>'
-                    . '<td>' . htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
-                    . '<td>' . htmlspecialchars((string) ($row['department_name'] ?? '—'), ENT_QUOTES, 'UTF-8') . '</td>'
-                    . '<td>' . htmlspecialchars(
-                        ($row['first_checkin'] ?? '') !== '' ? (string) $row['first_checkin'] : '—',
-                        ENT_QUOTES,
-                        'UTF-8'
-                    ) . '</td>'
+                    . '<td style="word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">'
+                    . htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+                    . '<td style="' . $deptCellStyle . '">'
+                    . htmlspecialchars((string) ($row['department_name'] ?? '—'), ENT_QUOTES, 'UTF-8') . '</td>'
                     . '</tr>';
             }
         }

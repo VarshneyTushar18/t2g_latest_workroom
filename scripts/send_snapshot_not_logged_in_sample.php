@@ -20,6 +20,11 @@ if ($cronKey === '') {
     $cronKey = 'local';
 }
 
+if ($reportDate === '') {
+    // Cron route needs a date segment before the recipient email (CodeIgniter URI order).
+    $reportDate = date('Y-m-d', strtotime('-1 day'));
+}
+
 if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
     fwrite(STDERR, "Invalid recipient: {$recipient}\n");
     exit(1);

@@ -1,4 +1,4 @@
-﻿<?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
+<?php defined('BASEPATH') or exit('No direct script access allowed'); ?>
 <?php //print_r($res_child); ?>
 <?php init_head(); ?>
 <style>
@@ -250,6 +250,7 @@ function refreshSnapshotSummaryCounts() {
 		url: SNAPSHOT_SUMMARY_URL,
 		data: { department_id: dept },
 		dataType: 'json',
+		timeout: 60000,
 	}).done(function (resp) {
 		if (!resp || !resp.success || !resp.summary) {
 			return;
@@ -271,12 +272,14 @@ $(function () {
 		}
 		$dept.selectpicker({ liveSearch: true, width: '100%', container: 'body' });
 		$dept.on('changed.bs.select', function () {
+		$dept.on('changed.bs.select', function () {
+			if (!deptFilterInteractive) {
+				return;
+			}
 			refreshSnapshotSummaryCounts();
 		});
-	}
-	updateSnapshotStatCardLinks();
-	snapshotUiLoader.bindNavigation('a.snapshot-stat-card, a.snapshot-dept-count, a[href*="Emt/monitoring"]');
-});
-</script>
+		setTimeout(function () {
+			deptFilterInteractive = true;
+		}, 0);
 </body>
 </html>
