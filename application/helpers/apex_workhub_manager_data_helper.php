@@ -2,6 +2,15 @@
 
 defined('BASEPATH') or exit('No direct script access allowed');
 
+function t2g_apex_manager_ensure_snapshot_helpers()
+{
+    if (function_exists('snapshot_can_view_all_departments')) {
+        return;
+    }
+    $CI = &get_instance();
+    $CI->load->helper('custom');
+}
+
 /**
  * Active staff in one or more departments (same idea as Snapshot department filter).
  *
@@ -32,8 +41,22 @@ function t2g_apex_manager_active_staff_ids_in_departments(array $department_ids)
  */
 function t2g_apex_manager_department_ids_for_team($manager_id)
 {
+    t2g_apex_manager_ensure_snapshot_helpers();
     $manager_id = (int) $manager_id;
     $dept_ids   = [];
+
+    if (snapshot_can_view_all_departments($manager_id)) {
+        $CI = &get_instance();
+        $CI->load->model('departments_model');
+        foreach ($CI->departments_model->get() as $dep) {
+            $id = is_array($dep) ? (int) ($dep['departmentid'] ?? 0) : (int) ($dep->departmentid ?? 0);
+            if ($id > 0) {
+                $dept_ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($dept_ids));
+    }
 
     if (function_exists('snapshot_viewer_department_ids')) {
         $scope = snapshot_viewer_department_ids($manager_id);
@@ -89,9 +112,23 @@ function t2g_apex_manager_department_filter_options($manager_id)
  */
 function t2g_apex_manager_team_report_ids($manager_id)
 {
+    t2g_apex_manager_ensure_snapshot_helpers();
     $manager_id = (int) $manager_id;
     if ($manager_id <= 0) {
         return [];
+    }
+
+    if (snapshot_can_view_all_departments($manager_id)) {
+        $CI = &get_instance();
+        $rows = $CI->db->select('staffid')
+            ->from(db_prefix() . 'staff')
+            ->where('active', 1)
+            ->get()
+            ->result_array();
+
+        return array_values(array_unique(array_filter(array_map('intval', array_column($rows, 'staffid')), function ($id) {
+            return $id > 0;
+        })));
     }
 
     $dept_ids = t2g_apex_manager_department_ids_for_team($manager_id);
@@ -545,7 +582,7 @@ function t2g_apex_manager_snapshot_today($CI, $staff_id)
     if (!$CI->db->table_exists($table)) {
         return false;
     }
-  try {
+    try {
         $CI->db->reset_query();
         $row = $CI->db->query(
             'SELECT 1 FROM ' . $table . ' WHERE staff_id = ? AND date_time >= ? LIMIT 1',
@@ -559,6 +596,99 @@ function t2g_apex_manager_snapshot_today($CI, $staff_id)
 }
 
 /**
+ * @param int[] $staff_ids
+ * @return array<int, array<string, mixed>>
+ */
+function t2g_apex_manager_batch_active_tasks($CI, array $staff_ids)
+{
+    $staff_ids = array_values(array_unique(array_filter(array_map('intval', $staff_ids))));
+    if ($staff_ids === []) {
+        return [];
+    }
+    $table = db_prefix() . 'taskstimers';
+    if (!$CI->db->table_exists($table)) {
+        return [];
+    }
+    $map = [];
+    try {
+        foreach (array_chunk($staff_ids, 400) as $chunk) {
+            $in = implode(',', $chunk);
+            $CI->db->reset_query();
+            $rows = $CI->db->query(
+                'SELECT tt.staff_id, t.name, t.status, tt.start_time, t.id AS task_id
+                 FROM ' . $table . ' tt
+                 INNER JOIN ' . db_prefix() . 'tasks t ON t.id = tt.task_id
+                 WHERE tt.staff_id IN (' . $in . ') AND (tt.end_time IS NULL OR tt.end_time = "0000-00-00 00:00:00")
+                 ORDER BY tt.staff_id ASC, tt.start_time DESC'
+            )->result_array();
+            foreach ($rows as $row) {
+        $sid = (int) ($row['staff_id'] ?? 0);
+        if ($sid < 1 || isset($map[$sid])) {
+            continue;
+        }
+        $progress = 25;
+        $s = (int) ($row['status'] ?? 0);
+        if ($s === 4) {
+            $progress = 100;
+        } elseif ($s === 3) {
+            $progress = 50;
+        } elseif ($s === 2) {
+            $progress = 25;
+        }
+                $map[$sid] = [
+                    'name'     => $row['name'] ?? '—',
+                    'progress' => $progress,
+                    'task_id'  => (int) ($row['task_id'] ?? 0),
+                    'started'  => !empty($row['start_time']) ? date('g:i A', strtotime($row['start_time'])) : '—',
+                    'since_ts' => !empty($row['start_time']) ? strtotime($row['start_time']) : null,
+                ];
+            }
+        }
+    } catch (Throwable $e) {
+        return $map;
+    }
+
+    return $map;
+}
+
+/**
+ * @param int[] $staff_ids
+ * @return array<int, bool>
+ */
+function t2g_apex_manager_batch_snapshot_today($CI, array $staff_ids)
+{
+    $staff_ids = array_values(array_unique(array_filter(array_map('intval', $staff_ids))));
+    if ($staff_ids === []) {
+        return [];
+    }
+    $table = db_prefix() . 'staff_drive_data';
+    if (!$CI->db->table_exists($table)) {
+        return [];
+    }
+    $map = [];
+    try {
+        foreach (array_chunk($staff_ids, 400) as $chunk) {
+            $in = implode(',', $chunk);
+            $CI->db->reset_query();
+            $rows = $CI->db->query(
+                'SELECT DISTINCT staff_id FROM ' . $table . ' WHERE staff_id IN (' . $in . ') AND date_time >= ?',
+                [date('Y-m-d 00:00:00')]
+            )->result_array();
+            foreach ($rows as $row) {
+                $sid = (int) ($row['staff_id'] ?? 0);
+                if ($sid > 0) {
+                    $map[$sid] = true;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        return $map;
+    }
+
+    return $map;
+}
+
+/**
  * Manager Team dashboard payload (matches team tab mockup).
  *
  * @return array<string, mixed>
@@ -566,12 +696,16 @@ function t2g_apex_manager_snapshot_today($CI, $staff_id)
 function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
 {
     $CI = &get_instance();
+    t2g_apex_manager_ensure_snapshot_helpers();
     $manager_id = $manager_id > 0 ? (int) $manager_id : (int) get_staff_user_id();
+    $company_wide = snapshot_can_view_all_departments($manager_id);
     $team_ids         = t2g_apex_manager_team_report_ids($manager_id);
     $scope_dept_ids   = t2g_apex_manager_department_ids_for_team($manager_id);
     $department_filters = t2g_apex_manager_department_filter_options($manager_id);
     $today            = date('Y-m-d');
     $total            = count($team_ids);
+    $active_task_map  = t2g_apex_manager_batch_active_tasks($CI, $team_ids);
+    $snapshot_map     = t2g_apex_manager_batch_snapshot_today($CI, $team_ids);
 
     $present_count = 0;
     $leave_count   = 0;
@@ -595,11 +729,17 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
     $dept_labels  = t2g_apex_manager_batch_department_labels($CI, $team_ids, $scope_dept_ids);
     $staff_rows   = [];
     if ($team_ids !== []) {
-        $in = implode(',', array_map('intval', $team_ids));
-        foreach ($CI->db->query(
-            'SELECT staffid, firstname, lastname, staff_identifi FROM ' . db_prefix() . 'staff WHERE staffid IN (' . $in . ')'
-        )->result_array() as $row) {
-            $staff_rows[(int) $row['staffid']] = $row;
+        foreach (array_chunk($team_ids, 400) as $chunk) {
+            $in = implode(',', array_map('intval', $chunk));
+            try {
+                foreach ($CI->db->query(
+                    'SELECT staffid, firstname, lastname, staff_identifi FROM ' . db_prefix() . 'staff WHERE staffid IN (' . $in . ')'
+                )->result_array() as $row) {
+                    $staff_rows[(int) $row['staffid']] = $row;
+                }
+            } catch (Throwable $e) {
+                log_message('error', 'Manager team staff rows: ' . $e->getMessage());
+            }
         }
     }
 
@@ -644,7 +784,7 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
             $checkin_ts[] = $checkin;
         }
 
-        $task = t2g_apex_manager_active_task($CI, $sid);
+        $task = $active_task_map[$sid] ?? null;
         if ($task) {
             $active_tasks_total++;
         }
@@ -666,40 +806,42 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
             'task'        => $task,
             'break_label' => $status_key === 'present' ? 'Working' : ($status_key === 'leave' ? 'On leave' : '—'),
             'break_tone'  => $status_key === 'present' ? 'working' : 'neutral',
-            'snapshot'    => t2g_apex_manager_snapshot_today($CI, $sid),
+            'snapshot'    => !empty($snapshot_map[$sid]),
             'profile_url' => admin_url('staff/member/' . $sid),
             'timesheet_url' => admin_url('staff/timesheets/' . $sid),
         ];
 
-        $earned = 0.0;
-        $taken = 0.0;
-        $balance = 0.0;
-        try {
-            if ($CI->app_modules->is_active('timesheets')) {
-                $CI->load->model('timesheets/timesheets_model');
-                if (method_exists($CI->timesheets_model, 'get_staff_leave_balance_cards')) {
-                    $cards = $CI->timesheets_model->get_staff_leave_balance_cards((int) $sid, (int) date('Y'), (int) date('m'));
-                    foreach ($cards as $card) {
-                        if ((string) ($card['slug'] ?? '') === 'earned-leave') {
-                            $earned = (float) ($card['granted'] ?? 0);
-                            $taken = (float) ($card['consumed'] ?? 0);
-                            $balance = (float) ($card['available'] ?? $card['balance'] ?? 0);
-                            break;
+        if (!$company_wide) {
+            $earned = 0.0;
+            $taken = 0.0;
+            $balance = 0.0;
+            try {
+                if ($CI->app_modules->is_active('timesheets')) {
+                    $CI->load->model('timesheets/timesheets_model');
+                    if (method_exists($CI->timesheets_model, 'get_staff_leave_balance_cards')) {
+                        $cards = $CI->timesheets_model->get_staff_leave_balance_cards((int) $sid, (int) date('Y'), (int) date('m'));
+                        foreach ($cards as $card) {
+                            if ((string) ($card['slug'] ?? '') === 'earned-leave') {
+                                $earned = (float) ($card['granted'] ?? 0);
+                                $taken = (float) ($card['consumed'] ?? 0);
+                                $balance = (float) ($card['available'] ?? $card['balance'] ?? 0);
+                                break;
+                            }
                         }
                     }
                 }
+            } catch (Throwable $e) {
             }
-        } catch (Throwable $e) {
-        }
 
-        $leave_balance_rows[] = [
-            'staff_id' => (int) $sid,
-            'name'     => get_staff_full_name($sid),
-            'earned'   => round($earned, 1),
-            'taken'    => round($taken, 1),
-            'balance'  => round($balance, 1),
-            'available'=> $balance > 0 ? 'Available' : 'Low balance',
-        ];
+            $leave_balance_rows[] = [
+                'staff_id' => (int) $sid,
+                'name'     => get_staff_full_name($sid),
+                'earned'   => round($earned, 1),
+                'taken'    => round($taken, 1),
+                'balance'  => round($balance, 1),
+                'available'=> $balance > 0 ? 'Available' : 'Low balance',
+            ];
+        }
     }
 
     $avg_checkin = '—';
@@ -712,14 +854,32 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
     $upcoming_leaves = [];
     $leave_table = db_prefix() . 'timesheets_requisition_leave';
     if ($team_ids !== [] && $CI->db->table_exists($leave_table)) {
-        $ids_sql = implode(',', array_map('intval', $team_ids));
         $month_start = date('Y-m-01 00:00:00');
         try {
-            $rows = $CI->db->query(
-                'SELECT status, COUNT(*) AS c FROM ' . $leave_table
-                . ' WHERE staff_id IN (' . $ids_sql . ') AND datecreated >= ? GROUP BY status',
-                [$month_start]
-            )->result_array();
+            if ($company_wide) {
+                $rows = $CI->db->query(
+                    'SELECT status, COUNT(*) AS c FROM ' . $leave_table
+                    . ' WHERE datecreated >= ? GROUP BY status',
+                    [$month_start]
+                )->result_array();
+                $upcoming = $CI->db->query(
+                    'SELECT staff_id, start_time, end_time, status, subject FROM ' . $leave_table
+                    . ' WHERE start_time >= ? ORDER BY start_time ASC LIMIT 8',
+                    [date('Y-m-d 00:00:00')]
+                )->result_array();
+            } else {
+                $ids_sql = implode(',', array_map('intval', $team_ids));
+                $rows = $CI->db->query(
+                    'SELECT status, COUNT(*) AS c FROM ' . $leave_table
+                    . ' WHERE staff_id IN (' . $ids_sql . ') AND datecreated >= ? GROUP BY status',
+                    [$month_start]
+                )->result_array();
+                $upcoming = $CI->db->query(
+                    'SELECT staff_id, start_time, end_time, status, subject FROM ' . $leave_table
+                    . ' WHERE staff_id IN (' . $ids_sql . ') AND start_time >= ? ORDER BY start_time ASC LIMIT 8',
+                    [date('Y-m-d 00:00:00')]
+                )->result_array();
+            }
             foreach ($rows as $r) {
                 $st = (int) ($r['status'] ?? -1);
                 $c = (int) ($r['c'] ?? 0);
@@ -732,11 +892,6 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
                     $leave_summary['rejected'] += $c;
                 }
             }
-            $upcoming = $CI->db->query(
-                'SELECT staff_id, start_time, end_time, status, subject FROM ' . $leave_table
-                . ' WHERE staff_id IN (' . $ids_sql . ') AND start_time >= ? ORDER BY start_time ASC LIMIT 8',
-                [date('Y-m-d 00:00:00')]
-            )->result_array();
             foreach ($upcoming as $u) {
                 $upcoming_leaves[] = [
                     'name'  => get_staff_full_name((int) $u['staff_id']),
@@ -753,6 +908,12 @@ function t2g_apex_gather_manager_team_dashboard($manager_id = 0)
     $productivity = $total > 0 ? (int) round(($present_count / $total) * 100) : null;
 
     $insights = [];
+    if ($company_wide) {
+        $insights[] = [
+            'tone' => 'info',
+            'text' => 'Company-wide view: earned-leave balance table is omitted for speed. KPIs and live status include all active staff.',
+        ];
+    }
     $not_checked = max(0, $total - count($checkin_ts));
     if ($not_checked > 0) {
         $insights[] = ['tone' => 'danger', 'text' => $not_checked . ' team member' . ($not_checked === 1 ? ' has' : 's have') . ' not checked in yet today.'];

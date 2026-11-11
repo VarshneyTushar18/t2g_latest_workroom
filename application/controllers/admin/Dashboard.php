@@ -35,12 +35,16 @@ class Dashboard extends AdminController
         $data['google_ids_calendars']  = $this->misc_model->get_google_calendar_ids();
         $bodyclass = 'dashboard invoices-total-manual hrms-ui';
         $this->load->helper('apex_workhub');
-        $data['use_apex_associate_dashboard'] = t2g_apex_workhub_dashboard_user();
-        $data['use_apex_manager_dashboard']     = t2g_apex_workhub_manager_user();
+        $data['use_apex_admin_team_dashboard']  = t2g_apex_workhub_admin_team_user();
+        $data['use_apex_associate_dashboard']   = t2g_apex_workhub_dashboard_user();
+        $data['use_apex_manager_dashboard']     = t2g_apex_workhub_manager_user() && !$data['use_apex_admin_team_dashboard'];
         if ($data['use_apex_associate_dashboard']) {
             $bodyclass .= ' associate-dashboard apex-workhub';
             if ($data['use_apex_manager_dashboard']) {
                 $bodyclass .= ' apex-workhub-manager';
+            }
+            if (!empty($data['use_apex_admin_team_dashboard'])) {
+                $bodyclass .= ' apex-workhub-admin-team';
             }
         }
         $data['bodyclass'] = $bodyclass;
@@ -108,24 +112,39 @@ class Dashboard extends AdminController
             show_404();
         }
         $this->load->helper('apex_workhub');
-        if (!t2g_apex_workhub_manager_user()) {
+        if (!t2g_apex_workhub_team_dashboard_user()) {
             show_404();
         }
         if (!function_exists('t2g_apex_gather_manager_team_dashboard')) {
             show_404();
         }
 
-        @set_time_limit(120);
+        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
 
-        $payload = t2g_apex_gather_manager_team_dashboard();
-        $payload['deferred'] = false;
-        $html    = t2g_apex_render_manager_team_dashboard($payload);
-
-        $this->output
-            ->set_content_type('application/json', 'utf-8')
-            ->set_output(json_encode([
+        try {
+            $payload = t2g_apex_gather_manager_team_dashboard();
+            $payload['deferred'] = false;
+            $html    = t2g_apex_render_manager_team_dashboard($payload);
+            $json    = json_encode([
                 'data' => $payload,
                 'html' => $html,
-            ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?: '{}');
+            ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+            if ($json === false) {
+                throw new RuntimeException('Team dashboard JSON encode failed: ' . json_last_error_msg());
+            }
+            $this->output
+                ->set_content_type('application/json', 'utf-8')
+                ->set_output($json);
+        } catch (Throwable $e) {
+            log_message('error', 'apex_manager_team_data: ' . $e->getMessage());
+            $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json', 'utf-8')
+                ->set_output(json_encode([
+                    'error' => 'Team dashboard could not be built.',
+                    'detail' => ENVIRONMENT !== 'production' ? $e->getMessage() : '',
+                ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?: '{}');
+        }
     }
 }

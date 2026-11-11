@@ -43,6 +43,13 @@ function _init_admin_assets()
     // Javascript
     $CI->app_scripts->add('vendor-js', 'assets/builds/vendor-admin.js');
 
+    $CI->app_scripts->add(
+        'perfex-bootstrap-compat-js',
+        'assets/js/admin-perfex-bootstrap-compat.js?v=1',
+        'admin',
+        ['vendor-js']
+    );
+
     $CI->app_scripts->add('jquery-migrate-js', 'assets/plugins/jquery/jquery-migrate.' . (ENVIRONMENT === 'production' ? 'min.' : '') . 'js');
 
     add_datatables_js_assets();

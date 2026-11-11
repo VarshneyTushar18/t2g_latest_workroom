@@ -90,29 +90,88 @@ function t2g_apex_workhub_manager_user($staff_id = '')
 }
 
 /**
- * Associates and managers (not admin / HR / HOD).
+ * Admin / super-admin: Team WorkHub only (no Self tab).
+ */
+function t2g_apex_workhub_admin_team_user($staff_id = '')
+{
+    if ($staff_id === '' || $staff_id === null) {
+        $staff_id = get_staff_user_id();
+    }
+    if (!is_staff_member($staff_id)) {
+        return false;
+    }
+    if (is_admin($staff_id)) {
+        return true;
+    }
+    if (function_exists('is_super_admin') && is_super_admin()) {
+        return true;
+    }
+    if (function_exists('is_admin2') && is_admin2($staff_id)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Users who may open the manager Team dashboard (managers + admins).
+ */
+function t2g_apex_workhub_team_dashboard_user($staff_id = '')
+{
+    return t2g_apex_workhub_manager_user($staff_id) || t2g_apex_workhub_admin_team_user($staff_id);
+}
+
+/**
+ * Associates, managers, and admin team-only home.
  */
 function t2g_apex_workhub_dashboard_user($staff_id = '')
 {
-    return t2g_apex_associate_dashboard_user($staff_id) || t2g_apex_workhub_manager_user($staff_id);
+    return t2g_apex_associate_dashboard_user($staff_id)
+        || t2g_apex_workhub_manager_user($staff_id)
+        || t2g_apex_workhub_admin_team_user($staff_id);
 }
 
 /**
  * @param array<string, mixed> $data
  */
-function t2g_apex_workhub_build_personal_html($data, $for_manager = false)
+function t2g_apex_workhub_code_html_path()
 {
-    $paths = [
-        FCPATH . 'code.html',
-        APPPATH . '../code.html',
-    ];
-    $code_path = null;
-    foreach ($paths as $p) {
+    static $resolved = null;
+    if ($resolved !== null) {
+        return $resolved === '' ? null : $resolved;
+    }
+    foreach ([FCPATH . 'code.html', APPPATH . '../code.html'] as $p) {
         if (is_readable($p)) {
-            $code_path = $p;
-            break;
+            $resolved = $p;
+
+            return $p;
         }
     }
+    $resolved = '';
+
+    return null;
+}
+
+/**
+ * Greeting bar only (no personal main) — used for admin team-only dashboard.
+ */
+function t2g_apex_workhub_build_greeting_header_only(array $data)
+{
+    $code_path = t2g_apex_workhub_code_html_path();
+    if (!$code_path) {
+        return '';
+    }
+    $html = file_get_contents($code_path);
+    if (!preg_match('/<!-- BEGIN: TopHeader -->\s*(<header[\s\S]*?<\/header>)\s*<!-- END: TopHeader -->/s', $html, $m)) {
+        return '';
+    }
+
+    return t2g_apex_patch_header($m[1], $data);
+}
+
+function t2g_apex_workhub_build_personal_html($data, $for_manager = false)
+{
+    $code_path = t2g_apex_workhub_code_html_path();
     if (!$code_path) {
         return '<div class="alert alert-danger mtop20">Apex WorkHub template (code.html) was not found.</div>';
     }
@@ -150,11 +209,19 @@ function t2g_apex_workhub_build_personal_html($data, $for_manager = false)
  */
 function t2g_apex_workhub_html()
 {
-    $is_manager = t2g_apex_workhub_manager_user();
+    $CI = &get_instance();
+    $CI->load->helper('custom');
+
+    $is_admin_team = t2g_apex_workhub_admin_team_user();
+    $is_manager    = t2g_apex_workhub_manager_user() && !$is_admin_team;
 
     try {
-        $personal_data = t2g_apex_workhub_gather_data();
-        if ($is_manager) {
+        if ($is_admin_team) {
+            $personal_data = t2g_apex_workhub_gather_header_context();
+        } else {
+            $personal_data = t2g_apex_workhub_gather_data();
+        }
+        if ($is_manager || $is_admin_team) {
             // Full team aggregation is loaded via AJAX (avoids 60s timeout on home).
             $team_data = t2g_apex_manager_team_dashboard_placeholder();
         }
@@ -166,7 +233,22 @@ function t2g_apex_workhub_html()
     }
 
     try {
-        if ($is_manager) {
+        if ($is_admin_team) {
+            $header_html = t2g_apex_workhub_build_greeting_header_only($personal_data);
+            $team_html   = t2g_apex_render_manager_team_dashboard($team_data);
+
+            $out = '<div class="apex-manager-dashboard-shell apex-admin-team-only min-w-0 bg-slate-100 flex flex-col">';
+            if ($header_html !== '') {
+                $out .= $header_html;
+            }
+            $out .= '<div id="apex-manager-team-pane" class="apex-manager-pane" data-apex-manager-pane="team">' . $team_html . '</div>';
+            $out .= '</div>';
+
+            $json_team = json_encode($team_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?: '{}';
+            $json_personal = json_encode($personal_data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?: '{}';
+            $out .= '<script type="application/json" id="apex-workhub-data">' . $json_personal . '</script>';
+            $out .= '<script type="application/json" id="apex-manager-team-data">' . $json_team . '</script>';
+        } elseif ($is_manager) {
             $personal_html = t2g_apex_workhub_build_personal_html($personal_data, true);
             $split          = t2g_apex_split_workhub_top_header($personal_html);
             $team_html      = t2g_apex_render_manager_team_dashboard($team_data);

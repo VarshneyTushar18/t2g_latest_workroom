@@ -4,6 +4,15 @@
 - FileZilla site **tech2globe** (or set environment variables below)
 - Know the **remote folder** on the server (e.g. `/public_html`, `/t2gworkroom`)
 
+### Staging (`103.174.102.70`) — use `public_html`
+The live site is served from **`/public_html`** (contains `index.php`, `application`, `assets`).  
+FTP also has a **duplicate** `application/` at **`/`** (FTP root) that **nginx does not use**.  
+Upload into **`public_html`** in FileZilla, or:
+
+```powershell
+.\_deploy\sync_ftp.ps1 -RemotePath /public_html -OnlyPaths "application/models/Emt_model.php"
+```
+
 ## Option A — FileZilla site (recommended on this PC)
 Site **tech2globe** is read from `%APPDATA%\FileZilla\sitemanager.xml`.
 

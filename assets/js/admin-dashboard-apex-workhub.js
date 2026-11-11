@@ -108,7 +108,11 @@
     });
   }
 
-  root.querySelectorAll('button[type="button"]').forEach(function (btn) {
+  if (!root) {
+    root = document.getElementById('apex-workhub-root');
+  }
+  if (root) {
+    root.querySelectorAll('button[type="button"]').forEach(function (btn) {
     var txt = (btn.textContent || '').trim();
     if (txt.indexOf('HR Snapshot') !== -1) {
       btn.addEventListener('click', function () {
@@ -128,7 +132,8 @@
         });
       }
     }
-  });
+    });
+  }
 
   var dataEl = document.getElementById('apex-workhub-data');
   if (dataEl && dataEl.textContent) {
@@ -309,6 +314,16 @@
     var teamChartsReady = false;
     var teamPayloadLoading = false;
 
+    function setTeamPaneLoading(on) {
+      if (!teamPane) {
+        return;
+      }
+      var root = teamPane.querySelector('#apex-manager-team-root');
+      if (root) {
+        root.classList.toggle('apex-team-is-loading', !!on);
+      }
+    }
+
     function loadManagerTeamPayload(done) {
       var data = parseTeamData();
       if (data && !data.deferred) {
@@ -321,6 +336,7 @@
         return;
       }
       teamPayloadLoading = true;
+      setTeamPaneLoading(true);
       if (teamPane) {
         teamPane.setAttribute('aria-busy', 'true');
       }
@@ -330,6 +346,9 @@
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       })
         .then(function (res) {
+          if (!res.ok) {
+            throw new Error('Team data request failed (' + res.status + ')');
+          }
           return res.json();
         })
         .then(function (payload) {
@@ -343,19 +362,21 @@
             }
           }
           teamChartsReady = false;
-          initApexSortableTables(teamPane || document);
+          initApexTeamDataTables(teamPane || document);
           if (done) {
             done();
           }
         })
-        .catch(function () {
+        .catch(function (err) {
           if (teamPane) {
+            var extra = err && err.message ? ' (' + err.message + ')' : '';
             teamPane.innerHTML =
-              '<div class="p-8 text-center text-rose-600 text-sm">Team dashboard could not load. Please refresh and try again.</div>';
+              '<div class="p-8 text-center text-rose-600 text-sm">Team dashboard could not load. Please refresh and try again.' + extra + '</div>';
           }
         })
         .finally(function () {
           teamPayloadLoading = false;
+          setTeamPaneLoading(false);
           if (teamPane) {
             teamPane.removeAttribute('aria-busy');
           }
@@ -384,20 +405,32 @@
             initManagerTeamCharts();
             teamChartsReady = true;
           }
-          bindTeamTableFilters();
+          bindTeamLiveStatusFilters();
         });
       }
     }
 
-    document.querySelectorAll('.apex-manager-dashboard-shell [data-apex-manager-view]').forEach(function (btn) {
-      if (btn.dataset.apexViewBound === '1') {
-        return;
-      }
-      btn.dataset.apexViewBound = '1';
-      btn.addEventListener('click', function () {
-        setManagerView(btn.getAttribute('data-apex-manager-view'));
+    var adminTeamOnly = managerShell.classList.contains('apex-admin-team-only');
+
+    if (!adminTeamOnly) {
+      document.querySelectorAll('.apex-manager-dashboard-shell [data-apex-manager-view]').forEach(function (btn) {
+        if (btn.dataset.apexViewBound === '1') {
+          return;
+        }
+        btn.dataset.apexViewBound = '1';
+        btn.addEventListener('click', function () {
+          setManagerView(btn.getAttribute('data-apex-manager-view'));
+        });
       });
-    });
+    } else {
+      loadManagerTeamPayload(function () {
+        if (!teamChartsReady) {
+          initManagerTeamCharts();
+          teamChartsReady = true;
+        }
+        bindTeamLiveStatusFilters();
+      });
+    }
 
     function parseTeamData() {
       var el = document.getElementById('apex-manager-team-data');
@@ -512,7 +545,172 @@
       }
     }
 
-    function bindTeamTableFilters() {
+    function destroyApexTeamDataTables(scope) {
+      if (typeof jQuery === 'undefined' || !jQuery.fn.DataTable) {
+        return;
+      }
+      var $scope = scope ? jQuery(scope) : jQuery(document);
+      $scope.find('table.apex-team-dt-table').each(function () {
+        if (jQuery.fn.DataTable.isDataTable(this)) {
+          jQuery(this).DataTable().destroy(false);
+        }
+        jQuery(this).removeClass('dt-inline');
+      });
+    }
+
+    function apexTeamDefaultPageLength() {
+      var len = 10;
+      if (typeof app !== 'undefined' && app.options && app.options.tables_pagination_limit) {
+        len = parseFloat(app.options.tables_pagination_limit);
+      }
+      if (isNaN(len) || len < 1) {
+        len = 10;
+      }
+      return len;
+    }
+
+    function apexTeamDataTableOptions(extra) {
+      var pageLen = apexTeamDefaultPageLength();
+      var lengthOptions = [1, 5, 10, 25, 50, 100];
+      var lengthNames = [1, 5, 10, 25, 50, 100];
+      if (jQuery.inArray(pageLen, lengthOptions) === -1) {
+        lengthOptions.push(pageLen);
+        lengthNames.push(pageLen);
+      }
+      lengthOptions.sort(function (a, b) {
+        return a - b;
+      });
+      lengthNames.sort(function (a, b) {
+        return a - b;
+      });
+      var allLabel =
+        typeof app !== 'undefined' && app.lang && app.lang.dt_length_menu_all
+          ? app.lang.dt_length_menu_all
+          : 'All';
+      lengthOptions.push(-1);
+      lengthNames.push(allLabel);
+
+      var lang =
+        typeof app !== 'undefined' && app.lang && app.lang.datatables ? app.lang.datatables : {};
+
+      var base = {
+        language: lang,
+        paginate: true,
+        pageLength: pageLen,
+        lengthMenu: [lengthOptions, lengthNames],
+        order: [[0, 'asc']],
+        autoWidth: false,
+        retrieve: false,
+        destroy: true,
+        dom: "<'row'><'row'<'col-md-6'l><'col-md-6'f>>rt<'row'<'col-md-4'i><'col-md-8 dataTables_paging'<'#colvis'><'.dt-page-jump'>p>>",
+        fnDrawCallback: function (oSettings) {
+          var $wrap = jQuery(oSettings.nTableWrapper);
+          $wrap.removeClass('table-loading');
+          $wrap.find('table.apex-team-dt-table').removeClass('dt-table-loading');
+          if (typeof _table_jump_to_page === 'function') {
+            _table_jump_to_page(jQuery(oSettings.nTable), oSettings);
+          }
+          if (oSettings.aoData.length === 0 || oSettings.aiDisplay.length === 0) {
+            $wrap.addClass('app_dt_empty');
+          } else {
+            $wrap.removeClass('app_dt_empty');
+          }
+        },
+        initComplete: function (oSettings) {
+          var wrapper = oSettings.nTableWrapper;
+          if (!wrapper) {
+            return;
+          }
+          jQuery(wrapper).removeClass('table-loading');
+          jQuery(oSettings.nTable).removeClass('dt-table-loading');
+          var dtEmpty = wrapper.querySelector('.dataTables_empty');
+          if (dtEmpty) {
+            dtEmpty.setAttribute('colspan', oSettings.aoColumns.length);
+          }
+        },
+      };
+      return jQuery.extend({}, base, extra || {});
+    }
+
+  function apexTeamLiveStatusFilter(settings, data, dataIndex) {
+    if (!settings.nTable || settings.nTable.id !== 'apexTeamLiveTable') {
+      return true;
+    }
+    var ao = settings.aoData[dataIndex];
+    var row = ao && ao.nTr;
+    if (!row || !row.classList || !row.classList.contains('apex-team-live-row')) {
+      return true;
+    }
+    var dept = document.getElementById('apexTeamFilterDept');
+    var status = document.getElementById('apexTeamFilterStatus');
+    var search = document.getElementById('apexTeamSearch');
+    var deptVal = dept ? dept.value : '';
+    var statusVal = status ? status.value : '';
+    var q = search ? (search.value || '').toLowerCase().trim() : '';
+    return (
+      (!deptVal || row.getAttribute('data-dept') === deptVal) &&
+      (!statusVal || row.getAttribute('data-status') === statusVal) &&
+      (!q || (row.getAttribute('data-search') || '').indexOf(q) !== -1)
+    );
+  }
+
+  if (typeof jQuery !== 'undefined' && jQuery.fn.dataTable && !window.__apexTeamLiveDtFilterRegistered) {
+    jQuery.fn.dataTable.ext.search.push(apexTeamLiveStatusFilter);
+    window.__apexTeamLiveDtFilterRegistered = true;
+  }
+
+    function initApexTeamDataTables(scope) {
+      if (typeof jQuery === 'undefined' || !jQuery.fn.DataTable) {
+        bindTeamLiveStatusFilters();
+        return;
+      }
+      destroyApexTeamDataTables(scope);
+      var $scope = scope ? jQuery(scope) : jQuery('#apex-manager-team-root');
+
+      var liveDom =
+        "<'row'<'col-md-6'l><'col-md-6 text-right apex-team-live-dt-toolbar'>>rt<'row'<'col-md-4'i><'col-md-8 dataTables_paging'<'#colvis'><'.dt-page-jump'>p>>";
+
+      function tbodyHasDataRows(table) {
+        var tb = table.tBodies[0];
+        if (!tb || tb.rows.length === 0) {
+          return false;
+        }
+        if (tb.rows.length === 1 && tb.rows[0].cells.length <= 1) {
+          return false;
+        }
+        return true;
+      }
+
+      $scope.find('#apexTeamLiveTable').each(function () {
+        if (!tbodyHasDataRows(this)) {
+          return;
+        }
+        try {
+          jQuery(this).addClass('dt-inline').DataTable(
+            apexTeamDataTableOptions({
+              dom: liveDom,
+            })
+          );
+        } catch (e) {
+          console.error('apexTeamLiveTable DataTable init failed', e);
+        }
+      });
+
+      $scope.find('#apexTeamLeaveBalanceTable, #apexTeamUpcomingLeaveTable').each(function () {
+        if (!tbodyHasDataRows(this)) {
+          return;
+        }
+        try {
+          jQuery(this).addClass('dt-inline').DataTable(apexTeamDataTableOptions());
+        } catch (e) {
+          console.error('apex team DataTable init failed', e);
+        }
+      });
+
+      bindTeamLiveStatusFilters();
+    }
+
+    function bindTeamLiveStatusFilters() {
       var deptSelect = document.getElementById('apexTeamFilterDept');
       var statusSelect = document.getElementById('apexTeamFilterStatus');
       var searchInput = document.getElementById('apexTeamSearch');
@@ -532,37 +730,23 @@
         });
       }
 
-      function filterLiveTable() {
-        var table = document.getElementById('apexTeamLiveTable');
-        var dept = document.getElementById('apexTeamFilterDept');
-        var status = document.getElementById('apexTeamFilterStatus');
-        var search = document.getElementById('apexTeamSearch');
-        if (!table) {
-          return;
+      function redrawLiveDt() {
+        if (typeof jQuery !== 'undefined' && jQuery.fn.DataTable && jQuery.fn.DataTable.isDataTable('#apexTeamLiveTable')) {
+          jQuery('#apexTeamLiveTable').DataTable().draw();
         }
-        var deptVal = dept ? dept.value : '';
-        var statusVal = status ? status.value : '';
-        var q = search ? (search.value || '').toLowerCase().trim() : '';
-        table.querySelectorAll('.apex-team-live-row').forEach(function (row) {
-          var ok =
-            (!deptVal || row.getAttribute('data-dept') === deptVal) &&
-            (!statusVal || row.getAttribute('data-status') === statusVal) &&
-            (!q || (row.getAttribute('data-search') || '').indexOf(q) !== -1);
-          row.style.display = ok ? '' : 'none';
-        });
       }
 
       if (deptSelect && deptSelect.dataset.apexBound !== '1') {
         deptSelect.dataset.apexBound = '1';
-        deptSelect.addEventListener('change', filterLiveTable);
+        deptSelect.addEventListener('change', redrawLiveDt);
       }
       if (statusSelect && statusSelect.dataset.apexBound !== '1') {
         statusSelect.dataset.apexBound = '1';
-        statusSelect.addEventListener('change', filterLiveTable);
+        statusSelect.addEventListener('change', redrawLiveDt);
       }
       if (searchInput && searchInput.dataset.apexBound !== '1') {
         searchInput.dataset.apexBound = '1';
-        searchInput.addEventListener('input', filterLiveTable);
+        searchInput.addEventListener('input', redrawLiveDt);
       }
     }
   }

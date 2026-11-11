@@ -243,6 +243,52 @@ body.associate-dashboard.apex-workhub .apex-manager-pane.hidden {
   display: none !important;
 }
 
+body.associate-dashboard.apex-workhub.apex-workhub-admin-team .apex-manager-tabs-slot,
+body.associate-dashboard.apex-workhub .apex-admin-team-only .apex-manager-tabs-slot {
+  display: none !important;
+}
+
+body.associate-dashboard.apex-workhub.apex-workhub-admin-team .screen-options-btn,
+body.associate-dashboard.apex-workhub.apex-workhub-admin-team .screen-options-area {
+  display: none !important;
+}
+
+body.associate-dashboard.apex-workhub.apex-workhub-admin-team .apex-admin-team-only,
+body.associate-dashboard.apex-workhub.apex-workhub-admin-team #apex-manager-team-root {
+  min-height: 480px;
+  width: 100%;
+}
+
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_wrapper {
+  width: 100%;
+}
+
+/* Perfex marks wrappers as table-loading; rows stay at opacity 0 until that class is removed */
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_wrapper.table-loading table thead th,
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_wrapper.table-loading table tbody tr {
+  opacity: 1 !important;
+}
+
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_length select {
+  min-width: 4.5rem;
+}
+
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_info {
+  padding-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+#apex-manager-team-root .apex-team-dt-wrap .dataTables_paginate {
+  padding-top: 8px;
+  text-align: right;
+}
+
+body.associate-dashboard.apex-workhub #apex-manager-team-root .dataTables_wrapper .row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 body.associate-dashboard.apex-workhub .apex-manager-team-root table th,
 body.associate-dashboard.apex-workhub .apex-manager-team-root table td,
 body.associate-dashboard.apex-workhub #apex-workhub-root table.table th,
@@ -271,4 +317,45 @@ body.associate-dashboard.apex-workhub .apex-sortable-table .apex-sort-icon {
   margin-left: 4px;
   font-size: 10px;
   opacity: 0.65;
+}
+
+/* Manager team tab: card loaders while AJAX team payload loads */
+body.associate-dashboard.apex-workhub .apex-team-is-loading .apex-team-loadable {
+  position: relative;
+  pointer-events: none;
+}
+
+body.associate-dashboard.apex-workhub .apex-team-is-loading .apex-team-loadable > * {
+  opacity: 0.35;
+  filter: grayscale(0.15);
+}
+
+body.associate-dashboard.apex-workhub .apex-team-is-loading .apex-team-loadable::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.55);
+  z-index: 2;
+}
+
+body.associate-dashboard.apex-workhub .apex-team-is-loading .apex-team-loadable::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: apex-team-spin 0.75s linear infinite;
+  z-index: 3;
+}
+
+@keyframes apex-team-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

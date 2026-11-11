@@ -77,9 +77,11 @@ function t2g_apex_render_manager_team_dashboard($d)
     $pedma_evaluated = (int) ($pedma['evaluated'] ?? 0);
     $dept_filters    = $d['department_filters'] ?? [];
 
+    $team_loading = !empty($d['deferred']);
+
     ob_start();
     ?>
-<div id="apex-manager-team-root" class="apex-manager-team-root bg-slate-100 min-w-0 text-slate-800">
+<div id="apex-manager-team-root" class="apex-manager-team-root bg-slate-100 min-w-0 text-slate-800<?php echo $team_loading ? ' apex-team-is-loading' : ''; ?>"<?php echo $team_loading ? ' data-apex-team-deferred="1"' : ''; ?>>
 <div class="p-8 max-w-[1720px] mx-auto w-full space-y-6">
 <div class="flex flex-wrap items-start justify-between gap-4">
 <div>
@@ -94,7 +96,7 @@ function t2g_apex_render_manager_team_dashboard($d)
 </div>
 </div>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 apex-team-loadable">
 <?php echo t2g_apex_manager_kpi_card('Total Employees', (string) $total, (string) $total . ' in your team', 'slate'); ?>
 <?php echo t2g_apex_manager_kpi_card('Present Today', $present . '/' . max(1, $total), $att_rate . '% Attendance', 'emerald'); ?>
 <?php echo t2g_apex_manager_kpi_card('On Leave', (string) $on_leave, $leave_pct . '% of team', 'amber'); ?>
@@ -103,15 +105,15 @@ function t2g_apex_render_manager_team_dashboard($d)
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-<div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-3">Team Attendance Trend</h3>
 <div class="relative h-[220px]"><canvas id="apexTeamAttendanceTrend"></canvas></div>
 </div>
-<div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-3">Team Leave Summary</h3>
 <div class="relative h-[220px] flex items-center justify-center"><canvas id="apexTeamLeaveDonut"></canvas></div>
 </div>
-<div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col items-center">
+<div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col items-center apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-1 self-start w-full">Team Performance (PEDMA)</h3>
 <p class="text-[11px] text-slate-500 mb-3 self-start w-full"><?php echo html_escape($pedma_month); ?></p>
 <div class="relative w-44 h-44">
@@ -131,7 +133,7 @@ function t2g_apex_render_manager_team_dashboard($d)
 </div>
 </div>
 
-<div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
 <h3 class="text-sm font-bold text-slate-900">Team Members Live Status</h3>
 <div class="flex flex-wrap items-center gap-2">
@@ -153,19 +155,17 @@ foreach ($dept_filters as $dep) {
 <input type="search" id="apexTeamSearch" placeholder="Search employee…" class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white min-w-[160px]"/>
 </div>
 </div>
-<div class="table-responsive">
-<table class="table table-striped table-bordered table-hover apex-sortable-table" id="apexTeamLiveTable">
+<div class="apex-team-dt-wrap">
+<table class="table table-striped table-bordered table-hover apex-team-dt-table" id="apexTeamLiveTable">
 <thead><tr>
-<?php
-echo t2g_apex_sortable_th('Employee', 0);
-echo t2g_apex_sortable_th('Department', 1);
-echo t2g_apex_sortable_th('First check-in', 2);
-echo t2g_apex_sortable_th('Current task', 3);
-echo t2g_apex_sortable_th('Task timer', 4);
-echo t2g_apex_sortable_th('Break', 5);
-echo t2g_apex_sortable_th('Snapshot', 6);
-echo t2g_apex_sortable_th('Leave', 7);
-?>
+<th><?php echo html_escape(t2g_apex_table_heading('Employee')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Department')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('First check-in')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Current task')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Task timer')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Break')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Snapshot')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Leave')); ?></th>
 </tr></thead>
 <tbody>
 <?php echo t2g_apex_manager_live_status_rows($d['live_status'] ?? []); ?>
@@ -175,40 +175,35 @@ echo t2g_apex_sortable_th('Leave', 7);
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-<div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-3">Complete Leave Data</h3>
-<div class="table-responsive max-h-72 overflow-y-auto">
-<table class="table table-striped table-bordered table-hover apex-sortable-table" id="apexTeamLeaveBalanceTable">
+<div class="apex-team-dt-wrap">
+<table class="table table-striped table-bordered table-hover apex-team-dt-table" id="apexTeamLeaveBalanceTable">
 <thead><tr>
-<?php
-echo t2g_apex_sortable_th('Employee', 0);
-echo t2g_apex_sortable_th('Earned', 1);
-echo t2g_apex_sortable_th('Taken', 2);
-echo t2g_apex_sortable_th('Balance', 3);
-echo t2g_apex_sortable_th('Status', 4);
-?>
+<th><?php echo html_escape(t2g_apex_table_heading('Employee')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Earned')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Taken')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Balance')); ?></th>
 </tr></thead>
 <tbody><?php echo t2g_apex_manager_leave_balance_rows($d['leave_balances'] ?? []); ?></tbody>
 </table>
 </div>
 </div>
-<div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-3">Upcoming Leaves</h3>
-<div class="table-responsive max-h-72 overflow-y-auto">
-<table class="table table-striped table-bordered table-hover apex-sortable-table" id="apexTeamUpcomingLeaveTable">
+<div class="apex-team-dt-wrap">
+<table class="table table-striped table-bordered table-hover apex-team-dt-table" id="apexTeamUpcomingLeaveTable">
 <thead><tr>
-<?php
-echo t2g_apex_sortable_th('Employee', 0);
-echo t2g_apex_sortable_th('Type', 1);
-echo t2g_apex_sortable_th('Dates', 2);
-echo t2g_apex_sortable_th('Status', 3);
-?>
+<th><?php echo html_escape(t2g_apex_table_heading('Employee')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Type')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Dates')); ?></th>
+<th><?php echo html_escape(t2g_apex_table_heading('Status')); ?></th>
 </tr></thead>
 <tbody><?php echo t2g_apex_manager_upcoming_leave_rows($d['upcoming_leaves'] ?? []); ?></tbody>
 </table>
 </div>
 </div>
-<div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+<div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 apex-team-loadable">
 <h3 class="text-sm font-bold text-slate-900 mb-3">Quick Insights</h3>
 <ul class="space-y-3 text-xs m-0 p-0 list-none">
 <?php foreach ($d['insights'] ?? [] as $ins) {
@@ -301,17 +296,15 @@ function t2g_apex_manager_live_status_rows(array $rows)
 function t2g_apex_manager_leave_balance_rows(array $rows)
 {
     if ($rows === []) {
-        return '<tr><td colspan="5" class="py-6 text-center text-slate-500">No data</td></tr>';
+        return '<tr><td colspan="4" class="py-6 text-center text-slate-500">No data</td></tr>';
     }
     $html = '';
     foreach ($rows as $r) {
-        $ok = ($r['balance'] ?? 0) > 0;
         $html .= '<tr>';
         $html .= '<td>' . html_escape($r['name'] ?? '') . '</td>';
         $html .= '<td>' . html_escape($r['earned'] ?? 0) . '</td>';
         $html .= '<td>' . html_escape($r['taken'] ?? 0) . '</td>';
         $html .= '<td><strong>' . html_escape($r['balance'] ?? 0) . '</strong></td>';
-        $html .= '<td><span class="label ' . ($ok ? 'label-success' : 'label-danger') . '">' . html_escape($r['available'] ?? '') . '</span></td>';
         $html .= '</tr>';
     }
 

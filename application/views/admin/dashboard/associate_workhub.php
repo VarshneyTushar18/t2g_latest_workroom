@@ -7,5 +7,10 @@ if (!function_exists('t2g_apex_workhub_html')) {
 if (!function_exists('t2g_apex_workhub_dashboard_user') || !t2g_apex_workhub_dashboard_user()) {
     return;
 }
-echo t2g_apex_workhub_html();
+$html = t2g_apex_workhub_html();
+if ($html === '' || $html === null) {
+    echo '<div class="alert alert-danger mtop20">WorkHub dashboard did not render. Check application logs or contact support.</div>';
+} else {
+    echo $html;
+}
 ?>

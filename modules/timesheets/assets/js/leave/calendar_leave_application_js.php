@@ -99,7 +99,8 @@
                 $el.attr('title', data.event.extendedProps._tooltip);
 				$el.attr('status', data.event.extendedProps._status);
                 $el.attr('onclick', data.event.extendedProps.onclick);
-                $el.attr('data-toggle', 'tooltip').tooltip({html:true});;
+                $el.attr('data-toggle', 'tooltip');
+                $el.attr('data-html', 'true');
                 if (!data.event.extendedProps.url) {
                     $el.on('click', function(){
                         view_event(data.event.extendedProps.eventid);

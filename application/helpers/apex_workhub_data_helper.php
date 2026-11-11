@@ -84,6 +84,34 @@ function t2g_apex_db_count($table, $where = '')
  *
  * @return array<string, mixed>
  */
+function t2g_apex_workhub_gather_header_context()
+{
+    $staff_id   = (int) get_staff_user_id();
+    $staff_name = get_staff_full_name();
+    $first_name = trim(explode(' ', $staff_name)[0] ?? $staff_name);
+    $hour       = (int) date('G');
+    if ($hour < 12) {
+        $greeting = 'Good morning';
+    } elseif ($hour < 17) {
+        $greeting = 'Good afternoon';
+    } else {
+        $greeting = 'Good evening';
+    }
+
+    return [
+        'staff_id'   => $staff_id,
+        'greeting'   => $greeting,
+        'first_name' => $first_name,
+        'staff_name' => $staff_name,
+        'date_long'  => date('l, d F Y'),
+        'thought'    => t2g_apex_thought_of_day(),
+        'urls'       => function_exists('t2g_apex_workhub_routes') ? t2g_apex_workhub_routes() : [],
+    ];
+}
+
+/**
+ * @return array<string, mixed>
+ */
 function t2g_apex_workhub_gather_data()
 {
     $CI       = &get_instance();

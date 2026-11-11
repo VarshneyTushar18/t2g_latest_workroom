@@ -9,6 +9,9 @@
 .PARAMETER RemotePath
   Remote folder, e.g. /public_html or /t2gworkroom
 
+.PARAMETER OnlyPaths
+  Relative paths under the project root (upload only these files).
+
 .PARAMETER WhatIf
   List files that would be uploaded without uploading.
 
@@ -20,6 +23,7 @@ param(
     [string] $SiteName = 'tech2globe',
     [Parameter(Mandatory = $true)]
     [string] $RemotePath,
+    [string[]] $OnlyPaths,
     [switch] $WhatIf,
     [switch] $DryRun
 )
@@ -130,8 +134,22 @@ Write-Host "Remote: $hostUri$remoteBase"
 Write-Host "Site:   $SiteName ($($creds.User))"
 if ($WhatIf) { Write-Host 'WHATIF — no uploads' -ForegroundColor Yellow }
 
-$files = Get-ChildItem -LiteralPath $LocalRoot -Recurse -File -Force |
-    Where-Object { -not (Test-ShouldSkip -FullPath $_.FullName -Root $LocalRoot) }
+if ($OnlyPaths -and $OnlyPaths.Count -gt 0) {
+    if ($OnlyPaths.Count -eq 1 -and $OnlyPaths[0] -match ',') {
+        $OnlyPaths = $OnlyPaths[0].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    }
+    $files = foreach ($rel in $OnlyPaths) {
+        $rel = $rel.Trim().Replace('/', '\')
+        $full = Join-Path $LocalRoot $rel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+            throw "OnlyPaths file not found: $rel"
+        }
+        Get-Item -LiteralPath $full
+    }
+} else {
+    $files = Get-ChildItem -LiteralPath $LocalRoot -Recurse -File -Force |
+        Where-Object { -not (Test-ShouldSkip -FullPath $_.FullName -Root $LocalRoot) }
+}
 
 $uploaded = 0
 foreach ($f in $files) {

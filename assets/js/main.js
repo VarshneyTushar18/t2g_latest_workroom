@@ -1900,10 +1900,21 @@ $(function () {
     }
   });
 
-  // Init tooltips
-  $("body").tooltip({
-    selector: '[data-toggle="tooltip"]',
-  });
+  // Init tooltips (Bootstrap 3 delegated). Avoid double-binding when BS5 or per-element .tooltip() ran.
+  try {
+    var $bodyTip = $("body");
+    if ($bodyTip.data("bs.tooltip")) {
+      $bodyTip.tooltip("destroy");
+    }
+    $bodyTip.tooltip({
+      selector: '[data-toggle="tooltip"]',
+      html: true,
+    });
+  } catch (e) {
+    if (typeof console !== "undefined" && console.warn) {
+      console.warn("Tooltip init skipped:", e);
+    }
+  }
 
   // Init popovers
   $("body").popover({

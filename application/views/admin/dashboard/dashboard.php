@@ -225,7 +225,7 @@ document.addEventListener('mousemove', e => {
 
 
 </style>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+<?php /* Use admin Bootstrap 3 (vendor-admin.js). Bootstrap 5 CDN breaks tooltips, modals, and upload previews. */ ?>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <!-- Fireworks JS -->
 <script type="module">
@@ -310,7 +310,7 @@ document.addEventListener('mousemove', e => {
 <?php if (!empty($use_apex_associate_dashboard)) { ?>
 <script>window.__apexStaffId = <?php echo (int) get_staff_user_id(); ?>;</script>
 <script src="<?php echo base_url('assets/plugins/Chart.js/Chart.min.js'); ?>"></script>
-<script src="<?php echo base_url('assets/js/admin-dashboard-apex-workhub.js?v=15'); ?>"></script>
+<script src="<?php echo base_url('assets/js/admin-dashboard-apex-workhub.js?v=23'); ?>"></script>
 <script src="<?php echo base_url('assets/js/admin-dashboard-hrms-calendar.js?v=2'); ?>"></script>
 <?php } ?>
 
